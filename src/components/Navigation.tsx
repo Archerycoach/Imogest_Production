@@ -121,13 +121,12 @@ export function Navigation() {
   const toolsItems: NavItem[] = [
     { icon: Calculator, label: "Financiamento", path: "/financing", section: "tools" },
     { icon: Trophy, label: "Performance", path: "/team-dashboard", section: "tools" },
-    { icon: MessageSquare, label: "Automação WhatsApp", path: "/whatsapp-automation", section: "tools" },
     { icon: FolderOpen, label: "Documentos", path: "/documents", section: "tools" },
   ];
 
   const automationItems: NavItem[] = [
-    { icon: MessageSquare, label: "WhatsApp", path: "/whatsapp-automation", section: "automation" },
     { icon: Zap, label: "Workflows", path: "/workflows", section: "automation" },
+    { icon: Zap, label: "Workflows Equipa", path: "/team-workflows", section: "automation" },
   ];
 
   const settingsItems: NavItem[] = [
@@ -135,7 +134,7 @@ export function Navigation() {
     { icon: Settings, label: "Definições", path: "/settings", section: "settings" },
   ];
 
-  const allNavItems = [...adminItems, ...mainItems, ...toolsItems, ...settingsItems];
+  const allNavItems = [...adminItems, ...mainItems, ...toolsItems, ...automationItems, ...settingsItems];
 
   return (
     <div className="flex h-screen w-64 flex-col border-r bg-card">

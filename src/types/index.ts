@@ -89,6 +89,10 @@ export interface Property {
   images?: string[];
   created_at: string;
   updated_at: string;
+  // Additional fields from database
+  rental_price?: number;
+  district?: string;
+  postal_code?: string;
   // Compatibility fields
   typology?: string;
   energy_rating?: string;
@@ -115,6 +119,7 @@ export interface Task {
   id: string;
   title: string;
   description: string;
+  notes?: string;
   leadId?: string;
   propertyId?: string;
   priority: TaskPriority;
@@ -230,6 +235,17 @@ export interface Automation {
   action: AutomationAction;
   actionConfig: Record<string, any>;
   createdAt: string;
+}
+
+export interface WorkflowExecution {
+  id: string;
+  workflow_id: string;
+  lead_id: string;
+  user_id: string;
+  status: "pending" | "completed" | "failed";
+  executed_at: string;
+  completed_at?: string;
+  error_message?: string;
 }
 
 // Property Matching Types

@@ -75,18 +75,10 @@ export const getProperty = async (id: string): Promise<Property | null> => {
 
 // Create new property
 export const createProperty = async (property: PropertyInsert) => {
-  // Generate a clean slug
-  const slug = property.title
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, "")
-    .replace(/[\s_-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-
   const { data, error } = await (supabase as any)
     .from("properties")
     .insert({
       ...property,
-      slug: `${slug}-${Date.now()}`,
       property_type: property.property_type as any,
       status: property.status as any
     })
@@ -129,7 +121,7 @@ export const searchProperties = async (query: string): Promise<Property[]> => {
   const { data, error } = await (supabase as any)
     .from("properties")
     .select("*")
-    .or(`title.ilike.%${query}%,address.ilike.%${query}%,location.ilike.%${query}%`)
+    .or(`title.ilike.%${query}%,address.ilike.%${query}%,city.ilike.%${query}%`)
     .order("created_at", { ascending: false });
 
   if (error) {

@@ -1,71 +1,59 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 
-// Force types to match what we expect from the DB
-type Contact = {
-  id: string;
-  name: string;
-  email: string | null;
-  phone: string | null;
-  role: string;
-  avatar_url: string | null;
-};
+type Contact = Database["public"]["Tables"]["contacts"]["Row"];
+type ContactInsert = Database["public"]["Tables"]["contacts"]["Insert"];
+type ContactUpdate = Database["public"]["Tables"]["contacts"]["Update"];
 
-export const getContacts = async () => {
-  // Fetch from profiles as contacts
+export const getContacts = async (): Promise<Contact[]> => {
   const { data, error } = await supabase
-    .from("profiles")
-    .select("*");
+    .from("contacts")
+    .select("*")
+    .order("created_at", { ascending: false });
 
   if (error) {
     console.error("Error fetching contacts:", error);
     return [];
   }
   
-  // Map profiles to contacts
-  return data.map((profile: any) => ({
-    id: profile.id,
-    name: profile.full_name || profile.email || "Sem Nome",
-    email: profile.email,
-    phone: profile.phone,
-    role: profile.role,
-    avatar_url: profile.avatar_url
-  })) as Contact[];
+  return data || [];
 };
 
 export const searchContacts = async (query: string): Promise<Contact[]> => {
   const { data, error } = await supabase
-    .from("profiles")
+    .from("contacts")
     .select("*")
-    .or(`full_name.ilike.%${query}%,email.ilike.%${query}%`);
+    .or(`name.ilike.%${query}%,email.ilike.%${query}%,phone.ilike.%${query}%`)
+    .order("created_at", { ascending: false });
 
   if (error) {
     console.error("Error searching contacts:", error);
     return [];
   }
 
-  return data.map((profile: any) => ({
-    id: profile.id,
-    name: profile.full_name || profile.email || "Sem Nome",
-    email: profile.email,
-    phone: profile.phone,
-    role: profile.role,
-    avatar_url: profile.avatar_url
-  })) as Contact[];
+  return data || [];
 };
 
-export const createContact = async (contact: any) => {
-  // Contacts are essentially profiles in this system, but we might not allow creating profiles directly via this service
-  // depending on auth flow. Assuming this creates a lead or just fails gracefully for now, or creates a profile if using admin rights.
-  // For safety, let's map it to creating a lead with type 'contact' if that existed, but since it's profiles:
-  
-  console.warn("Creating contacts directly is restricted to auth registration.");
-  return null;
-};
+export const createContact = async (contact: ContactInsert): Promise<Contact> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
 
-export const updateContact = async (id: string, updates: any) => {
   const { data, error } = await supabase
-    .from("profiles")
+    .from("contacts")
+    .insert({
+      ...contact,
+      user_id: user.id,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+export const updateContact = async (id: string, updates: ContactUpdate): Promise<Contact> => {
+  const { data, error } = await supabase
+    .from("contacts")
     .update(updates)
     .eq("id", id)
     .select()
@@ -75,13 +63,96 @@ export const updateContact = async (id: string, updates: any) => {
   return data;
 };
 
-export const deleteContact = async (id: string) => {
-  // Soft delete usually, or real delete if admin
+export const deleteContact = async (id: string): Promise<void> => {
   const { error } = await supabase
-    .from("profiles")
+    .from("contacts")
     .delete()
     .eq("id", id);
 
   if (error) throw error;
-  return true;
+};
+
+// Convert lead to contact
+export const convertLeadToContact = async (leadId: string, leadData: any): Promise<Contact> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  // Create contact from lead data
+  const contactData: ContactInsert = {
+    user_id: user.id,
+    name: leadData.name,
+    email: leadData.email || null,
+    phone: leadData.phone || null,
+    notes: leadData.notes || null,
+    lead_source_id: leadId,
+    auto_message_config: {},
+  };
+
+  const { data: contact, error: contactError } = await supabase
+    .from("contacts")
+    .insert(contactData)
+    .select()
+    .single();
+
+  if (contactError) throw contactError;
+
+  // Note: Lead status is NOT automatically updated
+  // The user can manually update the lead status if needed
+
+  return contact;
+};
+
+// Configure automatic messages for contact
+export const configureAutoMessages = async (
+  contactId: string, 
+  config: {
+    birthday_enabled?: boolean;
+    custom_dates?: Array<{
+      date: string;
+      message: string;
+      enabled: boolean;
+    }>;
+  }
+): Promise<Contact> => {
+  const { data, error } = await supabase
+    .from("contacts")
+    .update({ 
+      auto_message_config: config as any
+    })
+    .eq("id", contactId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+// Get contacts with upcoming birthdays (next 30 days)
+export const getUpcomingBirthdays = async (): Promise<Contact[]> => {
+  const today = new Date();
+  const nextMonth = new Date();
+  nextMonth.setDate(today.getDate() + 30);
+
+  const { data, error } = await supabase
+    .from("contacts")
+    .select("*")
+    .not("birth_date", "is", null)
+    .order("birth_date", { ascending: true });
+
+  if (error) {
+    console.error("Error fetching birthdays:", error);
+    return [];
+  }
+
+  // Filter birthdays in the next 30 days (considering year-agnostic dates)
+  const filtered = (data || []).filter(contact => {
+    if (!contact.birth_date) return false;
+    
+    const birthDate = new Date(contact.birth_date);
+    const thisYearBirthday = new Date(today.getFullYear(), birthDate.getMonth(), birthDate.getDate());
+    
+    return thisYearBirthday >= today && thisYearBirthday <= nextMonth;
+  });
+
+  return filtered;
 };

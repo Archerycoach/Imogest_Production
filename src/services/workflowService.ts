@@ -69,3 +69,71 @@ export const processLeadWorkflows = async (leadId: string, triggerType: string) 
   console.log(`Processing workflows for lead ${leadId} with trigger ${triggerType}`);
   return true;
 };
+
+export const executeWorkflowForLead = async (
+  workflowId: string, 
+  leadId: string, 
+  userId: string
+) => {
+  const { data: workflow, error: workflowError } = await supabase
+    .from("lead_workflow_rules")
+    .select("*")
+    .eq("id", workflowId)
+    .single();
+
+  if (workflowError || !workflow) {
+    throw new Error("Workflow não encontrado");
+  }
+
+  // Create execution record
+  const { data: execution, error: executionError } = await supabase
+    .from("workflow_executions")
+    .insert({
+      workflow_id: workflowId,
+      lead_id: leadId,
+      user_id: userId,
+      status: "pending",
+      executed_at: new Date().toISOString()
+    })
+    .select()
+    .single();
+
+  if (executionError) {
+    throw executionError;
+  }
+
+  // Simulate workflow processing
+  // In a real implementation, this would:
+  // 1. Send emails via email service
+  // 2. Create tasks in task table
+  // 3. Send notifications via notification service
+  // 4. Create calendar events
+
+  try {
+    // Simulate async processing
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // Update execution status to completed
+    await supabase
+      .from("workflow_executions")
+      .update({
+        status: "completed",
+        completed_at: new Date().toISOString()
+      })
+      .eq("id", execution.id);
+
+    return execution;
+  } catch (error) {
+    // Update execution status to failed
+    await supabase
+      .from("workflow_executions")
+      .update({
+        status: "failed",
+        error_message: error instanceof Error ? error.message : "Unknown error",
+        completed_at: new Date().toISOString()
+      })
+      .eq("id", execution.id);
+
+    throw error;
+  }
+};

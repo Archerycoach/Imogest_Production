@@ -12,6 +12,7 @@ import { Progress } from "@/components/ui/progress";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import { Layout } from "@/components/Layout";
 
 interface AgentMetrics {
   id: string;
@@ -162,191 +163,193 @@ export default function TeamDashboard() {
     : 0;
 
   return (
-    <div className="p-8 space-y-8 bg-slate-50/50 min-h-full">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Performance 🏆</h1>
-          <p className="text-gray-500 mt-2">Métricas, metas e rankings</p>
+    <Layout title="Performance da Equipa">
+      <div className="p-8 space-y-8 bg-slate-50/50 min-h-full">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Performance 🏆</h1>
+            <p className="text-gray-500 mt-2">Métricas, metas e rankings</p>
+          </div>
+          <Select value={selectedView} onValueChange={setSelectedView}>
+            <SelectTrigger className="w-64">
+              <SelectValue placeholder="Selecione a visualização" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="team">📊 Equipa Completa</SelectItem>
+              {agents.map(agent => (
+                <SelectItem key={agent.id} value={agent.id}>
+                  👤 {agent.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-        <Select value={selectedView} onValueChange={setSelectedView}>
-          <SelectTrigger className="w-64">
-            <SelectValue placeholder="Selecione a visualização" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="team">📊 Equipa Completa</SelectItem>
-            {agents.map(agent => (
-              <SelectItem key={agent.id} value={agent.id}>
-                👤 {agent.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-gray-500">
-              Total Vendas (Mês)
-            </CardTitle>
-            <DollarSign className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(totalRevenue)}</div>
-            {totalRevenue > 0 && (
-              <p className="text-xs text-green-600 mt-1 flex items-center">
-                <TrendingUp className="h-3 w-3 mr-1" />
-                {totalDeals} negócio{totalDeals !== 1 ? "s" : ""} fechado{totalDeals !== 1 ? "s" : ""}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-gray-500">
-              Negócios Fechados
-            </CardTitle>
-            <Trophy className="h-4 w-4 text-yellow-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalDeals}</div>
-            <p className="text-xs text-gray-500 mt-1">
-              {totalLeads} leads ativos
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-gray-500">
-              Taxa de Conversão
-            </CardTitle>
-            <Target className="h-4 w-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{avgConversion.toFixed(1)}%</div>
-            <p className="text-xs text-green-600 mt-1">
-              Média {selectedView === "team" ? "da equipa" : "do agente"}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-gray-500">
-              Leads Ativos
-            </CardTitle>
-            <Users className="h-4 w-4 text-purple-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalLeads}</div>
-            <p className="text-xs text-gray-500 mt-1">
-              Em acompanhamento
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <Card className="col-span-1">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Award className="h-5 w-5 text-yellow-500" />
-              {selectedView === "team" ? "Ranking de Performance" : "Desempenho Individual"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
-              </div>
-            ) : metrics.length === 0 ? (
-              <div className="text-center py-8 text-slate-500">
-                Nenhum agente encontrado ou sem dados de performance.
-              </div>
-            ) : (
-              metrics.map((agent, index) => (
-                <div key={agent.id} className="flex items-center gap-4">
-                  {selectedView === "team" && (
-                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 font-bold text-slate-600">
-                      {index + 1}
-                    </div>
-                  )}
-                  <Avatar>
-                    <AvatarFallback>{agent.avatar}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1">
-                    <div className="flex justify-between mb-1">
-                      <span className="font-medium">{agent.name}</span>
-                      <span className="text-sm font-bold text-green-600">
-                        {formatCurrency(agent.total_revenue)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-xs text-gray-500 mb-2">
-                      <span>{agent.deals_closed} negócios</span>
-                      <span>{agent.conversion_rate}% conv.</span>
-                    </div>
-                    <Progress value={agent.goal_progress} className="h-2" />
-                    <p className="text-xs text-right mt-1 text-gray-400">
-                      {agent.goal_progress}% da meta
-                    </p>
-                  </div>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="col-span-1">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Target className="h-5 w-5 text-red-500" />
-              Metas do Mês
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-6">
-              <div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-sm font-medium">Faturação Global</span>
-                  <span className="text-sm text-gray-500">
-                    {totalRevenue > 0 ? Math.round((totalRevenue / (metrics.length * 500000)) * 100) : 0}% atingido
-                  </span>
-                </div>
-                <Progress value={totalRevenue > 0 ? Math.min(100, (totalRevenue / (metrics.length * 500000)) * 100) : 0} className="h-3 bg-slate-100" />
-              </div>
-
-              <div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-sm font-medium">Novos Leads</span>
-                  <span className="text-sm text-gray-500">{totalLeads > 0 ? Math.round((totalLeads / 50) * 100) : 0}% atingido</span>
-                </div>
-                <Progress value={totalLeads > 0 ? Math.min(100, (totalLeads / 50) * 100) : 0} className="h-3 bg-slate-100" />
-              </div>
-
-              <div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-sm font-medium">Taxa de Conversão</span>
-                  <span className="text-sm text-gray-500">{avgConversion > 0 ? Math.round((avgConversion / 15) * 100) : 0}% atingido</span>
-                </div>
-                <Progress value={avgConversion > 0 ? Math.min(100, (avgConversion / 15) * 100) : 0} className="h-3 bg-slate-100" />
-              </div>
-
-              <div className="p-4 bg-blue-50 rounded-lg mt-6">
-                <h4 className="font-semibold text-blue-900 mb-2">Dica de Performance 💡</h4>
-                <p className="text-sm text-blue-700">
-                  {selectedView === "team" 
-                    ? metrics.length > 0 
-                      ? "Focar em leads qualificados e fazer follow-ups regulares pode melhorar a taxa de conversão da equipa."
-                      : "Configure agentes e comece a adicionar leads para ver métricas de performance."
-                    : "Focar em leads qualificados e fazer follow-ups regulares pode melhorar a taxa de conversão."}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-gray-500">
+                Total Vendas (Mês)
+              </CardTitle>
+              <DollarSign className="h-4 w-4 text-green-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{formatCurrency(totalRevenue)}</div>
+              {totalRevenue > 0 && (
+                <p className="text-xs text-green-600 mt-1 flex items-center">
+                  <TrendingUp className="h-3 w-3 mr-1" />
+                  {totalDeals} negócio{totalDeals !== 1 ? "s" : ""} fechado{totalDeals !== 1 ? "s" : ""}
                 </p>
+              )}
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-gray-500">
+                Negócios Fechados
+              </CardTitle>
+              <Trophy className="h-4 w-4 text-yellow-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{totalDeals}</div>
+              <p className="text-xs text-gray-500 mt-1">
+                {totalLeads} leads ativos
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-gray-500">
+                Taxa de Conversão
+              </CardTitle>
+              <Target className="h-4 w-4 text-blue-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{avgConversion.toFixed(1)}%</div>
+              <p className="text-xs text-green-600 mt-1">
+                Média {selectedView === "team" ? "da equipa" : "do agente"}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-gray-500">
+                Leads Ativos
+              </CardTitle>
+              <Users className="h-4 w-4 text-purple-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{totalLeads}</div>
+              <p className="text-xs text-gray-500 mt-1">
+                Em acompanhamento
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <Card className="col-span-1">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Award className="h-5 w-5 text-yellow-500" />
+                {selectedView === "team" ? "Ranking de Performance" : "Desempenho Individual"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+                </div>
+              ) : metrics.length === 0 ? (
+                <div className="text-center py-8 text-slate-500">
+                  Nenhum agente encontrado ou sem dados de performance.
+                </div>
+              ) : (
+                metrics.map((agent, index) => (
+                  <div key={agent.id} className="flex items-center gap-4">
+                    {selectedView === "team" && (
+                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 font-bold text-slate-600">
+                        {index + 1}
+                      </div>
+                    )}
+                    <Avatar>
+                      <AvatarFallback>{agent.avatar}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                      <div className="flex justify-between mb-1">
+                        <span className="font-medium">{agent.name}</span>
+                        <span className="text-sm font-bold text-green-600">
+                          {formatCurrency(agent.total_revenue)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-xs text-gray-500 mb-2">
+                        <span>{agent.deals_closed} negócios</span>
+                        <span>{agent.conversion_rate}% conv.</span>
+                      </div>
+                      <Progress value={agent.goal_progress} className="h-2" />
+                      <p className="text-xs text-right mt-1 text-gray-400">
+                        {agent.goal_progress}% da meta
+                      </p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="col-span-1">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Target className="h-5 w-5 text-red-500" />
+                Metas do Mês
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-6">
+                <div>
+                  <div className="flex justify-between mb-2">
+                    <span className="text-sm font-medium">Faturação Global</span>
+                    <span className="text-sm text-gray-500">
+                      {totalRevenue > 0 ? Math.round((totalRevenue / (metrics.length * 500000)) * 100) : 0}% atingido
+                    </span>
+                  </div>
+                  <Progress value={totalRevenue > 0 ? Math.min(100, (totalRevenue / (metrics.length * 500000)) * 100) : 0} className="h-3 bg-slate-100" />
+                </div>
+
+                <div>
+                  <div className="flex justify-between mb-2">
+                    <span className="text-sm font-medium">Novos Leads</span>
+                    <span className="text-sm text-gray-500">{totalLeads > 0 ? Math.round((totalLeads / 50) * 100) : 0}% atingido</span>
+                  </div>
+                  <Progress value={totalLeads > 0 ? Math.min(100, (totalLeads / 50) * 100) : 0} className="h-3 bg-slate-100" />
+                </div>
+
+                <div>
+                  <div className="flex justify-between mb-2">
+                    <span className="text-sm font-medium">Taxa de Conversão</span>
+                    <span className="text-sm text-gray-500">{avgConversion > 0 ? Math.round((avgConversion / 15) * 100) : 0}% atingido</span>
+                  </div>
+                  <Progress value={avgConversion > 0 ? Math.min(100, (avgConversion / 15) * 100) : 0} className="h-3 bg-slate-100" />
+                </div>
+
+                <div className="p-4 bg-blue-50 rounded-lg mt-6">
+                  <h4 className="font-semibold text-blue-900 mb-2">Dica de Performance 💡</h4>
+                  <p className="text-sm text-blue-700">
+                    {selectedView === "team" 
+                      ? metrics.length > 0 
+                        ? "Focar em leads qualificados e fazer follow-ups regulares pode melhorar a taxa de conversão da equipa."
+                        : "Configure agentes e comece a adicionar leads para ver métricas de performance."
+                      : "Focar em leads qualificados e fazer follow-ups regulares pode melhorar a taxa de conversão."}
+                  </p>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       </div>
-    </div>
+    </Layout>
   );
 }

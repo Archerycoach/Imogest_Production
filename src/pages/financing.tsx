@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Layout } from "@/components/Layout";
 import { Calculator, TrendingUp, Home, FileText, Download, Settings } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -28,7 +29,6 @@ export default function FinancingPage() {
     loanTermYears: 30,
   });
 
-  // Advanced cost configuration
   const [imtPercentage, setImtPercentage] = useState<number>(6.5);
   const [stampDutyPercentage, setStampDutyPercentage] = useState<number>(0.8);
   const [deedValue, setDeedValue] = useState<number>(1500);
@@ -60,7 +60,6 @@ export default function FinancingPage() {
 
     const workbook = XLSX.utils.book_new();
 
-    // Sheet 1: Summary
     const summaryData = [
       ["SIMULAÇÃO DE FINANCIAMENTO HABITAÇÃO"],
       [""],
@@ -94,7 +93,6 @@ export default function FinancingPage() {
     const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
     XLSX.utils.book_append_sheet(workbook, summarySheet, "Resumo");
 
-    // Export
     XLSX.writeFile(workbook, `Simulacao_Financiamento_${new Date().toISOString().split("T")[0]}.xlsx`);
   };
 
@@ -106,8 +104,8 @@ export default function FinancingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-6">
-      <div className="max-w-7xl mx-auto">
+    <Layout title="Financiamento">
+      <div className="p-6">
         <div className="mb-6 flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
@@ -126,7 +124,6 @@ export default function FinancingPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Input Form */}
           <Card className="lg:col-span-1">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -206,7 +203,6 @@ export default function FinancingPage() {
                 />
               </div>
 
-              {/* Advanced Costs Configuration */}
               <div className="border-t pt-4">
                 <Button
                   variant="outline"
@@ -301,7 +297,6 @@ export default function FinancingPage() {
             </CardContent>
           </Card>
 
-          {/* Results */}
           <Card className="lg:col-span-2">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -493,7 +488,6 @@ export default function FinancingPage() {
           </Card>
         </div>
 
-        {/* Info Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
           <Card>
             <CardHeader>
@@ -550,6 +544,6 @@ export default function FinancingPage() {
           </Card>
         </div>
       </div>
-    </div>
+    </Layout>
   );
 }

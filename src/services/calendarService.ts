@@ -90,8 +90,8 @@ export const getCalendarEvent = async (id: string): Promise<CalendarEvent | null
 
 // Create new calendar event
 export const createCalendarEvent = async (event: CalendarEventInsert): Promise<CalendarEvent> => {
-  // Validate dates
-  if (new Date(event.end_time) <= new Date(event.start_time)) {
+  // Validate dates only if end_time is provided
+  if (event.end_time && new Date(event.end_time) <= new Date(event.start_time)) {
     throw new Error("A data de fim deve ser posterior à data de início");
   }
 

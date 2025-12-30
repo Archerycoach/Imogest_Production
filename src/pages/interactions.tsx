@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -106,7 +107,7 @@ export default function Interactions() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <Layout title="Interações">
       <div className="container mx-auto p-6 space-y-6">
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -314,6 +315,6 @@ export default function Interactions() {
           )}
         </div>
       </div>
-    </div>
+    </Layout>
   );
 }

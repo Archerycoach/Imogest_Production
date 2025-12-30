@@ -20,6 +20,8 @@ export interface LeadWithDetails extends Lead {
   interactions?: Interaction[];
 }
 
+export type LeadWithContacts = LeadWithDetails;
+
 // Get all leads with filters
 export const getLeads = async () => {
   const { data, error } = await supabase
@@ -37,6 +39,9 @@ export const getLeads = async () => {
 
   return (data as unknown) as Lead[];
 };
+
+// Alias for compatibility with existing code
+export const getAllLeads = getLeads;
 
 // Get single lead with full details
 export const getLead = async (id: string): Promise<LeadWithDetails | null> => {

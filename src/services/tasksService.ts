@@ -20,6 +20,9 @@ export const getTasks = async (): Promise<Task[]> => {
   return data || [];
 };
 
+// Alias for compatibility
+export const getAllTasks = getTasks;
+
 // Get single task by ID
 export const getTask = async (id: string): Promise<Task | null> => {
   const { data, error } = await supabase
@@ -92,6 +95,26 @@ export const toggleTaskCompletion = async (id: string, currentStatus: string): P
 
   if (error) throw error;
   return data;
+};
+
+export const completeTask = async (id: string) => {
+  return updateTask(id, { status: "completed" });
+};
+
+export const getTaskStats = async () => {
+  const { data: tasks } = await supabase.from("tasks").select("status, due_date");
+  
+  if (!tasks) return { total: 0, pending: 0, inProgress: 0, completed: 0, overdue: 0 };
+  
+  const now = new Date();
+  
+  return {
+    total: tasks.length,
+    pending: tasks.filter(t => t.status === "pending").length,
+    inProgress: tasks.filter(t => t.status === "in_progress").length,
+    completed: tasks.filter(t => t.status === "completed").length,
+    overdue: tasks.filter(t => t.status !== "completed" && t.due_date && new Date(t.due_date) < now).length
+  };
 };
 
 // Get tasks by status

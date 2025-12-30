@@ -215,7 +215,10 @@ export const deleteUser = async (userId: string) => {
       throw new Error(result.error || "Erro ao eliminar utilizador");
     }
 
-    await logActivity("delete_user", "profile", userId);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await logActivity(user.id, "delete_user", "profile", userId);
+    }
     
     return result;
   } catch (error: any) {
@@ -313,29 +316,75 @@ export const getSubscriptionPlans = async () => {
   const { data, error } = await supabase
     .from("subscription_plans")
     .select("*")
-    .eq("is_active", true)
     .order("price", { ascending: true });
 
   if (error) throw error;
   return data || [];
 };
 
-// Create or update subscription plan
-export const upsertSubscriptionPlan = async (plan: any) => {
+// Get all subscription plans (including inactive)
+export const getAllSubscriptionPlans = async () => {
   const { data, error } = await supabase
     .from("subscription_plans")
-    .upsert(plan)
+    .select("*")
+    .order("price", { ascending: true });
+
+  if (error) throw error;
+  return data || [];
+};
+
+// Create subscription plan
+export const createSubscriptionPlan = async (plan: any) => {
+  const { data, error } = await supabase
+    .from("subscription_plans")
+    .insert(plan)
     .select()
     .single();
 
   if (error) throw error;
 
-  await logActivity(
-    plan.id ? "update_subscription_plan" : "create_subscription_plan",
-    "subscription_plan",
-    data.id,
-    plan
-  );
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) {
+    await logActivity(user.id, "create_subscription_plan", "subscription_plans", data.id, JSON.stringify(plan));
+  }
+
+  return data;
+};
+
+// Update subscription plan
+export const updateSubscriptionPlan = async (planId: string, updates: any) => {
+  const { data, error } = await supabase
+    .from("subscription_plans")
+    .update(updates)
+    .eq("id", planId)
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) {
+    await logActivity(user.id, "update_subscription_plan", "subscription_plans", planId, JSON.stringify(updates));
+  }
+
+  return data;
+};
+
+// Toggle subscription plan active status
+export const toggleSubscriptionPlanStatus = async (planId: string, isActive: boolean) => {
+  const { data, error } = await supabase
+    .from("subscription_plans")
+    .update({ is_active: isActive })
+    .eq("id", planId)
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) {
+    await logActivity(user.id, "toggle_plan_status", "subscription_plans", planId, JSON.stringify({ is_active: isActive }));
+  }
 
   return data;
 };

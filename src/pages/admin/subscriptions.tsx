@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -21,6 +22,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -41,6 +43,10 @@ import {
   Target,
   ArrowLeft,
   Loader2,
+  Settings,
+  Home,
+  ToggleLeft,
+  ToggleRight,
 } from "lucide-react";
 import {
   getAllSubscriptions,
@@ -49,15 +55,37 @@ import {
   activateSubscription,
   extendSubscription,
   createSubscription,
-  getSubscriptionPlans,
   type SubscriptionWithPlan,
 } from "@/services/subscriptionService";
-import { getAllUsers } from "@/services/adminService";
+import { 
+  getAllUsers, 
+  getAllSubscriptionPlans,
+  createSubscriptionPlan,
+  updateSubscriptionPlan,
+  toggleSubscriptionPlanStatus,
+} from "@/services/adminService";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 type SubscriptionPlan = Database["public"]["Tables"]["subscription_plans"]["Row"];
+
+interface PlanFormData {
+  name: string;
+  description: string;
+  price: number;
+  currency: string;
+  billing_interval: "monthly" | "yearly";
+  stripe_price_id: string;
+  stripe_product_id: string;
+  features: string[];
+  limits: {
+    max_users: number | null;
+    max_leads: number | null;
+    max_properties: number | null;
+  };
+  is_active: boolean;
+}
 
 export default function AdminSubscriptionsPage() {
   const router = useRouter();
@@ -78,6 +106,26 @@ export default function AdminSubscriptionsPage() {
   const [selectedSubscription, setSelectedSubscription] = useState<SubscriptionWithPlan | null>(null);
   const [newStatus, setNewStatus] = useState("");
   const [extensionMonths, setExtensionMonths] = useState(1);
+
+  const [planDialogOpen, setPlanDialogOpen] = useState(false);
+  const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null);
+  const [planFormData, setPlanFormData] = useState<PlanFormData>({
+    name: "",
+    description: "",
+    price: 0,
+    currency: "EUR",
+    billing_interval: "monthly",
+    stripe_price_id: "",
+    stripe_product_id: "",
+    features: [],
+    limits: {
+      max_users: null,
+      max_leads: null,
+      max_properties: null,
+    },
+    is_active: true,
+  });
+  const [newFeature, setNewFeature] = useState("");
 
   useEffect(() => {
     checkAccess();
@@ -107,7 +155,7 @@ export default function AdminSubscriptionsPage() {
       const [subsData, usersData, plansData, statsData] = await Promise.all([
         getAllSubscriptions(),
         getAllUsers(),
-        getSubscriptionPlans(),
+        getAllSubscriptionPlans(),
         getSubscriptionStats(),
       ]);
 
@@ -183,6 +231,90 @@ export default function AdminSubscriptionsPage() {
       console.error("Error extending subscription:", error);
       alert("Erro ao estender subscrição");
     }
+  };
+
+  const openPlanDialog = (plan?: SubscriptionPlan) => {
+    if (plan) {
+      setEditingPlan(plan);
+      setPlanFormData({
+        name: plan.name,
+        description: plan.description || "",
+        price: plan.price,
+        currency: plan.currency,
+        billing_interval: plan.billing_interval as "monthly" | "yearly",
+        stripe_price_id: plan.stripe_price_id || "",
+        stripe_product_id: plan.stripe_product_id || "",
+        features: Array.isArray(plan.features) ? plan.features as string[] : [],
+        limits: {
+          max_users: (plan.limits as any)?.max_users ?? null,
+          max_leads: (plan.limits as any)?.max_leads ?? null,
+          max_properties: (plan.limits as any)?.max_properties ?? null,
+        },
+        is_active: plan.is_active,
+      });
+    } else {
+      setEditingPlan(null);
+      setPlanFormData({
+        name: "",
+        description: "",
+        price: 0,
+        currency: "EUR",
+        billing_interval: "monthly",
+        stripe_price_id: "",
+        stripe_product_id: "",
+        features: [],
+        limits: {
+          max_users: null,
+          max_leads: null,
+          max_properties: null,
+        },
+        is_active: true,
+      });
+    }
+    setPlanDialogOpen(true);
+  };
+
+  const handleSavePlan = async () => {
+    try {
+      if (editingPlan) {
+        await updateSubscriptionPlan(editingPlan.id, planFormData);
+      } else {
+        await createSubscriptionPlan(planFormData);
+      }
+      await loadData();
+      setPlanDialogOpen(false);
+      setEditingPlan(null);
+    } catch (error) {
+      console.error("Error saving plan:", error);
+      alert("Erro ao guardar plano");
+    }
+  };
+
+  const handleTogglePlanStatus = async (planId: string, currentStatus: boolean) => {
+    try {
+      await toggleSubscriptionPlanStatus(planId, !currentStatus);
+      await loadData();
+    } catch (error) {
+      console.error("Error toggling plan status:", error);
+      alert("Erro ao alterar estado do plano");
+    }
+  };
+
+  const addFeature = () => {
+    if (newFeature.trim()) {
+      setPlanFormData({
+        ...planFormData,
+        features: [...planFormData.features, newFeature.trim()],
+      });
+      setNewFeature("");
+    }
+  };
+
+  const removeFeature = (index: number) => {
+    setPlanFormData({
+      ...planFormData,
+      features: planFormData.features.filter((_, i) => i !== index),
+    });
   };
 
   const getStatusBadge = (status: string) => {
@@ -317,6 +449,7 @@ export default function AdminSubscriptionsPage() {
             <TabsList className="bg-white border-2 border-gray-200">
               <TabsTrigger value="subscriptions">Subscrições Ativas</TabsTrigger>
               <TabsTrigger value="plans">Planos Disponíveis</TabsTrigger>
+              <TabsTrigger value="manage-plans">Gestão de Planos</TabsTrigger>
               <TabsTrigger value="create">Criar Subscrição</TabsTrigger>
             </TabsList>
 
@@ -345,11 +478,10 @@ export default function AdminSubscriptionsPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Todos</SelectItem>
-                        <SelectItem value="trial">Em Teste</SelectItem>
+                        <SelectItem value="trialing">Em Teste</SelectItem>
                         <SelectItem value="active">Ativas</SelectItem>
                         <SelectItem value="cancelled">Canceladas</SelectItem>
-                        <SelectItem value="expired">Expiradas</SelectItem>
-                        <SelectItem value="suspended">Suspensas</SelectItem>
+                        <SelectItem value="past_due">Vencidas</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -433,7 +565,7 @@ export default function AdminSubscriptionsPage() {
                       <div className="space-y-4">
                         <div className="flex justify-between items-center text-sm">
                           <span className="text-gray-500">Preço</span>
-                          <span className="font-semibold">{plan.price} {plan.currency}/{plan.billing_interval === "monthly" ? "mês" : "ano"}</span>
+                          <span className="font-semibold">€{plan.price}/{plan.billing_interval === "monthly" ? "mês" : "ano"}</span>
                         </div>
 
                         <div className="space-y-2">
@@ -447,32 +579,113 @@ export default function AdminSubscriptionsPage() {
                               <Target className="h-3 w-3" />
                               {(plan.limits as any)?.max_leads || "Ilimitado"} leads
                             </li>
+                            <li className="flex items-center gap-2">
+                              <Home className="h-3 w-3" />
+                              {(plan.limits as any)?.max_properties || "Ilimitado"} imóveis
+                            </li>
                           </ul>
                         </div>
+
+                        {plan.features && Array.isArray(plan.features) && (plan.features as string[]).length > 0 && (
+                          <div className="space-y-2">
+                            <span className="text-xs font-semibold text-gray-500 uppercase">Características</span>
+                            <ul className="text-sm space-y-1">
+                              {(plan.features as string[]).map((feature, idx) => (
+                                <li key={idx} className="flex items-center gap-2">
+                                  <CheckCircle className="h-3 w-3 text-emerald-600" />
+                                  {feature}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
                       </div>
                     </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2 mb-4">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-gray-600">Utilizadores:</span>
-                          <span className="font-semibold">{(plan.limits as any)?.max_users || "Ilimitados"}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-gray-600">Leads:</span>
-                          <span className="font-semibold">{(plan.limits as any)?.max_leads || "Ilimitados"}</span>
-                        </div>
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-gray-600">Imóveis:</span>
-                          <span className="font-semibold">{(plan.limits as any)?.max_properties || "Ilimitados"}</span>
-                        </div>
-                      </div>
-                      <Badge className={plan.is_active ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-700"}>
-                        {plan.is_active ? "Ativo" : "Inativo"}
-                      </Badge>
-                    </CardContent>
                   </Card>
                 ))}
               </div>
+            </TabsContent>
+
+            <TabsContent value="manage-plans">
+              <Card className="border-2 border-gray-200">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>Gestão de Planos</CardTitle>
+                      <CardDescription>Criar e editar planos de subscrição</CardDescription>
+                    </div>
+                    <Button onClick={() => openPlanDialog()}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      Criar Plano
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>Preço</TableHead>
+                        <TableHead>Intervalo</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {plans.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                            Nenhum plano configurado
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        plans.map((plan) => (
+                          <TableRow key={plan.id}>
+                            <TableCell>
+                              <div>
+                                <p className="font-semibold text-gray-900">{plan.name}</p>
+                                <p className="text-sm text-gray-600">{plan.description}</p>
+                              </div>
+                            </TableCell>
+                            <TableCell className="font-semibold">€{plan.price}</TableCell>
+                            <TableCell>
+                              {plan.billing_interval === "monthly" ? "Mensal" : "Anual"}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={plan.is_active ? "default" : "secondary"}>
+                                {plan.is_active ? "Ativo" : "Inativo"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => openPlanDialog(plan)}
+                                >
+                                  <Edit className="h-4 w-4 mr-2" />
+                                  Editar
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleTogglePlanStatus(plan.id, plan.is_active)}
+                                >
+                                  {plan.is_active ? (
+                                    <ToggleRight className="h-4 w-4" />
+                                  ) : (
+                                    <ToggleLeft className="h-4 w-4" />
+                                  )}
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
             </TabsContent>
 
             <TabsContent value="create">
@@ -507,7 +720,7 @@ export default function AdminSubscriptionsPage() {
                       <SelectContent>
                         {plans.filter(p => p.is_active).map((plan) => (
                           <SelectItem key={plan.id} value={plan.id}>
-                            {plan.name} - €{plan.price}/{plan.billing_interval === "monthly" ? "mês" : plan.billing_interval === "yearly" ? "ano" : "período"}
+                            {plan.name} - €{plan.price}/{plan.billing_interval === "monthly" ? "mês" : "ano"}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -626,6 +839,231 @@ export default function AdminSubscriptionsPage() {
                   )}
                 </div>
               )}
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={planDialogOpen} onOpenChange={setPlanDialogOpen}>
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>
+                  {editingPlan ? "Editar Plano" : "Criar Novo Plano"}
+                </DialogTitle>
+                <DialogDescription>
+                  Configure as características e limites do plano de subscrição
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Nome do Plano *</Label>
+                    <Input
+                      value={planFormData.name}
+                      onChange={(e) => setPlanFormData({ ...planFormData, name: e.target.value })}
+                      placeholder="Ex: Plano Básico"
+                    />
+                  </div>
+
+                  <div>
+                    <Label>Preço *</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={planFormData.price}
+                      onChange={(e) => setPlanFormData({ ...planFormData, price: Number(e.target.value) })}
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label>Descrição</Label>
+                  <Textarea
+                    value={planFormData.description}
+                    onChange={(e) => setPlanFormData({ ...planFormData, description: e.target.value })}
+                    placeholder="Descreva o plano..."
+                    rows={3}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Moeda</Label>
+                    <Select 
+                      value={planFormData.currency} 
+                      onValueChange={(value) => setPlanFormData({ ...planFormData, currency: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="EUR">EUR (€)</SelectItem>
+                        <SelectItem value="USD">USD ($)</SelectItem>
+                        <SelectItem value="GBP">GBP (£)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label>Intervalo de Faturação</Label>
+                    <Select 
+                      value={planFormData.billing_interval} 
+                      onValueChange={(value: "monthly" | "yearly") => 
+                        setPlanFormData({ ...planFormData, billing_interval: value })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="monthly">Mensal</SelectItem>
+                        <SelectItem value="yearly">Anual</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-4 p-4 border rounded-lg bg-gray-50">
+                  <h4 className="font-semibold text-sm">Limites do Plano</h4>
+                  <p className="text-xs text-gray-600">
+                    Deixe em branco ou 0 para ilimitado
+                  </p>
+                  
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <Label>Máx. Utilizadores</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={planFormData.limits.max_users || ""}
+                        onChange={(e) => setPlanFormData({
+                          ...planFormData,
+                          limits: { 
+                            ...planFormData.limits, 
+                            max_users: e.target.value ? Number(e.target.value) : null 
+                          }
+                        })}
+                        placeholder="Ilimitado"
+                      />
+                    </div>
+
+                    <div>
+                      <Label>Máx. Leads</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={planFormData.limits.max_leads || ""}
+                        onChange={(e) => setPlanFormData({
+                          ...planFormData,
+                          limits: { 
+                            ...planFormData.limits, 
+                            max_leads: e.target.value ? Number(e.target.value) : null 
+                          }
+                        })}
+                        placeholder="Ilimitado"
+                      />
+                    </div>
+
+                    <div>
+                      <Label>Máx. Imóveis</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={planFormData.limits.max_properties || ""}
+                        onChange={(e) => setPlanFormData({
+                          ...planFormData,
+                          limits: { 
+                            ...planFormData.limits, 
+                            max_properties: e.target.value ? Number(e.target.value) : null 
+                          }
+                        })}
+                        placeholder="Ilimitado"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4 p-4 border rounded-lg bg-gray-50">
+                  <h4 className="font-semibold text-sm">Características do Plano</h4>
+                  
+                  <div className="flex gap-2">
+                    <Input
+                      value={newFeature}
+                      onChange={(e) => setNewFeature(e.target.value)}
+                      placeholder="Ex: Relatórios avançados"
+                      onKeyPress={(e) => e.key === "Enter" && addFeature()}
+                    />
+                    <Button type="button" onClick={addFeature}>
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  {planFormData.features.length > 0 && (
+                    <div className="space-y-2">
+                      {planFormData.features.map((feature, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-2 bg-white rounded">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle className="h-4 w-4 text-emerald-600" />
+                            <span className="text-sm">{feature}</span>
+                          </div>
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => removeFeature(idx)}
+                          >
+                            ✕
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-4 p-4 border rounded-lg bg-gray-50">
+                  <h4 className="font-semibold text-sm">Integração Stripe (Opcional)</h4>
+                  
+                  <div>
+                    <Label>Stripe Product ID</Label>
+                    <Input
+                      value={planFormData.stripe_product_id}
+                      onChange={(e) => setPlanFormData({ ...planFormData, stripe_product_id: e.target.value })}
+                      placeholder="prod_xxxxx"
+                    />
+                  </div>
+
+                  <div>
+                    <Label>Stripe Price ID</Label>
+                    <Input
+                      value={planFormData.stripe_price_id}
+                      onChange={(e) => setPlanFormData({ ...planFormData, stripe_price_id: e.target.value })}
+                      placeholder="price_xxxxx"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="is_active"
+                    checked={planFormData.is_active}
+                    onChange={(e) => setPlanFormData({ ...planFormData, is_active: e.target.checked })}
+                    className="rounded"
+                  />
+                  <Label htmlFor="is_active" className="cursor-pointer">
+                    Ativar plano imediatamente
+                  </Label>
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setPlanDialogOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleSavePlan}>
+                  {editingPlan ? "Guardar Alterações" : "Criar Plano"}
+                </Button>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
         </div>

@@ -38,9 +38,14 @@ export default function Login() {
   }, []);
 
   const checkAuth = async () => {
-    const user = await getCurrentUser();
-    if (user) {
-      router.push("/dashboard");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        router.push("/dashboard");
+      }
+    } catch (error) {
+      console.error("Error checking existing session:", error);
+      // User needs to login, stay on login page
     }
   };
 

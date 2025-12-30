@@ -140,10 +140,13 @@ export type Database = {
       }
       contacts: {
         Row: {
+          auto_message_config: Json | null
+          birth_date: string | null
           company: string | null
           created_at: string | null
           email: string | null
           id: string
+          lead_source_id: string | null
           name: string
           notes: string | null
           phone: string | null
@@ -153,10 +156,13 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          auto_message_config?: Json | null
+          birth_date?: string | null
           company?: string | null
           created_at?: string | null
           email?: string | null
           id?: string
+          lead_source_id?: string | null
           name: string
           notes?: string | null
           phone?: string | null
@@ -166,10 +172,13 @@ export type Database = {
           user_id: string
         }
         Update: {
+          auto_message_config?: Json | null
+          birth_date?: string | null
           company?: string | null
           created_at?: string | null
           email?: string | null
           id?: string
+          lead_source_id?: string | null
           name?: string
           notes?: string | null
           phone?: string | null
@@ -179,6 +188,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "contacts_lead_source_id_fkey"
+            columns: ["lead_source_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "contacts_user_id_fkey"
             columns: ["user_id"]
@@ -245,6 +261,53 @@ export type Database = {
           },
           {
             foreignKeyName: "documents_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      image_uploads: {
+        Row: {
+          created_at: string | null
+          entity_id: string | null
+          entity_type: string
+          file_name: string
+          file_path: string
+          file_size: number
+          id: string
+          mime_type: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          entity_id?: string | null
+          entity_type: string
+          file_name: string
+          file_path: string
+          file_size: number
+          id?: string
+          mime_type: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          entity_id?: string | null
+          entity_type?: string
+          file_name?: string
+          file_path?: string
+          file_size?: number
+          id?: string
+          mime_type?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "image_uploads_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
@@ -677,6 +740,7 @@ export type Database = {
           latitude: number | null
           listed_at: string | null
           longitude: number | null
+          main_image_url: string | null
           notes: string | null
           postal_code: string | null
           price: number | null
@@ -716,6 +780,7 @@ export type Database = {
           latitude?: number | null
           listed_at?: string | null
           longitude?: number | null
+          main_image_url?: string | null
           notes?: string | null
           postal_code?: string | null
           price?: number | null
@@ -755,6 +820,7 @@ export type Database = {
           latitude?: number | null
           listed_at?: string | null
           longitude?: number | null
+          main_image_url?: string | null
           notes?: string | null
           postal_code?: string | null
           price?: number | null
@@ -965,6 +1031,7 @@ export type Database = {
           description: string | null
           due_date: string | null
           id: string
+          notes: string | null
           priority: string | null
           related_contact_id: string | null
           related_lead_id: string | null
@@ -983,6 +1050,7 @@ export type Database = {
           description?: string | null
           due_date?: string | null
           id?: string
+          notes?: string | null
           priority?: string | null
           related_contact_id?: string | null
           related_lead_id?: string | null
@@ -1001,6 +1069,7 @@ export type Database = {
           description?: string | null
           due_date?: string | null
           id?: string
+          notes?: string | null
           priority?: string | null
           related_contact_id?: string | null
           related_lead_id?: string | null
@@ -1092,6 +1161,64 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workflow_executions: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          error_message: string | null
+          executed_at: string | null
+          id: string
+          lead_id: string
+          status: string
+          user_id: string
+          workflow_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          executed_at?: string | null
+          id?: string
+          lead_id: string
+          status?: string
+          user_id: string
+          workflow_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          executed_at?: string | null
+          id?: string
+          lead_id?: string
+          status?: string
+          user_id?: string
+          workflow_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workflow_executions_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_executions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workflow_executions_workflow_id_fkey"
+            columns: ["workflow_id"]
+            isOneToOne: false
+            referencedRelation: "lead_workflow_rules"
             referencedColumns: ["id"]
           },
         ]
