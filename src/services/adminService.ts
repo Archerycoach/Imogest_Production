@@ -1,0 +1,506 @@
+import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
+
+type Profile = Database["public"]["Tables"]["profiles"]["Row"];
+
+export interface AppBranding {
+  companyName: string;
+  logo: string | null;
+}
+
+export interface CreateUserData {
+  email: string;
+  password: string;
+  fullName: string;
+  role: "admin" | "team_lead" | "agent";
+  isActive: boolean;
+  teamLeadId?: string;
+}
+
+export type ActivityLogWithProfile = Database["public"]["Tables"]["activity_logs"]["Row"] & {
+  profiles: {
+    full_name: string | null;
+    email: string | null;
+  } | null;
+};
+
+// Check if current user is admin
+export const isAdmin = async (): Promise<boolean> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return false;
+
+  const { data } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  return data?.role === "admin";
+};
+
+// Check if current user is admin or manager
+export const isAdminOrManager = async (): Promise<boolean> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return false;
+
+  const { data } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  return data?.role === "admin" || data?.role === "team_lead";
+};
+
+// Get current user role
+export const getCurrentUserRole = async (): Promise<string | null> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  return data?.role || null;
+};
+
+// Get general admin stats
+export const getAdminStats = async () => {
+  const { count: usersCount } = await supabase
+    .from("profiles")
+    .select("*", { count: "exact", head: true });
+
+  const { count: activeCount } = await supabase
+    .from("profiles")
+    .select("*", { count: "exact", head: true })
+    .eq("is_active", true);
+
+  const { count: leadsCount } = await supabase
+    .from("leads")
+    .select("*", { count: "exact", head: true });
+
+  const { count: propertiesCount } = await supabase
+    .from("properties")
+    .select("*", { count: "exact", head: true });
+
+  const { count: tasksCount } = await supabase
+    .from("tasks")
+    .select("*", { count: "exact", head: true });
+
+  return {
+    totalUsers: usersCount || 0,
+    activeUsers: activeCount || 0,
+    totalLeads: leadsCount || 0,
+    totalProperties: propertiesCount || 0,
+    totalTasks: tasksCount || 0,
+  };
+};
+
+// Get all users (admin only)
+export const getAllUsers = async (): Promise<Profile[]> => {
+  const role = await getCurrentUserRole();
+  
+  let query = supabase
+    .from("profiles")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  // Team leads only see their assigned agents
+  if (role === "team_lead") {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
+    
+    query = query.or(`team_lead_id.eq.${user.id},id.eq.${user.id}`);
+  }
+
+  const { data, error } = await query;
+
+  if (error) throw error;
+  return data || [];
+};
+
+// Update user role (admin only)
+export const updateUserRole = async (userId: string, role: string) => {
+  try {
+    // Update role in profiles table
+    const { data, error } = await supabase
+      .from("profiles")
+      .update({ 
+        role: role as "admin" | "team_lead" | "agent" 
+      })
+      .eq("id", userId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    await logActivity(userId, "update_role", "users", userId, JSON.stringify({ role }));
+    return data;
+  } catch (error: any) {
+    console.error("[AdminService] Error in updateUserRole:", error);
+    throw error;
+  }
+};
+
+// Toggle user active status
+export const toggleUserStatus = async (userId: string, isActive: boolean) => {
+  const { error } = await supabase
+    .from("profiles")
+    .update({ is_active: isActive })
+    .eq("id", userId);
+
+  if (error) throw error;
+
+  await logActivity(userId, "toggle_status", "users", userId, JSON.stringify({ is_active: isActive }));
+};
+
+// Delete user (admin only)
+export const deleteUser = async (userId: string) => {
+  try {
+    console.log("[AdminService] Starting deleteUser...");
+    console.log("[AdminService] Target userId:", userId);
+    
+    // 1. Obtém sessão atual
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    console.log("[AdminService] Session exists:", !!session);
+    console.log("[AdminService] Access token exists:", !!session?.access_token);
+    if (session?.access_token) {
+      console.log("[AdminService] Access token (first 20 chars):", session.access_token.substring(0, 20) + "...");
+    }
+    
+    if (!session?.access_token) {
+      console.error("[AdminService] No active session found");
+      throw new Error("Sessão expirada. Por favor, faça login novamente.");
+    }
+
+    console.log("[AdminService] Sending delete request to API...");
+
+    // 2. Chama API Route com autenticação
+    const response = await fetch("/api/admin/delete-user", {
+      method: "DELETE",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ userId }),
+    });
+
+    console.log("[AdminService] Response status:", response.status);
+    console.log("[AdminService] Response ok:", response.ok);
+
+    const result = await response.json();
+    console.log("[AdminService] Response body:", result);
+
+    if (!response.ok) {
+      throw new Error(result.error || "Erro ao eliminar utilizador");
+    }
+
+    await logActivity("delete_user", "profile", userId);
+    
+    return result;
+  } catch (error: any) {
+    console.error("[AdminService] Error in deleteUser:", error);
+    throw new Error(error.message || "Erro ao eliminar utilizador.");
+  }
+};
+
+// Log activity
+export const logActivity = async (
+  userId: string,
+  action: string,
+  entityType: string,
+  entityId?: string,
+  details?: any
+) => {
+  const { error } = await supabase
+    .from("activity_logs")
+    .insert({
+      user_id: userId,
+      action,
+      entity_type: entityType,
+      entity_id: entityId,
+      details
+    } as any);
+};
+
+// Get activity logs
+export const getActivityLogs = async (limit = 50) => {
+  const { data, error } = await supabase
+    .from("activity_logs")
+    .select(`
+      *,
+      profiles!activity_logs_user_id_fkey (
+        full_name,
+        email
+      )
+    `)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  
+  // Cast the result to the expected type since Supabase types might be strict about relations
+  return (data as unknown as ActivityLogWithProfile[]) || [];
+};
+
+// Get subscription statistics
+export const getSubscriptionStats = async () => {
+  const { data: subscriptions, error } = await supabase
+    .from("subscriptions")
+    .select("status");
+
+  if (error) throw error;
+
+  const stats = {
+    total: subscriptions?.length || 0,
+    active: subscriptions?.filter((s) => s.status === "active").length || 0,
+    trial: subscriptions?.filter((s) => s.status === "trialing").length || 0,
+    cancelled: subscriptions?.filter((s) => s.status === "cancelled").length || 0,
+  };
+
+  return stats;
+};
+
+// Get revenue statistics
+export const getRevenueStats = async () => {
+  const { data: payments, error } = await supabase
+    .from("payment_history")
+    .select("amount, payment_date, status")
+    .eq("status", "completed");
+
+  if (error) throw error;
+
+  const total = payments?.reduce((sum, p) => sum + p.amount, 0) || 0;
+  const currentMonth = new Date().getMonth();
+  const currentYear = new Date().getFullYear();
+
+  const monthlyRevenue =
+    payments
+      ?.filter((p) => {
+        const date = new Date(p.payment_date || "");
+        return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
+      })
+      .reduce((sum, p) => sum + p.amount, 0) || 0;
+
+  return {
+    total,
+    monthly: monthlyRevenue,
+  };
+};
+
+// Get all subscription plans
+export const getSubscriptionPlans = async () => {
+  const { data, error } = await supabase
+    .from("subscription_plans")
+    .select("*")
+    .eq("is_active", true)
+    .order("price", { ascending: true });
+
+  if (error) throw error;
+  return data || [];
+};
+
+// Create or update subscription plan
+export const upsertSubscriptionPlan = async (plan: any) => {
+  const { data, error } = await supabase
+    .from("subscription_plans")
+    .upsert(plan)
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  await logActivity(
+    plan.id ? "update_subscription_plan" : "create_subscription_plan",
+    "subscription_plan",
+    data.id,
+    plan
+  );
+
+  return data;
+};
+
+// Delete subscription plan
+export const deleteSubscriptionPlan = async (planId: string) => {
+  const { error } = await supabase
+    .from("subscription_plans")
+    .delete()
+    .eq("id", planId);
+
+  if (error) throw error;
+
+  await logActivity("delete_subscription_plan", "subscription_plan", planId);
+};
+
+// Get payment settings
+export const getPaymentSettings = async () => {
+  const { data, error } = await supabase
+    .from("system_settings")
+    .select("*")
+    .in("key", ["stripe_settings", "eupago_settings"])
+    .order("key");
+
+  if (error) throw error;
+  return data || [];
+};
+
+// Update payment settings
+export const updatePaymentSettings = async (key: string, value: any) => {
+  const { error } = await supabase
+    .from("system_settings")
+    .upsert({
+      key,
+      value,
+      updated_at: new Date().toISOString(),
+    });
+
+  if (error) throw error;
+
+  await logActivity("update_payment_settings", "system_settings", key, value);
+};
+
+/**
+ * Create a new user with email/password
+ * Uses API route that has access to service_role key
+ */
+export const createUser = async (userData: CreateUserData) => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session?.access_token) {
+      console.error("[AdminService] No active session found");
+      throw new Error("Sessão expirada. Por favor, faça login novamente.");
+    }
+
+    console.log("[AdminService] Sending create user request...");
+
+    const response = await fetch("/api/admin/create-user", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify(userData),
+    });
+
+    const result = await response.json();
+    console.log("[AdminService] API response:", result);
+
+    if (!response.ok) {
+      throw new Error(result.error || "Erro ao criar utilizador");
+    }
+
+    if (!result.success) {
+      throw new Error(result.error || "Falha ao criar utilizador");
+    }
+
+    return result;
+  } catch (error: any) {
+    console.error("[AdminService] Error in createUser:", error);
+    throw new Error(error.message || "Erro ao criar utilizador.");
+  }
+};
+
+// Get team leads (for assignment dropdown)
+export const getTeamLeads = async (): Promise<Profile[]> => {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("role", "team_lead")
+    .eq("is_active", true)
+    .order("full_name", { ascending: true });
+
+  if (error) throw error;
+  return data || [];
+};
+
+// Assign agent to team lead
+export const assignAgentToTeamLead = async (agentId: string, teamLeadId: string | null) => {
+  const { error } = await supabase
+    .from("profiles")
+    .update({ team_lead_id: teamLeadId })
+    .eq("id", agentId);
+
+  if (error) throw error;
+
+  await logActivity(agentId, "assign_agent_to_team_lead", "profile", agentId, JSON.stringify({ team_lead_id: teamLeadId }));
+};
+
+// Get agents for a team lead
+export const getTeamLeadAgents = async (teamLeadId: string): Promise<Profile[]> => {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("team_lead_id", teamLeadId)
+    .eq("role", "agent")
+    .order("full_name", { ascending: true });
+
+  if (error) throw error;
+  return data || [];
+};
+
+// Get app branding settings
+export const getAppBranding = async (): Promise<AppBranding> => {
+  const { data, error } = await supabase
+    .from("system_settings")
+    .select("value")
+    .eq("key", "app_branding")
+    .single();
+
+  if (error) throw error;
+  
+  const branding = data?.value as unknown as AppBranding;
+  return branding || { companyName: "Imogest", logo: null };
+};
+
+// Update app branding
+export const updateAppBranding = async (branding: AppBranding) => {
+  const { error } = await supabase
+    .from("system_settings")
+    .upsert({
+      key: "app_branding",
+      value: branding as unknown as Database["public"]["Tables"]["system_settings"]["Insert"]["value"],
+      updated_at: new Date().toISOString(),
+    });
+
+  if (error) throw error;
+
+  await logActivity("system", "update_app_branding", "system_settings", "app_branding", JSON.stringify(branding));
+};
+
+export const getSystemSettings = async (key: string) => {
+  const { data, error } = await supabase
+    .from("system_settings")
+    .select("*")
+    .eq("key", key)
+    .single();
+
+  if (error && error.code !== "PGRST116") {
+    console.error("Error fetching system settings:", error);
+    return null;
+  }
+  
+  return data ? data.value : null;
+};
+
+// Update setting
+export const updateSystemSetting = async (key: string, value: any) => {
+  const { error } = await supabase
+    .from("system_settings")
+    .upsert({ 
+      key, 
+      value,
+      updated_at: new Date().toISOString() 
+    } as any)
+    .select();
+    
+  if (error) throw error;
+  
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) {
+    await logActivity(user.id, "update_setting", "system_settings", key, { value });
+  }
+};
