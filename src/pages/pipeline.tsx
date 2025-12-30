@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
+import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -317,226 +318,230 @@ export default function PipelinePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <TrendingUp className="h-12 w-12 text-blue-600 mx-auto mb-4 animate-pulse" />
-          <p className="text-gray-600">A carregar funil de vendas...</p>
+      <Layout>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <TrendingUp className="h-12 w-12 text-blue-600 mx-auto mb-4 animate-pulse" />
+            <p className="text-gray-600">A carregar funil de vendas...</p>
+          </div>
         </div>
-      </div>
+      </Layout>
     );
   }
 
   return (
-    <SubscriptionGuard>
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto p-6 max-w-[1600px]">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">Funil de Vendas</h1>
-          <p className="text-gray-600">Visualize e gerencie seu pipeline de vendas</p>
+    <Layout>
+      <SubscriptionGuard>
+        <div className="min-h-screen bg-gray-50">
+          <div className="container mx-auto p-6 max-w-[1600px]">
+            <div className="mb-8">
+              <h1 className="text-4xl font-bold text-gray-900 mb-2">Funil de Vendas</h1>
+              <p className="text-gray-600">Visualize e gerencie seu pipeline de vendas</p>
+            </div>
+
+            <Tabs defaultValue="buyers" className="w-full">
+              <TabsList className="grid w-full grid-cols-2 mb-6">
+                <TabsTrigger value="buyers">👥 Funil Compradores</TabsTrigger>
+                <TabsTrigger value="sellers">🏠 Funil Vendedores</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="buyers" className="space-y-6">
+                {/* Metrics Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                  <Card className="border-2 border-blue-200 bg-blue-50">
+                    <CardContent className="pt-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-blue-600">Total Leads</p>
+                          <p className="text-3xl font-bold text-blue-900">{buyerLeads.length}</p>
+                        </div>
+                        <Users className="h-12 w-12 text-blue-400" />
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-2 border-purple-200 bg-purple-50">
+                    <CardContent className="pt-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-purple-600">Valor Total</p>
+                          <p className="text-3xl font-bold text-purple-900">
+                            {new Intl.NumberFormat("pt-PT", {
+                              style: "currency",
+                              currency: "EUR",
+                              minimumFractionDigits: 0,
+                            }).format(
+                              buyerLeads.reduce((sum, lead) => {
+                                const budget = typeof lead.budget === "number" ? lead.budget : Number(lead.budget) || 0;
+                                return sum + budget;
+                              }, 0)
+                            )}
+                          </p>
+                        </div>
+                        <DollarSign className="h-12 w-12 text-purple-400" />
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-2 border-emerald-200 bg-emerald-50">
+                    <CardContent className="pt-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-emerald-600">Taxa Conversão</p>
+                          <p className="text-3xl font-bold text-emerald-900">
+                            {buyerLeads.length > 0
+                              ? ((buyerLeads.filter((l) => l.status === "won").length / buyerLeads.length) * 100).toFixed(1)
+                              : 0}%
+                          </p>
+                        </div>
+                        <TrendingUp className="h-12 w-12 text-emerald-400" />
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-2 border-orange-200 bg-orange-50">
+                    <CardContent className="pt-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-orange-600">Em Negociação</p>
+                          <p className="text-3xl font-bold text-orange-900">
+                            {buyerLeads.filter((l) => l.status === "negotiation").length}
+                          </p>
+                        </div>
+                        <Target className="h-12 w-12 text-orange-400" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <Button
+                  onClick={() => exportLeadsToExcel(buyerLeads)}
+                  className="mb-4"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Exportar Excel
+                </Button>
+
+                {buyerLeads.length === 0 ? (
+                  <Card className="border-2 border-gray-200 shadow-sm">
+                    <CardContent className="flex flex-col items-center justify-center py-12">
+                      <Users className="h-16 w-16 text-gray-300 mb-4" />
+                      <p className="text-gray-500 text-lg mb-2">
+                        Nenhum lead comprador encontrado
+                      </p>
+                      <p className="text-gray-400 text-sm mb-4">
+                        Crie leads do tipo "Comprador" ou "Ambos" para vê-los aqui
+                      </p>
+                      <Button onClick={() => router.push("/leads")}>
+                        Ir para Leads
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  renderPipeline(BUYER_STAGES, buyerLeads)
+                )}
+              </TabsContent>
+
+              <TabsContent value="sellers" className="space-y-6">
+                {/* Metrics Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                  <Card className="border-2 border-blue-200 bg-blue-50">
+                    <CardContent className="pt-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-blue-600">Total Leads</p>
+                          <p className="text-3xl font-bold text-blue-900">{sellerLeads.length}</p>
+                        </div>
+                        <Users className="h-12 w-12 text-blue-400" />
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-2 border-purple-200 bg-purple-50">
+                    <CardContent className="pt-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-purple-600">Valor Total</p>
+                          <p className="text-3xl font-bold text-purple-900">
+                            {new Intl.NumberFormat("pt-PT", {
+                              style: "currency",
+                              currency: "EUR",
+                              minimumFractionDigits: 0,
+                            }).format(
+                              sellerLeads.reduce((sum, lead) => {
+                                const budget = typeof lead.budget === "number" ? lead.budget : Number(lead.budget) || 0;
+                                return sum + budget;
+                              }, 0)
+                            )}
+                          </p>
+                        </div>
+                        <DollarSign className="h-12 w-12 text-purple-400" />
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-2 border-emerald-200 bg-emerald-50">
+                    <CardContent className="pt-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-emerald-600">Taxa Conversão</p>
+                          <p className="text-3xl font-bold text-emerald-900">
+                            {sellerLeads.length > 0
+                              ? ((sellerLeads.filter((l) => l.status === "won").length / sellerLeads.length) * 100).toFixed(1)
+                              : 0}%
+                          </p>
+                        </div>
+                        <TrendingUp className="h-12 w-12 text-emerald-400" />
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-2 border-orange-200 bg-orange-50">
+                    <CardContent className="pt-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-orange-600">Em Negociação</p>
+                          <p className="text-3xl font-bold text-orange-900">
+                            {sellerLeads.filter((l) => l.status === "negotiation").length}
+                          </p>
+                        </div>
+                        <Target className="h-12 w-12 text-orange-400" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <Button
+                  onClick={() => exportLeadsToExcel(sellerLeads)}
+                  className="mb-4"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Exportar Excel
+                </Button>
+
+                {sellerLeads.length === 0 ? (
+                  <Card className="border-2 border-gray-200 shadow-sm">
+                    <CardContent className="flex flex-col items-center justify-center py-12">
+                      <Home className="h-16 w-16 text-gray-300 mb-4" />
+                      <p className="text-gray-500 text-lg mb-2">
+                        Nenhum lead vendedor encontrado
+                      </p>
+                      <p className="text-gray-400 text-sm mb-4">
+                        Crie leads do tipo "Vendedor" ou "Ambos" para vê-los aqui
+                      </p>
+                      <Button onClick={() => router.push("/leads")}>
+                        Ir para Leads
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  renderPipeline(SELLER_STAGES, sellerLeads)
+                )}
+              </TabsContent>
+            </Tabs>
+          </div>
         </div>
-
-        <Tabs defaultValue="buyers" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-6">
-            <TabsTrigger value="buyers">👥 Funil Compradores</TabsTrigger>
-            <TabsTrigger value="sellers">🏠 Funil Vendedores</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="buyers" className="space-y-6">
-            {/* Metrics Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-              <Card className="border-2 border-blue-200 bg-blue-50">
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-blue-600">Total Leads</p>
-                      <p className="text-3xl font-bold text-blue-900">{buyerLeads.length}</p>
-                    </div>
-                    <Users className="h-12 w-12 text-blue-400" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-2 border-purple-200 bg-purple-50">
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-purple-600">Valor Total</p>
-                      <p className="text-3xl font-bold text-purple-900">
-                        {new Intl.NumberFormat("pt-PT", {
-                          style: "currency",
-                          currency: "EUR",
-                          minimumFractionDigits: 0,
-                        }).format(
-                          buyerLeads.reduce((sum, lead) => {
-                            const budget = typeof lead.budget === "number" ? lead.budget : Number(lead.budget) || 0;
-                            return sum + budget;
-                          }, 0)
-                        )}
-                      </p>
-                    </div>
-                    <DollarSign className="h-12 w-12 text-purple-400" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-2 border-emerald-200 bg-emerald-50">
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-emerald-600">Taxa Conversão</p>
-                      <p className="text-3xl font-bold text-emerald-900">
-                        {buyerLeads.length > 0
-                          ? ((buyerLeads.filter((l) => l.status === "won").length / buyerLeads.length) * 100).toFixed(1)
-                          : 0}%
-                      </p>
-                    </div>
-                    <TrendingUp className="h-12 w-12 text-emerald-400" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-2 border-orange-200 bg-orange-50">
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-orange-600">Em Negociação</p>
-                      <p className="text-3xl font-bold text-orange-900">
-                        {buyerLeads.filter((l) => l.status === "negotiation").length}
-                      </p>
-                    </div>
-                    <Target className="h-12 w-12 text-orange-400" />
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <Button
-              onClick={() => exportLeadsToExcel(buyerLeads)}
-              className="mb-4"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Exportar Excel
-            </Button>
-
-            {buyerLeads.length === 0 ? (
-              <Card className="border-2 border-gray-200 shadow-sm">
-                <CardContent className="flex flex-col items-center justify-center py-12">
-                  <Users className="h-16 w-16 text-gray-300 mb-4" />
-                  <p className="text-gray-500 text-lg mb-2">
-                    Nenhum lead comprador encontrado
-                  </p>
-                  <p className="text-gray-400 text-sm mb-4">
-                    Crie leads do tipo "Comprador" ou "Ambos" para vê-los aqui
-                  </p>
-                  <Button onClick={() => router.push("/leads")}>
-                    Ir para Leads
-                  </Button>
-                </CardContent>
-              </Card>
-            ) : (
-              renderPipeline(BUYER_STAGES, buyerLeads)
-            )}
-          </TabsContent>
-
-          <TabsContent value="sellers" className="space-y-6">
-            {/* Metrics Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-              <Card className="border-2 border-blue-200 bg-blue-50">
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-blue-600">Total Leads</p>
-                      <p className="text-3xl font-bold text-blue-900">{sellerLeads.length}</p>
-                    </div>
-                    <Users className="h-12 w-12 text-blue-400" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-2 border-purple-200 bg-purple-50">
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-purple-600">Valor Total</p>
-                      <p className="text-3xl font-bold text-purple-900">
-                        {new Intl.NumberFormat("pt-PT", {
-                          style: "currency",
-                          currency: "EUR",
-                          minimumFractionDigits: 0,
-                        }).format(
-                          sellerLeads.reduce((sum, lead) => {
-                            const budget = typeof lead.budget === "number" ? lead.budget : Number(lead.budget) || 0;
-                            return sum + budget;
-                          }, 0)
-                        )}
-                      </p>
-                    </div>
-                    <DollarSign className="h-12 w-12 text-purple-400" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-2 border-emerald-200 bg-emerald-50">
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-emerald-600">Taxa Conversão</p>
-                      <p className="text-3xl font-bold text-emerald-900">
-                        {sellerLeads.length > 0
-                          ? ((sellerLeads.filter((l) => l.status === "won").length / sellerLeads.length) * 100).toFixed(1)
-                          : 0}%
-                      </p>
-                    </div>
-                    <TrendingUp className="h-12 w-12 text-emerald-400" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-2 border-orange-200 bg-orange-50">
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-orange-600">Em Negociação</p>
-                      <p className="text-3xl font-bold text-orange-900">
-                        {sellerLeads.filter((l) => l.status === "negotiation").length}
-                      </p>
-                    </div>
-                    <Target className="h-12 w-12 text-orange-400" />
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <Button
-              onClick={() => exportLeadsToExcel(sellerLeads)}
-              className="mb-4"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Exportar Excel
-            </Button>
-
-            {sellerLeads.length === 0 ? (
-              <Card className="border-2 border-gray-200 shadow-sm">
-                <CardContent className="flex flex-col items-center justify-center py-12">
-                  <Home className="h-16 w-16 text-gray-300 mb-4" />
-                  <p className="text-gray-500 text-lg mb-2">
-                    Nenhum lead vendedor encontrado
-                  </p>
-                  <p className="text-gray-400 text-sm mb-4">
-                    Crie leads do tipo "Vendedor" ou "Ambos" para vê-los aqui
-                  </p>
-                  <Button onClick={() => router.push("/leads")}>
-                    Ir para Leads
-                  </Button>
-                </CardContent>
-              </Card>
-            ) : (
-              renderPipeline(SELLER_STAGES, sellerLeads)
-            )}
-          </TabsContent>
-        </Tabs>
-      </div>
-    </div>
-    </SubscriptionGuard>
+      </SubscriptionGuard>
+    </Layout>
   );
 }

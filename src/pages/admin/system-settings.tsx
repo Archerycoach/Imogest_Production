@@ -19,6 +19,8 @@ import {
 } from "@/services/settingsService";
 import { getSession } from "@/services/authService";
 import { getUserProfile } from "@/services/profileService";
+import { Layout } from "@/components/Layout";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 
 export default function SystemSettings() {
   const router = useRouter();
@@ -164,326 +166,332 @@ export default function SystemSettings() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
-      </div>
+      <ProtectedRoute allowedRoles={["admin"]}>
+        <Layout>
+          <div className="flex items-center justify-center min-h-[60vh]">
+            <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
+          </div>
+        </Layout>
+      </ProtectedRoute>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
-      <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <Button
-            variant="ghost"
-            onClick={() => router.push("/admin/dashboard")}
-            className="mb-4"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Voltar ao Dashboard
-          </Button>
-          <h1 className="text-4xl font-bold text-slate-900">
-            ⚙️ Configurações do Sistema
-          </h1>
-          <p className="text-slate-600 mt-2">
-            Gerir módulos, pipeline e configurações globais
-          </p>
+    <ProtectedRoute allowedRoles={["admin"]}>
+      <Layout>
+        <div className="space-y-6">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="ghost"
+              onClick={() => router.push("/admin/dashboard")}
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Voltar ao Dashboard
+            </Button>
+            <div>
+              <h1 className="text-4xl font-bold text-slate-900">
+                ⚙️ Configurações do Sistema
+              </h1>
+              <p className="text-slate-600 mt-2">
+                Gerir módulos, pipeline e configurações globais
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-6">
+            {/* Modules Configuration */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  📦 Módulos Ativos
+                </CardTitle>
+                <CardDescription>
+                  Ativar ou desativar funcionalidades da aplicação
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="module-leads">Leads</Label>
+                      <p className="text-sm text-slate-500">
+                        Gestão de leads e contactos
+                      </p>
+                    </div>
+                    <Switch
+                      id="module-leads"
+                      checked={modules.leads}
+                      onCheckedChange={(checked) =>
+                        setModules({ ...modules, leads: checked })
+                      }
+                    />
+                  </div>
+
+                  <Separator />
+
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="module-properties">Imóveis</Label>
+                      <p className="text-sm text-slate-500">
+                        Base de dados de propriedades
+                      </p>
+                    </div>
+                    <Switch
+                      id="module-properties"
+                      checked={modules.properties}
+                      onCheckedChange={(checked) =>
+                        setModules({ ...modules, properties: checked })
+                      }
+                    />
+                  </div>
+
+                  <Separator />
+
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="module-tasks">Tarefas</Label>
+                      <p className="text-sm text-slate-500">
+                        Sistema de gestão de tarefas
+                      </p>
+                    </div>
+                    <Switch
+                      id="module-tasks"
+                      checked={modules.tasks}
+                      onCheckedChange={(checked) =>
+                        setModules({ ...modules, tasks: checked })
+                      }
+                    />
+                  </div>
+
+                  <Separator />
+
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="module-calendar">Calendário</Label>
+                      <p className="text-sm text-slate-500">
+                        Agenda e sincronização Google Calendar
+                      </p>
+                    </div>
+                    <Switch
+                      id="module-calendar"
+                      checked={modules.calendar}
+                      onCheckedChange={(checked) =>
+                        setModules({ ...modules, calendar: checked })
+                      }
+                    />
+                  </div>
+
+                  <Separator />
+
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="module-reports">Relatórios</Label>
+                      <p className="text-sm text-slate-500">
+                        Relatórios e análises exportáveis
+                      </p>
+                    </div>
+                    <Switch
+                      id="module-reports"
+                      checked={modules.reports}
+                      onCheckedChange={(checked) =>
+                        setModules({ ...modules, reports: checked })
+                      }
+                    />
+                  </div>
+
+                  <Separator />
+
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="module-chat">Chat</Label>
+                      <p className="text-sm text-slate-500">
+                        Sistema de mensagens internas
+                      </p>
+                    </div>
+                    <Switch
+                      id="module-chat"
+                      checked={modules.chat}
+                      onCheckedChange={(checked) =>
+                        setModules({ ...modules, chat: checked })
+                      }
+                    />
+                  </div>
+
+                  <div className="flex justify-end pt-4">
+                    <Button onClick={handleSaveModules} disabled={saving}>
+                      {saving ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          A guardar...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4 mr-2" />
+                          Guardar Módulos
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Pipeline Configuration */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  🎯 Configuração do Pipeline
+                </CardTitle>
+                <CardDescription>
+                  Personalizar etapas do funil de vendas
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  <div>
+                    <Label className="text-base font-semibold">
+                      Pipeline Compradores
+                    </Label>
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {pipeline.buyer.map((stage, index) => (
+                        <Badge
+                          key={index}
+                          variant="outline"
+                          className="text-sm px-3 py-1"
+                        >
+                          {index + 1}. {stage}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div>
+                    <Label className="text-base font-semibold">
+                      Pipeline Vendedores
+                    </Label>
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {pipeline.seller.map((stage, index) => (
+                        <Badge
+                          key={index}
+                          variant="outline"
+                          className="text-sm px-3 py-1"
+                        >
+                          {index + 1}. {stage}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="text-sm text-blue-900">
+                      ℹ️ <strong>Nota:</strong> A personalização avançada de
+                      etapas do pipeline estará disponível em breve. Por agora, as
+                      etapas padrão estão otimizadas para o mercado imobiliário.
+                    </p>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <Button onClick={handleSavePipeline} disabled={saving}>
+                      {saving ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          A guardar...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4 mr-2" />
+                          Guardar Pipeline
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Required Fields Configuration */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  ✅ Campos Obrigatórios
+                </CardTitle>
+                <CardDescription>
+                  Definir quais campos são obrigatórios em cada módulo
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  <div>
+                    <Label className="text-base font-semibold">Leads</Label>
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {requiredFields.leads.map((field, index) => (
+                        <Badge key={index} className="text-sm px-3 py-1">
+                          {field}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div>
+                    <Label className="text-base font-semibold">Imóveis</Label>
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {requiredFields.properties.map((field, index) => (
+                        <Badge key={index} className="text-sm px-3 py-1">
+                          {field}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div>
+                    <Label className="text-base font-semibold">Tarefas</Label>
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {requiredFields.tasks.map((field, index) => (
+                        <Badge key={index} className="text-sm px-3 py-1">
+                          {field}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p className="text-sm text-blue-900">
+                      ℹ️ <strong>Nota:</strong> A personalização de campos
+                      obrigatórios estará disponível em breve. Os campos atuais
+                      são otimizados para melhor qualidade de dados.
+                    </p>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <Button
+                      onClick={handleSaveRequiredFields}
+                      disabled={saving}
+                    >
+                      {saving ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          A guardar...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4 mr-2" />
+                          Guardar Campos
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
-
-        <div className="grid gap-6">
-          {/* Modules Configuration */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                📦 Módulos Ativos
-              </CardTitle>
-              <CardDescription>
-                Ativar ou desativar funcionalidades da aplicação
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="module-leads">Leads</Label>
-                    <p className="text-sm text-slate-500">
-                      Gestão de leads e contactos
-                    </p>
-                  </div>
-                  <Switch
-                    id="module-leads"
-                    checked={modules.leads}
-                    onCheckedChange={(checked) =>
-                      setModules({ ...modules, leads: checked })
-                    }
-                  />
-                </div>
-
-                <Separator />
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="module-properties">Imóveis</Label>
-                    <p className="text-sm text-slate-500">
-                      Base de dados de propriedades
-                    </p>
-                  </div>
-                  <Switch
-                    id="module-properties"
-                    checked={modules.properties}
-                    onCheckedChange={(checked) =>
-                      setModules({ ...modules, properties: checked })
-                    }
-                  />
-                </div>
-
-                <Separator />
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="module-tasks">Tarefas</Label>
-                    <p className="text-sm text-slate-500">
-                      Sistema de gestão de tarefas
-                    </p>
-                  </div>
-                  <Switch
-                    id="module-tasks"
-                    checked={modules.tasks}
-                    onCheckedChange={(checked) =>
-                      setModules({ ...modules, tasks: checked })
-                    }
-                  />
-                </div>
-
-                <Separator />
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="module-calendar">Calendário</Label>
-                    <p className="text-sm text-slate-500">
-                      Agenda e sincronização Google Calendar
-                    </p>
-                  </div>
-                  <Switch
-                    id="module-calendar"
-                    checked={modules.calendar}
-                    onCheckedChange={(checked) =>
-                      setModules({ ...modules, calendar: checked })
-                    }
-                  />
-                </div>
-
-                <Separator />
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="module-reports">Relatórios</Label>
-                    <p className="text-sm text-slate-500">
-                      Relatórios e análises exportáveis
-                    </p>
-                  </div>
-                  <Switch
-                    id="module-reports"
-                    checked={modules.reports}
-                    onCheckedChange={(checked) =>
-                      setModules({ ...modules, reports: checked })
-                    }
-                  />
-                </div>
-
-                <Separator />
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="module-chat">Chat</Label>
-                    <p className="text-sm text-slate-500">
-                      Sistema de mensagens internas
-                    </p>
-                  </div>
-                  <Switch
-                    id="module-chat"
-                    checked={modules.chat}
-                    onCheckedChange={(checked) =>
-                      setModules({ ...modules, chat: checked })
-                    }
-                  />
-                </div>
-
-                <div className="flex justify-end pt-4">
-                  <Button onClick={handleSaveModules} disabled={saving}>
-                    {saving ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        A guardar...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="h-4 w-4 mr-2" />
-                        Guardar Módulos
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Pipeline Configuration */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                🎯 Configuração do Pipeline
-              </CardTitle>
-              <CardDescription>
-                Personalizar etapas do funil de vendas
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                <div>
-                  <Label className="text-base font-semibold">
-                    Pipeline Compradores
-                  </Label>
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    {pipeline.buyer.map((stage, index) => (
-                      <Badge
-                        key={index}
-                        variant="outline"
-                        className="text-sm px-3 py-1"
-                      >
-                        {index + 1}. {stage}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-
-                <Separator />
-
-                <div>
-                  <Label className="text-base font-semibold">
-                    Pipeline Vendedores
-                  </Label>
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    {pipeline.seller.map((stage, index) => (
-                      <Badge
-                        key={index}
-                        variant="outline"
-                        className="text-sm px-3 py-1"
-                      >
-                        {index + 1}. {stage}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <p className="text-sm text-blue-900">
-                    ℹ️ <strong>Nota:</strong> A personalização avançada de
-                    etapas do pipeline estará disponível em breve. Por agora, as
-                    etapas padrão estão otimizadas para o mercado imobiliário.
-                  </p>
-                </div>
-
-                <div className="flex justify-end">
-                  <Button onClick={handleSavePipeline} disabled={saving}>
-                    {saving ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        A guardar...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="h-4 w-4 mr-2" />
-                        Guardar Pipeline
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Required Fields Configuration */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                ✅ Campos Obrigatórios
-              </CardTitle>
-              <CardDescription>
-                Definir quais campos são obrigatórios em cada módulo
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                <div>
-                  <Label className="text-base font-semibold">Leads</Label>
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    {requiredFields.leads.map((field, index) => (
-                      <Badge key={index} className="text-sm px-3 py-1">
-                        {field}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-
-                <Separator />
-
-                <div>
-                  <Label className="text-base font-semibold">Imóveis</Label>
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    {requiredFields.properties.map((field, index) => (
-                      <Badge key={index} className="text-sm px-3 py-1">
-                        {field}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-
-                <Separator />
-
-                <div>
-                  <Label className="text-base font-semibold">Tarefas</Label>
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    {requiredFields.tasks.map((field, index) => (
-                      <Badge key={index} className="text-sm px-3 py-1">
-                        {field}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <p className="text-sm text-blue-900">
-                    ℹ️ <strong>Nota:</strong> A personalização de campos
-                    obrigatórios estará disponível em breve. Os campos atuais
-                    são otimizados para melhor qualidade de dados.
-                  </p>
-                </div>
-
-                <div className="flex justify-end">
-                  <Button
-                    onClick={handleSaveRequiredFields}
-                    disabled={saving}
-                  >
-                    {saving ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        A guardar...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="h-4 w-4 mr-2" />
-                        Guardar Campos
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    </div>
+      </Layout>
+    </ProtectedRoute>
   );
 }

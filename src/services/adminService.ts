@@ -101,6 +101,7 @@ export const getAdminStats = async () => {
 // Get all users (admin only)
 export const getAllUsers = async (): Promise<Profile[]> => {
   const role = await getCurrentUserRole();
+  console.log("[AdminService] getAllUsers - Current user role:", role);
   
   let query = supabase
     .from("profiles")
@@ -110,14 +111,30 @@ export const getAllUsers = async (): Promise<Profile[]> => {
   // Team leads only see their assigned agents
   if (role === "team_lead") {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return [];
+    if (!user) {
+      console.log("[AdminService] getAllUsers - No user found for team_lead");
+      return [];
+    }
     
+    console.log("[AdminService] getAllUsers - Filtering for team_lead:", user.id);
     query = query.or(`team_lead_id.eq.${user.id},id.eq.${user.id}`);
   }
 
   const { data, error } = await query;
 
-  if (error) throw error;
+  if (error) {
+    console.error("[AdminService] getAllUsers - Error:", error);
+    throw error;
+  }
+  
+  console.log("[AdminService] getAllUsers - Returning", data?.length || 0, "users");
+  console.log("[AdminService] getAllUsers - User details:", data?.map(u => ({ 
+    id: u.id, 
+    name: u.full_name, 
+    email: u.email,
+    role: u.role 
+  })));
+  
   return data || [];
 };
 

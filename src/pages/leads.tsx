@@ -75,7 +75,7 @@ export default function LeadsPage() {
     notes: "",
     budget: "",
     location_preference: "",
-    source: ""
+    source: "website"
   });
 
   useEffect(() => {
@@ -220,7 +220,7 @@ export default function LeadsPage() {
       notes: "",
       budget: "",
       location_preference: "",
-      source: ""
+      source: "website"
     });
   };
 
@@ -343,6 +343,27 @@ export default function LeadsPage() {
                       placeholder="email@exemplo.com"
                     />
                   </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="source">Origem</Label>
+                    <Select 
+                      value={formState.source} 
+                      onValueChange={(value) => setFormState({ ...formState, source: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione origem" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="website">Website</SelectItem>
+                        <SelectItem value="referral">Referência</SelectItem>
+                        <SelectItem value="social_media">Redes Sociais</SelectItem>
+                        <SelectItem value="cold_call">Prospeção</SelectItem>
+                        <SelectItem value="event">Evento</SelectItem>
+                        <SelectItem value="other">Outro</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="status">Estado</Label>
@@ -567,6 +588,27 @@ export default function LeadsPage() {
                   onChange={(e) => setFormState({ ...formState, email: e.target.value })}
                 />
               </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-source">Origem</Label>
+                <Select 
+                  value={formState.source} 
+                  onValueChange={(value) => setFormState({ ...formState, source: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione origem" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="website">Website</SelectItem>
+                    <SelectItem value="referral">Referência</SelectItem>
+                    <SelectItem value="social_media">Redes Sociais</SelectItem>
+                    <SelectItem value="cold_call">Prospeção</SelectItem>
+                    <SelectItem value="event">Evento</SelectItem>
+                    <SelectItem value="other">Outro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="edit-status">Estado</Label>

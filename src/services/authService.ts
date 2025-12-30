@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { User, Session } from "@supabase/supabase-js";
+import { getUserWithRetry, getSessionWithRetry } from "@/lib/supabaseRetry";
 
 export interface AuthUser {
   id: string;
@@ -33,23 +34,46 @@ const getURL = () => {
   return url
 }
 
-// Get current user
-export const getCurrentUser = async (): Promise<AuthUser | null> => {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  
-  return {
-    id: user.id,
-    email: user.email || "",
-    user_metadata: user.user_metadata,
-    created_at: user.created_at
-  };
+// Get current user with retry logic
+export const getCurrentUser = async (): Promise<User | null> => {
+  try {
+    const userData = await getUserWithRetry(supabase, {
+      maxRetries: 3,
+      delayMs: 500,
+    });
+    return userData?.user || null;
+  } catch (error) {
+    console.error("[Auth] Failed to get current user after retries:", error);
+    return null;
+  }
 };
 
-// Get current session
-export const getSession = async (): Promise<Session | null> => {
-  const { data: { session } } = await supabase.auth.getSession();
-  return session;
+// Check if user is authenticated with retry logic
+export const isAuthenticated = async (): Promise<boolean> => {
+  try {
+    const userData = await getUserWithRetry(supabase, {
+      maxRetries: 2,
+      delayMs: 500,
+    });
+    return !!userData?.user;
+  } catch (error) {
+    console.error("[Auth] Failed to check authentication:", error);
+    return false;
+  }
+};
+
+// Get session with retry logic
+export const getSession = async () => {
+  try {
+    const sessionData = await getSessionWithRetry(supabase, {
+      maxRetries: 2,
+      delayMs: 500,
+    });
+    return sessionData?.session || null;
+  } catch (error) {
+    console.error("[Auth] Failed to get session:", error);
+    return null;
+  }
 };
 
 export const getCurrentSession = getSession; // Alias for backward compatibility

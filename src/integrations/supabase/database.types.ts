@@ -494,6 +494,7 @@ export type Database = {
       notifications: {
         Row: {
           created_at: string | null
+          data: Json | null
           id: string
           is_read: boolean | null
           message: string | null
@@ -506,6 +507,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string | null
+          data?: Json | null
           id?: string
           is_read?: boolean | null
           message?: string | null
@@ -518,6 +520,7 @@ export type Database = {
         }
         Update: {
           created_at?: string | null
+          data?: Json | null
           id?: string
           is_read?: boolean | null
           message?: string | null
@@ -1099,6 +1102,7 @@ export type Database = {
     }
     Functions: {
       calculate_lead_score: { Args: { lead_id: string }; Returns: number }
+      get_current_user_role: { Args: never; Returns: string }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
     }

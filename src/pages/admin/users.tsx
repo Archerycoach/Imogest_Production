@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
+import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -71,10 +72,13 @@ export default function AdminUsersPage() {
 
   const loadData = async () => {
     try {
+      console.log("[Users Page] Loading users and team leads...");
       const [usersData, teamLeadsData] = await Promise.all([
         getAllUsers(),
         getTeamLeads(),
       ]);
+      console.log("[Users Page] Loaded users:", usersData.length, "users");
+      console.log("[Users Page] User IDs:", usersData.map(u => ({ id: u.id, name: u.full_name, email: u.email })));
       setUsers(usersData);
       setTeamLeads(teamLeadsData);
     } catch (error) {
@@ -120,7 +124,13 @@ export default function AdminUsersPage() {
         teamLeadId: undefined,
       });
       
+      // Add small delay to ensure DB consistency before reloading
+      console.log("[Users Page] Waiting 1 second before reloading users...");
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      console.log("[Users Page] Reloading users list...");
       await loadData();
+      console.log("[Users Page] Users reloaded. Current count:", users.length);
     } catch (error: any) {
       console.error("Error creating user:", error);
       toast({
@@ -234,18 +244,20 @@ export default function AdminUsersPage() {
   if (loading) {
     return (
       <ProtectedRoute allowedRoles={["admin"]}>
-        <div className="min-h-screen bg-white flex items-center justify-center">
-          <Loader2 className="h-8 w-8 text-blue-600 animate-spin" />
-        </div>
+        <Layout>
+          <div className="flex items-center justify-center min-h-[60vh]">
+            <Loader2 className="h-8 w-8 text-blue-600 animate-spin" />
+          </div>
+        </Layout>
       </ProtectedRoute>
     );
   }
 
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
-      <div className="min-h-screen bg-gray-50">
-        <div className="container mx-auto p-6 max-w-7xl">
-          <div className="flex items-center justify-between mb-8">
+      <Layout>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Button variant="outline" onClick={() => router.push("/admin/dashboard")}>
                 <ArrowLeft className="h-4 w-4 mr-2" />
@@ -537,7 +549,7 @@ export default function AdminUsersPage() {
             </DialogContent>
           </Dialog>
         </div>
-      </div>
+      </Layout>
     </ProtectedRoute>
   );
 }

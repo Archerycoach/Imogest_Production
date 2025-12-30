@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Bell, Check, CheckCheck, X } from "lucide-react";
+import { Bell, Check, CheckCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -18,24 +18,62 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { getUserWithRetry } from "@/lib/supabaseRetry";
+import { supabase } from "@/integrations/supabase/client";
 
 export function NotificationCenter() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
-    loadNotifications();
-    loadUnreadCount();
+    // Check authentication status on mount
+    const checkAuth = async () => {
+      try {
+        const userData = await getUserWithRetry(supabase, {
+          maxRetries: 2,
+          delayMs: 500,
+        });
+        const isAuth = !!userData?.user;
+        setIsAuthenticated(isAuth);
+        
+        if (isAuth) {
+          // Only load if authenticated
+          loadUnreadCount();
+        }
+      } catch (error) {
+        console.log("[NotificationCenter] Auth check failed:", error);
+        setIsAuthenticated(false);
+      }
+    };
 
-    // Poll for new notifications every 30 seconds
+    checkAuth();
+
+    // Poll for new notifications every 30 seconds (only if authenticated)
     const interval = setInterval(() => {
-      loadUnreadCount();
+      // Use explicit check inside interval to get fresh state if needed, 
+      // or rely on the effect closure. To be safe and avoid stale closures in complex apps:
+      const pollUnreadCount = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          loadUnreadCount();
+        }
+      };
+      pollUnreadCount();
     }, 30000);
 
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    // Load notifications when popover opens (only if authenticated)
+    if (isOpen && notifications.length === 0 && isAuthenticated) {
+      loadNotifications();
+    }
+  }, [isOpen, isAuthenticated]);
 
   const loadNotifications = async () => {
     try {
@@ -44,6 +82,7 @@ export function NotificationCenter() {
       setNotifications(data);
     } catch (error) {
       console.error("Error loading notifications:", error);
+      // Don't show error toast for network issues - fail silently
     } finally {
       setLoading(false);
     }
@@ -55,16 +94,21 @@ export function NotificationCenter() {
       setUnreadCount(count);
     } catch (error) {
       console.error("Error loading unread count:", error);
+      // Fail silently - don't disrupt user experience
     }
   };
 
   const handleMarkAsRead = async (id: string) => {
     try {
-      await markNotificationAsRead(id);
-      setNotifications(prev =>
-        prev.map(n => (n.id === id ? { ...n, read: true } : n))
-      );
-      setUnreadCount(prev => Math.max(0, prev - 1));
+      const success = await markNotificationAsRead(id);
+      if (success) {
+        setNotifications(prev =>
+          prev.map(n => (n.id === id ? { ...n, read: true } : n))
+        );
+        setUnreadCount(prev => Math.max(0, prev - 1));
+      } else {
+        throw new Error("Failed to mark as read");
+      }
     } catch (error) {
       console.error("Error marking as read:", error);
       toast({
@@ -77,13 +121,17 @@ export function NotificationCenter() {
 
   const handleMarkAllAsRead = async () => {
     try {
-      await markAllAsRead();
-      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-      setUnreadCount(0);
-      toast({
-        title: "Sucesso",
-        description: "Todas as notificações foram marcadas como lidas",
-      });
+      const success = await markAllAsRead();
+      if (success) {
+        setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+        setUnreadCount(0);
+        toast({
+          title: "Sucesso",
+          description: "Todas as notificações foram marcadas como lidas",
+        });
+      } else {
+        throw new Error("Failed to mark all as read");
+      }
     } catch (error) {
       console.error("Error marking all as read:", error);
       toast({
@@ -112,7 +160,7 @@ export function NotificationCenter() {
   };
 
   return (
-    <Popover>
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="icon" className="relative">
           <Bell className="h-5 w-5" />
