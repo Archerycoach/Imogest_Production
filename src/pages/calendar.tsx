@@ -83,7 +83,7 @@ export default function Calendar() {
     googleSynced: dbEvent.google_synced || false,
     eventType: dbEvent.event_type || "meeting",
     createdAt: dbEvent.created_at,
-    userId: dbEvent.created_by
+    userId: dbEvent.created_by || "" // Add default empty string or proper mapping
   });
 
   const loadData = async () => {
@@ -91,17 +91,33 @@ export default function Calendar() {
     setLeads(getLeads());
     setProperties(getProperties());
     
-    // Load events from database
+    // Load events from database - service now returns properly typed CalendarEvent[]
     try {
       const dbEvents = await getCalendarEvents();
-      // Map DB events to Frontend format
-      const mappedDbEvents = dbEvents.map(mapDbEventToFrontend);
       
-      // Merge with localStorage events (filtering out duplicates if needed, but for now simple merge)
-      // In a real app we might want to prioritize DB events
-      const mergedEvents = [...getEvents(), ...mappedDbEvents];
+      // Get local events and ensure they match CalendarEvent interface
+      const localEventsRaw = getEvents();
+      const localEvents: CalendarEvent[] = localEventsRaw.map((e: any) => ({
+        id: e.id,
+        title: e.title,
+        description: e.description || "",
+        startTime: e.startTime || e.start_time,
+        endTime: e.endTime || e.end_time,
+        location: e.location || "",
+        attendees: e.attendees || [],
+        leadId: e.leadId || e.lead_id,
+        propertyId: e.propertyId || e.property_id,
+        googleEventId: e.googleEventId || e.google_event_id,
+        googleSynced: e.googleSynced || e.google_synced,
+        eventType: e.eventType || e.event_type || "meeting",
+        createdAt: e.createdAt || e.created_at || new Date().toISOString(),
+        userId: e.userId || e.user_id || ""
+      }));
+
+      // Merge with DB events (already properly typed)
+      const mergedEvents: CalendarEvent[] = [...localEvents, ...dbEvents];
       
-      // Remove duplicates by ID if any
+      // Remove duplicates by ID
       const uniqueEvents = Array.from(new Map(mergedEvents.map(item => [item.id, item])).values());
       
       setEvents(uniqueEvents);
@@ -115,8 +131,8 @@ export default function Calendar() {
 
     try {
       if (editingEvent) {
-        // Update existing event
-        const { data: updatedEvent, error } = await updateCalendarEvent(editingEvent.id, {
+        // Update existing event - returns CalendarEvent
+        const updatedEvent = await updateCalendarEvent(editingEvent.id, {
           title: formData.title,
           description: formData.description,
           start_time: formData.startTime,
@@ -126,23 +142,19 @@ export default function Calendar() {
           lead_id: formData.leadId || null,
           property_id: formData.propertyId || null,
         });
-        
-        if (error) throw error;
 
-        if (updatedEvent) {
-          setEvents(events.map((e) => (e.id === updatedEvent.id ? updatedEvent : e)));
-        }
+        setEvents(events.map((e) => (e.id === updatedEvent.id ? updatedEvent : e)));
 
         // Sync to Google Calendar if connected
         if (googleConnected && editingEvent.googleEventId) {
-          await updateGoogleEvent(editingEvent.googleEventId, updatedEvent);
+          await updateGoogleEvent(editingEvent.googleEventId, updatedEvent as any);
           toast({
             title: "Evento atualizado",
             description: "Evento atualizado no CRM e Google Calendar",
           });
         } else if (googleConnected) {
           // Create in Google if not synced yet
-          const googleEventId = await syncEventToGoogle(updatedEvent);
+          const googleEventId = await syncEventToGoogle(updatedEvent as any);
           if (googleEventId) {
             await updateCalendarEvent(updatedEvent.id, { 
               google_event_id: googleEventId,
@@ -155,7 +167,7 @@ export default function Calendar() {
           });
         }
       } else {
-        // Create new event
+        // Create new event - returns CalendarEvent
         if (!user) return;
         
         const newEventPayload = {

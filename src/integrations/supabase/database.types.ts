@@ -1,3 +1,4 @@
+ 
 export type Json =
   | string
   | number
@@ -6,625 +7,1100 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
-export interface Database {
+export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.1"
+  }
   public: {
     Tables: {
-      profiles: {
-        Row: {
-          id: string
-          email: string | null
-          full_name: string | null
-          avatar_url: string | null
-          role: "admin" | "team_lead" | "agent"
-          team_lead_id: string | null
-          is_active: boolean
-          created_at: string
-          updated_at: string
-          phone: string | null
-        }
-        Insert: {
-          id: string
-          email?: string | null
-          full_name?: string | null
-          avatar_url?: string | null
-          role?: "admin" | "team_lead" | "agent"
-          team_lead_id?: string | null
-          is_active?: boolean
-          created_at?: string
-          updated_at?: string
-          phone?: string | null
-        }
-        Update: {
-          id?: string
-          email?: string | null
-          full_name?: string | null
-          avatar_url?: string | null
-          role?: "admin" | "team_lead" | "agent"
-          team_lead_id?: string | null
-          is_active?: boolean
-          created_at?: string
-          updated_at?: string
-          phone?: string | null
-        }
-      }
-      leads: {
-        Row: {
-          id: string
-          user_id: string
-          name: string
-          email: string | null
-          phone: string | null
-          status: string
-          lead_type: string
-          budget: number | null
-          notes: string | null
-          source: string | null
-          created_at: string
-          updated_at: string
-          property_id: string | null
-          location_preference: string | null
-          typology: string | null
-          energy_rating: string | null
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          name: string
-          email?: string | null
-          phone?: string | null
-          status?: string
-          lead_type?: string
-          budget?: number | null
-          notes?: string | null
-          source?: string | null
-          created_at?: string
-          updated_at?: string
-          property_id?: string | null
-          location_preference?: string | null
-          typology?: string | null
-          energy_rating?: string | null
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          name?: string
-          email?: string | null
-          phone?: string | null
-          status?: string
-          lead_type?: string
-          budget?: number | null
-          notes?: string | null
-          source?: string | null
-          created_at?: string
-          updated_at?: string
-          property_id?: string | null
-          location_preference?: string | null
-          typology?: string | null
-          energy_rating?: string | null
-        }
-      }
-      properties: {
-        Row: {
-          id: string
-          user_id: string
-          title: string
-          description: string | null
-          price: number
-          status: string
-          property_type: string
-          address: string | null
-          city: string | null
-          postal_code: string | null
-          area: number | null
-          bedrooms: number | null
-          bathrooms: number | null
-          images: string[] | null
-          features: string[] | null
-          created_at: string
-          updated_at: string
-          slug: string
-          energy_rating: string | null
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          title: string
-          description?: string | null
-          price: number
-          status?: string
-          property_type?: string
-          address?: string | null
-          city?: string | null
-          postal_code?: string | null
-          area?: number | null
-          bedrooms?: number | null
-          bathrooms?: number | null
-          images?: string[] | null
-          features?: string[] | null
-          created_at?: string
-          updated_at?: string
-          slug?: string
-          energy_rating?: string | null
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          title?: string
-          description?: string | null
-          price?: number
-          status?: string
-          property_type?: string
-          address?: string | null
-          city?: string | null
-          postal_code?: string | null
-          area?: number | null
-          bedrooms?: number | null
-          bathrooms?: number | null
-          images?: string[] | null
-          features?: string[] | null
-          created_at?: string
-          updated_at?: string
-          slug?: string
-          energy_rating?: string | null
-        }
-      }
-      tasks: {
-        Row: {
-          id: string
-          user_id: string
-          title: string
-          description: string | null
-          status: string
-          priority: string
-          due_date: string | null
-          related_to: string | null
-          related_id: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          title: string
-          description?: string | null
-          status?: string
-          priority?: string
-          due_date?: string | null
-          related_to?: string | null
-          related_id?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          title?: string
-          description?: string | null
-          status?: string
-          priority?: string
-          due_date?: string | null
-          related_to?: string | null
-          related_id?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-      }
-      subscriptions: {
-        Row: {
-          id: string
-          user_id: string
-          plan_id: string | null
-          status: string
-          stripe_subscription_id: string | null
-          stripe_customer_id: string | null
-          current_period_start: string
-          current_period_end: string | null
-          cancel_at_period_end: boolean
-          trial_start: string | null
-          trial_end: string | null
-          created_at: string
-          updated_at: string
-          billing_interval: string | null
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          plan_id?: string | null
-          status: string
-          stripe_subscription_id?: string | null
-          stripe_customer_id?: string | null
-          current_period_start?: string
-          current_period_end?: string | null
-          cancel_at_period_end?: boolean
-          trial_start?: string | null
-          trial_end?: string | null
-          created_at?: string
-          updated_at?: string
-          billing_interval?: string | null
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          plan_id?: string | null
-          status?: string
-          stripe_subscription_id?: string | null
-          stripe_customer_id?: string | null
-          current_period_start?: string
-          current_period_end?: string | null
-          cancel_at_period_end?: boolean
-          trial_start?: string | null
-          trial_end?: string | null
-          created_at?: string
-          updated_at?: string
-          billing_interval?: string | null
-        }
-      }
-      subscription_plans: {
-        Row: {
-          id: string
-          name: string
-          description: string | null
-          price: number
-          currency: string
-          billing_interval: string
-          stripe_price_id: string | null
-          features: string[] | null
-          limits: Json | null
-          is_active: boolean
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          name: string
-          description?: string | null
-          price: number
-          currency?: string
-          billing_interval?: string
-          stripe_price_id?: string | null
-          features?: string[] | null
-          limits?: Json | null
-          is_active?: boolean
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          name?: string
-          description?: string | null
-          price?: number
-          currency?: string
-          billing_interval?: string
-          stripe_price_id?: string | null
-          features?: string[] | null
-          limits?: Json | null
-          is_active?: boolean
-          created_at?: string
-          updated_at?: string
-        }
-      }
-      payment_history: {
-        Row: {
-          id: string
-          user_id: string
-          subscription_id: string | null
-          amount: number
-          currency: string
-          status: string
-          payment_method: string | null
-          payment_provider: string | null
-          transaction_id: string | null
-          provider_transaction_id: string | null
-          payment_date: string | null
-          metadata: Json | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          subscription_id?: string | null
-          amount: number
-          currency?: string
-          status?: string
-          payment_method?: string | null
-          payment_provider?: string | null
-          transaction_id?: string | null
-          provider_transaction_id?: string | null
-          payment_date?: string | null
-          metadata?: Json | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          subscription_id?: string | null
-          amount?: number
-          currency?: string
-          status?: string
-          payment_method?: string | null
-          payment_provider?: string | null
-          transaction_id?: string | null
-          provider_transaction_id?: string | null
-          payment_date?: string | null
-          metadata?: Json | null
-          created_at?: string
-        }
-      }
-      system_settings: {
-        Row: {
-          id: string
-          key: string
-          value: Json
-          description: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          key: string
-          value: Json
-          description?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          key?: string
-          value?: Json
-          description?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-      }
       activity_logs: {
         Row: {
-          id: string
-          user_id: string
           action: string
-          entity_type: string
-          entity_id: string | null
+          created_at: string | null
           details: Json | null
-          ip_address: string | null
-          user_agent: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          action: string
+          entity_id: string | null
           entity_type: string
-          entity_id?: string | null
+          id: string
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string | null
           details?: Json | null
-          ip_address?: string | null
-          user_agent?: string | null
-          created_at?: string
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          user_id?: string | null
         }
         Update: {
-          id?: string
-          user_id?: string
           action?: string
-          entity_type?: string
-          entity_id?: string | null
+          created_at?: string | null
           details?: Json | null
-          ip_address?: string | null
-          user_agent?: string | null
-          created_at?: string
-        }
-      }
-      templates: {
-        Row: {
-          id: string
-          user_id: string
-          name: string
-          template_type: string
-          subject: string | null
-          body: string
-          variables: string[] | null
-          is_active: boolean
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
+          entity_id?: string | null
+          entity_type?: string
           id?: string
-          user_id: string
-          name: string
-          template_type?: string
-          subject?: string | null
-          body: string
-          variables?: string[] | null
-          is_active?: boolean
-          created_at?: string
-          updated_at?: string
+          user_id?: string | null
         }
-        Update: {
-          id?: string
-          user_id?: string
-          name?: string
-          template_type?: string
-          subject?: string | null
-          body?: string
-          variables?: string[] | null
-          is_active?: boolean
-          created_at?: string
-          updated_at?: string
-        }
-      }
-      interactions: {
-        Row: {
-          id: string
-          user_id: string
-          lead_id: string
-          property_id: string | null
-          interaction_type: string
-          subject: string | null
-          content: string | null
-          interaction_date: string
-          outcome: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          lead_id: string
-          property_id?: string | null
-          interaction_type: string
-          subject?: string | null
-          content?: string | null
-          interaction_date?: string
-          outcome?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          lead_id?: string
-          property_id?: string | null
-          interaction_type?: string
-          subject?: string | null
-          content?: string | null
-          interaction_date?: string
-          outcome?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-      }
-      notifications: {
-        Row: {
-          id: string
-          user_id: string
-          notification_type: string
-          title: string
-          message: string
-          is_read: boolean
-          related_entity_type: string | null
-          related_entity_id: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          notification_type: string
-          title: string
-          message: string
-          is_read?: boolean
-          related_entity_type?: string | null
-          related_entity_id?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          notification_type?: string
-          title?: string
-          message?: string
-          is_read?: boolean
-          related_entity_type?: string | null
-          related_entity_id?: string | null
-          created_at?: string
-        }
-      }
-      lead_workflow_rules: {
-        Row: {
-          id: string
-          user_id: string
-          template_id: string | null
-          name: string
-          description: string | null
-          trigger_status: string
-          action_type: string
-          action_config: Json | null
-          delay_days: number
-          delay_hours: number
-          enabled: boolean
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          template_id?: string | null
-          name: string
-          description?: string | null
-          trigger_status?: string
-          action_type: string
-          action_config?: Json | null
-          delay_days?: number
-          delay_hours?: number
-          enabled?: boolean
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          template_id?: string | null
-          name?: string
-          description?: string | null
-          trigger_status?: string
-          action_type?: string
-          action_config?: Json | null
-          delay_days?: number
-          delay_hours?: number
-          enabled?: boolean
-          created_at?: string
-          updated_at?: string
-        }
+        Relationships: [
+          {
+            foreignKeyName: "activity_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       calendar_events: {
         Row: {
-          id: string
-          user_id: string
-          title: string
-          description: string | null
-          start_time: string
-          end_time: string
-          location: string | null
-          event_type: string
+          all_day: boolean | null
           attendees: string[] | null
+          created_at: string | null
+          custom_fields: Json | null
+          description: string | null
+          end_time: string
+          event_type: string | null
+          google_calendar_id: string | null
+          google_event_id: string | null
+          id: string
+          is_synced: boolean | null
           lead_id: string | null
+          location: string | null
           property_id: string | null
-          created_at: string
-          updated_at: string
+          start_time: string
+          title: string
+          updated_at: string | null
+          user_id: string
         }
         Insert: {
-          id?: string
-          user_id: string
-          title: string
-          description?: string | null
-          start_time: string
-          end_time: string
-          location?: string | null
-          event_type?: string
+          all_day?: boolean | null
           attendees?: string[] | null
+          created_at?: string | null
+          custom_fields?: Json | null
+          description?: string | null
+          end_time: string
+          event_type?: string | null
+          google_calendar_id?: string | null
+          google_event_id?: string | null
+          id?: string
+          is_synced?: boolean | null
           lead_id?: string | null
+          location?: string | null
           property_id?: string | null
-          created_at?: string
-          updated_at?: string
+          start_time: string
+          title: string
+          updated_at?: string | null
+          user_id: string
         }
         Update: {
-          id?: string
-          user_id?: string
-          title?: string
-          description?: string | null
-          start_time?: string
-          end_time?: string
-          location?: string | null
-          event_type?: string
+          all_day?: boolean | null
           attendees?: string[] | null
+          created_at?: string | null
+          custom_fields?: Json | null
+          description?: string | null
+          end_time?: string
+          event_type?: string | null
+          google_calendar_id?: string | null
+          google_event_id?: string | null
+          id?: string
+          is_synced?: boolean | null
           lead_id?: string | null
+          location?: string | null
           property_id?: string | null
-          created_at?: string
-          updated_at?: string
+          start_time?: string
+          title?: string
+          updated_at?: string | null
+          user_id?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "calendar_events_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendar_events_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendar_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contacts: {
+        Row: {
+          company: string | null
+          created_at: string | null
+          email: string | null
+          id: string
+          name: string
+          notes: string | null
+          phone: string | null
+          position: string | null
+          tags: string[] | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          company?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          phone?: string | null
+          position?: string | null
+          tags?: string[] | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          company?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          position?: string | null
+          tags?: string[] | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contacts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      documents: {
+        Row: {
+          created_at: string | null
+          custom_fields: Json | null
+          file_path: string
+          file_size: number | null
+          file_type: string | null
+          id: string
+          lead_id: string | null
+          name: string
+          property_id: string | null
+          tags: string[] | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          custom_fields?: Json | null
+          file_path: string
+          file_size?: number | null
+          file_type?: string | null
+          id?: string
+          lead_id?: string | null
+          name: string
+          property_id?: string | null
+          tags?: string[] | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          custom_fields?: Json | null
+          file_path?: string
+          file_size?: number | null
+          file_type?: string | null
+          id?: string
+          lead_id?: string | null
+          name?: string
+          property_id?: string | null
+          tags?: string[] | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documents_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documents_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documents_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      interactions: {
+        Row: {
+          contact_id: string | null
+          content: string | null
+          created_at: string | null
+          id: string
+          interaction_date: string | null
+          interaction_type: string
+          lead_id: string | null
+          outcome: string | null
+          property_id: string | null
+          subject: string | null
+          user_id: string
+        }
+        Insert: {
+          contact_id?: string | null
+          content?: string | null
+          created_at?: string | null
+          id?: string
+          interaction_date?: string | null
+          interaction_type: string
+          lead_id?: string | null
+          outcome?: string | null
+          property_id?: string | null
+          subject?: string | null
+          user_id: string
+        }
+        Update: {
+          contact_id?: string | null
+          content?: string | null
+          created_at?: string | null
+          id?: string
+          interaction_date?: string | null
+          interaction_type?: string
+          lead_id?: string | null
+          outcome?: string | null
+          property_id?: string | null
+          subject?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "interactions_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "interactions_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "interactions_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "interactions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lead_workflow_rules: {
+        Row: {
+          action_config: Json | null
+          action_type: string
+          created_at: string | null
+          delay_days: number | null
+          delay_hours: number | null
+          description: string | null
+          enabled: boolean | null
+          id: string
+          name: string
+          trigger_status: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          action_config?: Json | null
+          action_type: string
+          created_at?: string | null
+          delay_days?: number | null
+          delay_hours?: number | null
+          description?: string | null
+          enabled?: boolean | null
+          id?: string
+          name: string
+          trigger_status: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          action_config?: Json | null
+          action_type?: string
+          created_at?: string | null
+          delay_days?: number | null
+          delay_hours?: number | null
+          description?: string | null
+          enabled?: boolean | null
+          id?: string
+          name?: string
+          trigger_status?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_workflow_rules_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leads: {
+        Row: {
+          assigned_to: string | null
+          bathrooms: number | null
+          bedrooms: number | null
+          budget: number | null
+          budget_max: number | null
+          budget_min: number | null
+          contact_id: string | null
+          created_at: string | null
+          custom_fields: Json | null
+          email: string | null
+          id: string
+          last_contact_date: string | null
+          lead_type: string | null
+          location_preference: string | null
+          max_area: number | null
+          min_area: number | null
+          name: string
+          next_follow_up: string | null
+          notes: string | null
+          phone: string | null
+          property_type: string | null
+          score: number | null
+          source: string | null
+          status: string | null
+          tags: string[] | null
+          temperature: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          bathrooms?: number | null
+          bedrooms?: number | null
+          budget?: number | null
+          budget_max?: number | null
+          budget_min?: number | null
+          contact_id?: string | null
+          created_at?: string | null
+          custom_fields?: Json | null
+          email?: string | null
+          id?: string
+          last_contact_date?: string | null
+          lead_type?: string | null
+          location_preference?: string | null
+          max_area?: number | null
+          min_area?: number | null
+          name: string
+          next_follow_up?: string | null
+          notes?: string | null
+          phone?: string | null
+          property_type?: string | null
+          score?: number | null
+          source?: string | null
+          status?: string | null
+          tags?: string[] | null
+          temperature?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          assigned_to?: string | null
+          bathrooms?: number | null
+          bedrooms?: number | null
+          budget?: number | null
+          budget_max?: number | null
+          budget_min?: number | null
+          contact_id?: string | null
+          created_at?: string | null
+          custom_fields?: Json | null
+          email?: string | null
+          id?: string
+          last_contact_date?: string | null
+          lead_type?: string | null
+          location_preference?: string | null
+          max_area?: number | null
+          min_area?: number | null
+          name?: string
+          next_follow_up?: string | null
+          notes?: string | null
+          phone?: string | null
+          property_type?: string | null
+          score?: number | null
+          source?: string | null
+          status?: string | null
+          tags?: string[] | null
+          temperature?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leads_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_read: boolean | null
+          message: string | null
+          notification_type: string | null
+          read_at: string | null
+          related_entity_id: string | null
+          related_entity_type: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_read?: boolean | null
+          message?: string | null
+          notification_type?: string | null
+          read_at?: string | null
+          related_entity_id?: string | null
+          related_entity_type?: string | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_read?: boolean | null
+          message?: string | null
+          notification_type?: string | null
+          read_at?: string | null
+          related_entity_id?: string | null
+          related_entity_type?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_history: {
+        Row: {
+          amount: number
+          created_at: string | null
+          currency: string | null
+          eupago_transaction_id: string | null
+          id: string
+          metadata: Json | null
+          payment_date: string | null
+          payment_method: string | null
+          payment_reference: string | null
+          status: string | null
+          stripe_payment_intent_id: string | null
+          subscription_id: string | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string | null
+          currency?: string | null
+          eupago_transaction_id?: string | null
+          id?: string
+          metadata?: Json | null
+          payment_date?: string | null
+          payment_method?: string | null
+          payment_reference?: string | null
+          status?: string | null
+          stripe_payment_intent_id?: string | null
+          subscription_id?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string | null
+          currency?: string | null
+          eupago_transaction_id?: string | null
+          id?: string
+          metadata?: Json | null
+          payment_date?: string | null
+          payment_method?: string | null
+          payment_reference?: string | null
+          status?: string | null
+          stripe_payment_intent_id?: string | null
+          subscription_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_history_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_history_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string | null
+          deleted_at: string | null
+          email: string | null
+          full_name: string | null
+          id: string
+          is_active: boolean | null
+          phone: string | null
+          role: string | null
+          team_lead_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string | null
+          deleted_at?: string | null
+          email?: string | null
+          full_name?: string | null
+          id: string
+          is_active?: boolean | null
+          phone?: string | null
+          role?: string | null
+          team_lead_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string | null
+          deleted_at?: string | null
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          is_active?: boolean | null
+          phone?: string | null
+          role?: string | null
+          team_lead_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_team_lead_id_fkey"
+            columns: ["team_lead_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      properties: {
+        Row: {
+          address: string | null
+          amenities: string[] | null
+          area: number | null
+          bathrooms: number | null
+          bedrooms: number | null
+          city: string | null
+          condominium_fee: number | null
+          country: string | null
+          created_at: string | null
+          custom_fields: Json | null
+          description: string | null
+          district: string | null
+          features: string[] | null
+          floor: number | null
+          id: string
+          images: string[] | null
+          is_featured: boolean | null
+          land_area: number | null
+          latitude: number | null
+          listed_at: string | null
+          longitude: number | null
+          notes: string | null
+          postal_code: string | null
+          price: number | null
+          price_per_sqm: number | null
+          property_type: string
+          reference_code: string | null
+          rental_price: number | null
+          status: string | null
+          title: string
+          total_floors: number | null
+          updated_at: string | null
+          user_id: string
+          video_url: string | null
+          views_count: number | null
+          virtual_tour_url: string | null
+          year_built: number | null
+        }
+        Insert: {
+          address?: string | null
+          amenities?: string[] | null
+          area?: number | null
+          bathrooms?: number | null
+          bedrooms?: number | null
+          city?: string | null
+          condominium_fee?: number | null
+          country?: string | null
+          created_at?: string | null
+          custom_fields?: Json | null
+          description?: string | null
+          district?: string | null
+          features?: string[] | null
+          floor?: number | null
+          id?: string
+          images?: string[] | null
+          is_featured?: boolean | null
+          land_area?: number | null
+          latitude?: number | null
+          listed_at?: string | null
+          longitude?: number | null
+          notes?: string | null
+          postal_code?: string | null
+          price?: number | null
+          price_per_sqm?: number | null
+          property_type: string
+          reference_code?: string | null
+          rental_price?: number | null
+          status?: string | null
+          title: string
+          total_floors?: number | null
+          updated_at?: string | null
+          user_id: string
+          video_url?: string | null
+          views_count?: number | null
+          virtual_tour_url?: string | null
+          year_built?: number | null
+        }
+        Update: {
+          address?: string | null
+          amenities?: string[] | null
+          area?: number | null
+          bathrooms?: number | null
+          bedrooms?: number | null
+          city?: string | null
+          condominium_fee?: number | null
+          country?: string | null
+          created_at?: string | null
+          custom_fields?: Json | null
+          description?: string | null
+          district?: string | null
+          features?: string[] | null
+          floor?: number | null
+          id?: string
+          images?: string[] | null
+          is_featured?: boolean | null
+          land_area?: number | null
+          latitude?: number | null
+          listed_at?: string | null
+          longitude?: number | null
+          notes?: string | null
+          postal_code?: string | null
+          price?: number | null
+          price_per_sqm?: number | null
+          property_type?: string
+          reference_code?: string | null
+          rental_price?: number | null
+          status?: string | null
+          title?: string
+          total_floors?: number | null
+          updated_at?: string | null
+          user_id?: string
+          video_url?: string | null
+          views_count?: number | null
+          virtual_tour_url?: string | null
+          year_built?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "properties_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      property_matches: {
+        Row: {
+          created_at: string | null
+          id: string
+          lead_id: string
+          match_reasons: string[] | null
+          match_score: number | null
+          property_id: string
+          status: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          lead_id: string
+          match_reasons?: string[] | null
+          match_score?: number | null
+          property_id: string
+          status?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          lead_id?: string
+          match_reasons?: string[] | null
+          match_score?: number | null
+          property_id?: string
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "property_matches_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "property_matches_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subscription_plans: {
+        Row: {
+          billing_interval: string | null
+          created_at: string | null
+          currency: string | null
+          description: string | null
+          features: Json | null
+          id: string
+          is_active: boolean | null
+          limits: Json | null
+          name: string
+          price: number
+          stripe_price_id: string | null
+          stripe_product_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          billing_interval?: string | null
+          created_at?: string | null
+          currency?: string | null
+          description?: string | null
+          features?: Json | null
+          id?: string
+          is_active?: boolean | null
+          limits?: Json | null
+          name: string
+          price: number
+          stripe_price_id?: string | null
+          stripe_product_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          billing_interval?: string | null
+          created_at?: string | null
+          currency?: string | null
+          description?: string | null
+          features?: Json | null
+          id?: string
+          is_active?: boolean | null
+          limits?: Json | null
+          name?: string
+          price?: number
+          stripe_price_id?: string | null
+          stripe_product_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      subscriptions: {
+        Row: {
+          cancelled_at: string | null
+          created_at: string | null
+          current_period_end: string | null
+          current_period_start: string | null
+          eupago_reference: string | null
+          id: string
+          plan_id: string | null
+          status: string | null
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          trial_end: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          cancelled_at?: string | null
+          created_at?: string | null
+          current_period_end?: string | null
+          current_period_start?: string | null
+          eupago_reference?: string | null
+          id?: string
+          plan_id?: string | null
+          status?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          trial_end?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          cancelled_at?: string | null
+          created_at?: string | null
+          current_period_end?: string | null
+          current_period_start?: string | null
+          eupago_reference?: string | null
+          id?: string
+          plan_id?: string | null
+          status?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          trial_end?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "subscription_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscriptions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      system_settings: {
+        Row: {
+          key: string
+          updated_at: string | null
+          value: Json
+        }
+        Insert: {
+          key: string
+          updated_at?: string | null
+          value: Json
+        }
+        Update: {
+          key?: string
+          updated_at?: string | null
+          value?: Json
+        }
+        Relationships: []
+      }
+      tasks: {
+        Row: {
+          assigned_to: string | null
+          completed_at: string | null
+          created_at: string | null
+          custom_fields: Json | null
+          description: string | null
+          due_date: string | null
+          id: string
+          priority: string | null
+          related_contact_id: string | null
+          related_lead_id: string | null
+          related_property_id: string | null
+          status: string | null
+          tags: string[] | null
+          title: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          completed_at?: string | null
+          created_at?: string | null
+          custom_fields?: Json | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          priority?: string | null
+          related_contact_id?: string | null
+          related_lead_id?: string | null
+          related_property_id?: string | null
+          status?: string | null
+          tags?: string[] | null
+          title: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          assigned_to?: string | null
+          completed_at?: string | null
+          created_at?: string | null
+          custom_fields?: Json | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          priority?: string | null
+          related_contact_id?: string | null
+          related_lead_id?: string | null
+          related_property_id?: string | null
+          status?: string | null
+          tags?: string[] | null
+          title?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_related_contact_id_fkey"
+            columns: ["related_contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_related_lead_id_fkey"
+            columns: ["related_lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_related_property_id_fkey"
+            columns: ["related_property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      templates: {
+        Row: {
+          body: string
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          subject: string | null
+          template_type: string
+          updated_at: string | null
+          user_id: string
+          variables: string[] | null
+        }
+        Insert: {
+          body: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          subject?: string | null
+          template_type: string
+          updated_at?: string | null
+          user_id: string
+          variables?: string[] | null
+        }
+        Update: {
+          body?: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          subject?: string | null
+          template_type?: string
+          updated_at?: string | null
+          user_id?: string
+          variables?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "templates_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      calculate_lead_score: { Args: { lead_id: string }; Returns: number }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
       [_ in never]: never
@@ -634,3 +1110,126 @@ export interface Database {
     }
   }
 }
+
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+
+export type Tables<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+      Row: infer R
+    }
+    ? R
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
+      }
+      ? R
+      : never
+    : never
+
+export type TablesInsert<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Insert: infer I
+    }
+    ? I
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Insert: infer I
+      }
+      ? I
+      : never
+    : never
+
+export type TablesUpdate<
+  DefaultSchemaTableNameOrOptions extends
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    : never = never,
+> = DefaultSchemaTableNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+      Update: infer U
+    }
+    ? U
+    : never
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
+    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+        Update: infer U
+      }
+      ? U
+      : never
+    : never
+
+export type Enums<
+  DefaultSchemaEnumNameOrOptions extends
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    : never = never,
+> = DefaultSchemaEnumNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
+    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+    : never
+
+export type CompositeTypes<
+  PublicCompositeTypeNameOrOptions extends
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
+  }
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    : never = never,
+> = PublicCompositeTypeNameOrOptions extends {
+  schema: keyof DatabaseWithoutInternals
+}
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
+    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    : never
+
+export const Constants = {
+  public: {
+    Enums: {},
+  },
+} as const

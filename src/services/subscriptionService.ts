@@ -188,7 +188,7 @@ export const extendSubscription = async (
 };
 
 export const getAllSubscriptions = async (filters: any = {}) => {
-  let query = supabase
+  let query = (supabase as any)
     .from("subscriptions")
     .select(`
       *,

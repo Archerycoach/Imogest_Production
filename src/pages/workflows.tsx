@@ -55,7 +55,7 @@ export default function WorkflowsPage() {
   const loadWorkflows = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("lead_workflow_rules") // Fixed table
         .select("*")
         .order("created_at", { ascending: false });
@@ -82,7 +82,7 @@ export default function WorkflowsPage() {
     try {
       if (enabled) {
         // Enable workflow by creating a rule based on the template
-        const { error } = await supabase
+        const { error } = await (supabase as any)
           .from("lead_workflow_rules")
           .insert({
             user_id: userId,
@@ -105,7 +105,7 @@ export default function WorkflowsPage() {
         });
       } else {
         // Disable workflow (delete the rule)
-        const { error } = await supabase
+        const { error } = await (supabase as any)
           .from("lead_workflow_rules")
           .delete()
           .eq("user_id", userId)

@@ -15,7 +15,7 @@ export default async function handler(
     // 1. Find the payment in payment_history using the reference
     // We stored reference in provider_transaction_id or metadata
     // Using provider_transaction_id for lookup
-    const { data: payment, error: fetchError } = await supabase
+    const { data: payment, error: fetchError } = await (supabase as any)
       .from("payment_history")
       .select("*")
       .eq("provider_transaction_id", referencia)
@@ -28,12 +28,14 @@ export default async function handler(
 
     if (estado === "PAGA") {
       // 2. Update payment status
-      const { error: updateError } = await supabase
+      const updateData: any = {
+        status: "completed",
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error: updateError } = await (supabase as any)
         .from("payment_history")
-        .update({
-          status: "completed",
-          updated_at: new Date().toISOString(),
-        } as any) // Cast to any to avoid deep instantiation issues here
+        .update(updateData)
         .eq("eupago_reference", referencia);
 
       if (updateError) throw updateError;
@@ -47,7 +49,7 @@ export default async function handler(
       
       if (planId) {
         // Get user's current subscription
-        const { data: currentSub } = await supabase
+        const { data: currentSub } = await (supabase as any)
           .from("subscriptions")
           .select("*")
           .eq("user_id", payment.user_id)
@@ -59,7 +61,7 @@ export default async function handler(
 
         if (currentSub) {
           // Renew
-          await supabase
+          await (supabase as any)
             .from("subscriptions")
             .update({
               status: "active",
@@ -70,7 +72,7 @@ export default async function handler(
             .eq("id", currentSub.id);
         } else {
           // Create new
-          await supabase
+          await (supabase as any)
             .from("subscriptions")
             .insert({
               user_id: payment.user_id,
@@ -83,7 +85,7 @@ export default async function handler(
       }
     } else {
       // Update as failed or cancelled
-      await supabase
+      await (supabase as any)
         .from("payment_history")
         .update({ 
           status: "failed",

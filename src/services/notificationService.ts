@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { TablesInsert } from "@/integrations/supabase/types";
+import type { Database } from "@/integrations/supabase/types";
 
 export type NotificationType = 
   | 'lead_assigned' 
@@ -26,7 +26,7 @@ export interface Notification {
   related_entity_type?: string;
 }
 
-type NotificationInsert = TablesInsert<"notifications">;
+type NotificationInsert = Database["public"]["Tables"]["notifications"]["Insert"];
 
 export const getNotifications = async (limit = 20) => {
   const { data, error } = await supabase

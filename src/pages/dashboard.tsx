@@ -118,7 +118,7 @@ export default function Dashboard() {
       const conversionRate = leads.length > 0 ? (wonLeads / leads.length) * 100 : 0;
 
       const todayEvents = events.filter(e => {
-        const eventDate = new Date(e.start_time || "");
+        const eventDate = new Date(e.startTime || "");
         return eventDate.toDateString() === now.toDateString();
       }).length;
 

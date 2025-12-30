@@ -1,7 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
+import type { CalendarEvent } from "@/types";
 
-type CalendarEvent = Database["public"]["Tables"]["calendar_events"]["Row"];
+type DbCalendarEvent = Database["public"]["Tables"]["calendar_events"]["Row"];
 type CalendarEventInsert = Database["public"]["Tables"]["calendar_events"]["Insert"];
 type CalendarEventUpdate = Database["public"]["Tables"]["calendar_events"]["Update"];
 
@@ -18,6 +19,24 @@ export {
   syncBirthdayAlerts,
 } from "./googleCalendarService";
 
+// Helper to map database event to frontend CalendarEvent
+const mapDbEventToFrontend = (dbEvent: DbCalendarEvent): CalendarEvent => ({
+  id: dbEvent.id,
+  title: dbEvent.title,
+  description: dbEvent.description || "",
+  startTime: dbEvent.start_time,
+  endTime: dbEvent.end_time,
+  location: dbEvent.location || "",
+  attendees: Array.isArray(dbEvent.attendees) ? (dbEvent.attendees as string[]) : [],
+  leadId: dbEvent.lead_id || undefined,
+  propertyId: dbEvent.property_id || undefined,
+  googleEventId: dbEvent.google_event_id || undefined,
+  googleSynced: !!dbEvent.google_event_id,
+  eventType: dbEvent.event_type || "meeting",
+  createdAt: dbEvent.created_at,
+  userId: dbEvent.user_id || ""
+});
+
 // Get all calendar events for current user
 export const getCalendarEvents = async (): Promise<CalendarEvent[]> => {
   const { data, error } = await supabase
@@ -30,7 +49,7 @@ export const getCalendarEvents = async (): Promise<CalendarEvent[]> => {
     return [];
   }
 
-  return data || [];
+  return (data || []).map(mapDbEventToFrontend);
 };
 
 // Get events within date range
@@ -50,7 +69,7 @@ export const getEventsByDateRange = async (
     return [];
   }
 
-  return data || [];
+  return (data || []).map(mapDbEventToFrontend);
 };
 
 // Get single event by ID
@@ -66,11 +85,11 @@ export const getCalendarEvent = async (id: string): Promise<CalendarEvent | null
     return null;
   }
 
-  return data;
+  return data ? mapDbEventToFrontend(data) : null;
 };
 
 // Create new calendar event
-export const createCalendarEvent = async (event: CalendarEventInsert) => {
+export const createCalendarEvent = async (event: CalendarEventInsert): Promise<CalendarEvent> => {
   // Validate dates
   if (new Date(event.end_time) <= new Date(event.start_time)) {
     throw new Error("A data de fim deve ser posterior à data de início");
@@ -90,11 +109,11 @@ export const createCalendarEvent = async (event: CalendarEventInsert) => {
     throw error;
   }
 
-  return data;
+  return mapDbEventToFrontend(data);
 };
 
 // Update calendar event
-export const updateCalendarEvent = async (id: string, updates: CalendarEventUpdate) => {
+export const updateCalendarEvent = async (id: string, updates: CalendarEventUpdate): Promise<CalendarEvent> => {
   const { data, error } = await supabase
     .from("calendar_events")
     .update({
@@ -106,7 +125,7 @@ export const updateCalendarEvent = async (id: string, updates: CalendarEventUpda
     .single();
 
   if (error) throw error;
-  return data;
+  return mapDbEventToFrontend(data);
 };
 
 // Delete calendar event
@@ -132,7 +151,7 @@ export const getEventsByType = async (type: string): Promise<CalendarEvent[]> =>
     return [];
   }
 
-  return data || [];
+  return (data || []).map(mapDbEventToFrontend);
 };
 
 // Get today's events

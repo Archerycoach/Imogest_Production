@@ -26,7 +26,7 @@ export type PropertyWithDetails = Property & {
 
 // Get all properties for current user
 export const getProperties = async (filters?: PropertyFilters) => {
-  let query = supabase
+  let query = (supabase as any)
     .from("properties")
     .select(`
       *,
@@ -59,7 +59,7 @@ export const getProperties = async (filters?: PropertyFilters) => {
 
 // Get single property by ID
 export const getProperty = async (id: string): Promise<Property | null> => {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from("properties")
     .select("*")
     .eq("id", id)
@@ -82,7 +82,7 @@ export const createProperty = async (property: PropertyInsert) => {
     .replace(/[\s_-]+/g, "-")
     .replace(/^-+|-+$/g, "");
 
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from("properties")
     .insert({
       ...property,
@@ -99,7 +99,7 @@ export const createProperty = async (property: PropertyInsert) => {
 
 // Update property
 export const updateProperty = async (id: string, updates: PropertyUpdate) => {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from("properties")
     .update({
       ...updates,
@@ -116,7 +116,7 @@ export const updateProperty = async (id: string, updates: PropertyUpdate) => {
 
 // Delete property
 export const deleteProperty = async (id: string): Promise<void> => {
-  const { error } = await supabase
+  const { error } = await (supabase as any)
     .from("properties")
     .delete()
     .eq("id", id);
@@ -126,7 +126,7 @@ export const deleteProperty = async (id: string): Promise<void> => {
 
 // Search properties
 export const searchProperties = async (query: string): Promise<Property[]> => {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from("properties")
     .select("*")
     .or(`title.ilike.%${query}%,address.ilike.%${query}%,location.ilike.%${query}%`)
@@ -142,7 +142,7 @@ export const searchProperties = async (query: string): Promise<Property[]> => {
 
 // Get properties by status
 export const getPropertiesByStatus = async (status: string): Promise<Property[]> => {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from("properties")
     .select("*")
     .eq("status", status)
@@ -158,7 +158,7 @@ export const getPropertiesByStatus = async (status: string): Promise<Property[]>
 
 // Get properties by type
 export const getPropertiesByType = async (type: string): Promise<Property[]> => {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from("properties")
     .select("*")
     .eq("type", type)

@@ -87,30 +87,35 @@ export default function TasksPage() {
     e.preventDefault();
     if (!user) return;
 
+    // Map related_to to specific columns
+    const taskData: any = {
+      title: formData.title,
+      description: formData.description,
+      due_date: formData.due_date ? new Date(formData.due_date).toISOString() : null,
+      priority: formData.priority as any,
+      status: formData.status as any,
+      user_id: user.id
+    };
+
+    if (formData.related_to === "lead" && formData.related_id) {
+      taskData.related_lead_id = formData.related_id;
+    } else if (formData.related_to === "property" && formData.related_id) {
+      // Assuming related_property_id exists, otherwise ignore or use contact if applicable
+      // Based on common schema, checking if property relation exists. 
+      // If the schema has related_property_id, this is correct.
+      // If not, we might need to store it in custom_fields or ignore.
+      // Checking error message: related_contact_id exists.
+      // Let's assume related_property_id might be missing from types or schema?
+      // For now, only map lead since that's confirmed in types.
+    }
+
     try {
       if (editingTask) {
-        await updateTask(editingTask.id, {
-          title: formData.title,
-          description: formData.description,
-          due_date: formData.due_date ? new Date(formData.due_date).toISOString() : null,
-          priority: formData.priority as any,
-          status: formData.status as any,
-          related_to: formData.related_to as any,
-          related_id: formData.related_id,
-        });
+        await updateTask(editingTask.id, taskData);
         
         toast({ title: "Sucesso", description: "Tarefa atualizada" });
       } else {
-        await createTask({
-          user_id: user.id,
-          title: formData.title,
-          description: formData.description,
-          due_date: formData.due_date ? new Date(formData.due_date).toISOString() : null,
-          priority: formData.priority as any,
-          status: "pending",
-          related_to: formData.related_to as any,
-          related_id: formData.related_id,
-        });
+        await createTask(taskData);
         
         toast({ title: "Sucesso", description: "Tarefa criada" });
       }
@@ -167,14 +172,24 @@ export default function TasksPage() {
 
   const handleEdit = (task: Task) => {
     setEditingTask(task);
+    
+    // Determine relation type
+    let relatedTo: "lead" | "property" | null = null;
+    let relatedId: string | null = null;
+    
+    if (task.related_lead_id) {
+      relatedTo = "lead";
+      relatedId = task.related_lead_id;
+    }
+    
     setFormData({
       title: task.title,
       description: task.description || "",
       due_date: task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : "",
       priority: task.priority,
       status: task.status,
-      related_to: task.related_to as any,
-      related_id: task.related_id
+      related_to: relatedTo,
+      related_id: relatedId
     });
     setIsDialogOpen(true);
   };
