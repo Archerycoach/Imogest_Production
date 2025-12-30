@@ -27,6 +27,7 @@ interface LeadCardProps {
 
 export function LeadCard({ lead, onClick, onDelete, onConvertSuccess }: LeadCardProps) {
   const [convertDialogOpen, setConvertDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [converting, setConverting] = useState(false);
   const { toast } = useToast();
 
@@ -189,8 +190,26 @@ export function LeadCard({ lead, onClick, onDelete, onConvertSuccess }: LeadCard
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
     if (onDelete) {
-      onDelete(lead.id);
+      try {
+        await onDelete(lead.id);
+        toast({
+          title: "Lead apagada com sucesso",
+          description: `${lead.name} foi removido do pipeline.`,
+        });
+        setDeleteDialogOpen(false);
+      } catch (error: any) {
+        console.error("Error deleting lead:", error);
+        toast({
+          title: "Erro ao apagar lead",
+          description: error.message || "Ocorreu um erro ao apagar a lead.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -350,6 +369,31 @@ export function LeadCard({ lead, onClick, onDelete, onConvertSuccess }: LeadCard
               className="bg-blue-600 hover:bg-blue-700"
             >
               {converting ? "Convertendo..." : "Confirmar Conversão"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Apagar Lead</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                Tem a certeza que deseja apagar <strong>{lead.name}</strong>?
+                <br /><br />
+                <span className="text-red-600 font-semibold">Esta ação não pode ser revertida.</span> Todos os dados desta lead, incluindo interações e histórico, serão permanentemente removidos.
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleConfirmDelete}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Apagar Lead
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -7,35 +7,42 @@ interface PipelineColumnProps {
   title: string;
   color: string;
   leads: LeadWithContacts[];
-  isDragging?: boolean;
-  onLeadClick?: (lead: LeadWithContacts) => void;
+  isDragging: boolean;
+  onLeadClick: (lead: LeadWithContacts) => void;
+  onLeadDelete?: (leadId: string) => void;
 }
 
-export function PipelineColumn({ id, title, color, leads, isDragging, onLeadClick }: PipelineColumnProps) {
-  const { setNodeRef } = useDroppable({
-    id: id,
-  });
+export function PipelineColumn({
+  id,
+  title,
+  color,
+  leads,
+  isDragging,
+  onLeadClick,
+  onLeadDelete,
+}: PipelineColumnProps) {
+  const { setNodeRef } = useDroppable({ id });
 
   return (
-    <div className="flex flex-col h-full rounded-lg bg-slate-50 border">
-      <div className={`p-3 rounded-t-lg border-b flex items-center gap-2 ${color} bg-opacity-10`}>
-        <div className={`w-3 h-3 rounded-full ${color}`}></div>
+    <div
+      ref={setNodeRef}
+      className={`flex flex-col h-full bg-gray-50 rounded-lg border-2 ${
+        isDragging ? "border-purple-400 bg-purple-50" : "border-gray-200"
+      }`}
+    >
+      <div className={`${color} text-white px-4 py-3 rounded-t-lg`}>
         <h3 className="font-semibold text-sm">{title}</h3>
-        <span className="ml-auto text-xs font-medium bg-white px-2 py-0.5 rounded border">
-          {leads.length}
-        </span>
+        <p className="text-xs opacity-90">{leads.length} lead{leads.length !== 1 ? "s" : ""}</p>
       </div>
-      
-      <div ref={setNodeRef} className="flex-1 p-2 space-y-2 min-h-[150px]">
+      <div className="flex-1 p-3 space-y-3 overflow-y-auto">
         {leads.map((lead) => (
-          <LeadCard key={lead.id} lead={lead} onClick={() => onLeadClick?.(lead)} />
+          <LeadCard
+            key={lead.id}
+            lead={lead}
+            onClick={() => onLeadClick(lead)}
+            onDelete={onLeadDelete}
+          />
         ))}
-        
-        {leads.length === 0 && (
-          <div className="h-full flex items-center justify-center text-xs text-muted-foreground border-2 border-dashed rounded-lg m-2 p-4">
-            {isDragging ? "Solte aqui" : "Sem leads"}
-          </div>
-        )}
       </div>
     </div>
   );

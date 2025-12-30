@@ -6,16 +6,20 @@ import { PipelineStats } from "@/components/pipeline/PipelineStats";
 import {
   getLeads,
   updateLeadStatus,
+  deleteLead,
   type LeadWithDetails,
 } from "@/services/leadsService";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { LeadType } from "@/types";
 
 export default function Pipeline() {
   const [leads, setLeads] = useState<LeadWithDetails[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingLead, setEditingLead] = useState<LeadWithDetails | null>(null);
+  const [pipelineView, setPipelineView] = useState<LeadType>("buyer");
 
   useEffect(() => {
     loadLeads();
@@ -25,8 +29,6 @@ export default function Pipeline() {
     try {
       setIsLoading(true);
       const data = await getLeads();
-      // Cast to LeadWithDetails[] as the service returns Lead[] but we need extra fields if available
-      // In a real scenario, we might want to fetch full details
       setLeads(data as unknown as LeadWithDetails[]);
     } catch (error) {
       console.error("Error fetching leads:", error);
@@ -36,7 +38,6 @@ export default function Pipeline() {
   };
 
   const handleLeadMove = async (leadId: string, newStatus: string) => {
-    // Optimistic update
     setLeads((prevLeads) =>
       prevLeads.map((lead) =>
         lead.id === leadId ? { ...lead, status: newStatus as any } : lead
@@ -47,7 +48,6 @@ export default function Pipeline() {
       await updateLeadStatus(leadId, newStatus);
     } catch (error) {
       console.error("Error updating lead status:", error);
-      // Revert on error
       loadLeads();
     }
   };
@@ -63,6 +63,22 @@ export default function Pipeline() {
     loadLeads();
   };
 
+  const handleDeleteLead = async (leadId: string) => {
+    try {
+      await deleteLead(leadId);
+      loadLeads();
+    } catch (error) {
+      console.error("Error deleting lead:", error);
+    }
+  };
+
+  const filteredLeads = leads.filter((lead) => {
+    if (pipelineView === "buyer") {
+      return lead.lead_type === "buyer" || lead.lead_type === "both";
+    }
+    return lead.lead_type === "seller" || lead.lead_type === "both";
+  });
+
   return (
     <Layout title="Pipeline">
       <div className="h-[calc(100vh-4rem)] p-6 flex flex-col gap-6">
@@ -77,14 +93,27 @@ export default function Pipeline() {
           </Button>
         </div>
 
-        <PipelineStats leads={leads} />
+        <Tabs value={pipelineView} onValueChange={(value) => setPipelineView(value as LeadType)} className="w-full">
+          <TabsList className="grid w-full max-w-md grid-cols-2">
+            <TabsTrigger value="buyer" className="flex items-center gap-2">
+              🏠 Compradores
+            </TabsTrigger>
+            <TabsTrigger value="seller" className="flex items-center gap-2">
+              💼 Vendedores
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        <PipelineStats leads={filteredLeads} pipelineView={pipelineView} />
 
         <div className="flex-1 overflow-x-auto min-h-0">
           <PipelineBoard
-            leads={leads}
+            leads={filteredLeads}
             onLeadMove={handleLeadMove}
             onLeadClick={handleEditLead}
+            onLeadDelete={handleDeleteLead}
             isLoading={isLoading}
+            pipelineView={pipelineView}
           />
         </div>
 

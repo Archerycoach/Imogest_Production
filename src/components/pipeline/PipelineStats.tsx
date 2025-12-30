@@ -1,81 +1,65 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Euro, TrendingUp, AlertCircle } from "lucide-react";
+import { Card } from "@/components/ui/card";
 import type { LeadWithContacts } from "@/services/leadsService";
+import type { LeadType } from "@/types";
+import { TrendingUp, Users, CheckCircle, XCircle } from "lucide-react";
 
 interface PipelineStatsProps {
   leads: LeadWithContacts[];
+  pipelineView: LeadType;
 }
 
-export function PipelineStats({ leads }: PipelineStatsProps) {
-  const totalLeads = leads.length;
-  const activeLeads = leads.filter((l) => !["won", "lost"].includes(l.status)).length;
-  
-  const totalValue = leads.reduce((sum, lead) => sum + (Number(lead.budget) || 0), 0);
-  
-  const conversionRate = totalLeads > 0
-    ? ((leads.filter((l) => l.status === "won").length / totalLeads) * 100).toFixed(1)
-    : "0.0";
+export function PipelineStats({ leads, pipelineView }: PipelineStatsProps) {
+  const total = leads.length;
+  const qualified = leads.filter((l) => l.status === "qualified").length;
+  const won = leads.filter((l) => l.status === "won").length;
+  const lost = leads.filter((l) => l.status === "lost").length;
+  const conversionRate = total > 0 ? ((won / total) * 100).toFixed(1) : "0.0";
+
+  const viewLabel = pipelineView === "buyer" ? "Compradores" : "Vendedores";
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Total de Leads</CardTitle>
-          <Users className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{totalLeads}</div>
-          <p className="text-xs text-muted-foreground">
-            {activeLeads} ativos no pipeline
-          </p>
-        </CardContent>
-      </Card>
-      
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Valor em Pipeline</CardTitle>
-          <Euro className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">
-            {new Intl.NumberFormat("pt-PT", { style: "currency", currency: "EUR" }).format(totalValue)}
+    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <Card className="p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-gray-600">Total {viewLabel}</p>
+            <p className="text-2xl font-bold text-gray-900">{total}</p>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Soma dos orçamentos
-          </p>
-        </CardContent>
+          <Users className="h-8 w-8 text-blue-500" />
+        </div>
       </Card>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Taxa de Conversão</CardTitle>
-          <TrendingUp className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{conversionRate}%</div>
-          <p className="text-xs text-muted-foreground">
-            Leads ganhos vs total
-          </p>
-        </CardContent>
+      <Card className="p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-gray-600">Qualificados</p>
+            <p className="text-2xl font-bold text-gray-900">{qualified}</p>
+          </div>
+          <TrendingUp className="h-8 w-8 text-purple-500" />
+        </div>
       </Card>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Novos este Mês</CardTitle>
-          <AlertCircle className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">
-            {leads.filter(l => {
-              const date = new Date(l.created_at);
-              const now = new Date();
-              return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
-            }).length}
+      <Card className="p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-gray-600">{pipelineView === "buyer" ? "Fechados" : "Vendidos"}</p>
+            <p className="text-2xl font-bold text-gray-900">{won}</p>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Leads criados este mês
-          </p>
-        </CardContent>
+          <CheckCircle className="h-8 w-8 text-green-500" />
+        </div>
+      </Card>
+
+      <Card className="p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-gray-600">Taxa de Conversão</p>
+            <p className="text-2xl font-bold text-gray-900">{conversionRate}%</p>
+          </div>
+          <div className="flex flex-col items-end">
+            <XCircle className="h-8 w-8 text-red-500 opacity-30" />
+            <span className="text-xs text-gray-500 mt-1">{lost} perdidos</span>
+          </div>
+        </div>
       </Card>
     </div>
   );
