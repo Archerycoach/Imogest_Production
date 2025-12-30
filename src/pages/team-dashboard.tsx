@@ -13,6 +13,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { Layout } from "@/components/Layout";
+import { useRouter } from "next/router";
 
 interface AgentMetrics {
   id: string;
@@ -27,23 +28,55 @@ interface AgentMetrics {
 }
 
 export default function TeamDashboard() {
+  const router = useRouter();
   const [metrics, setMetrics] = useState<AgentMetrics[]>([]);
   const [agents, setAgents] = useState<Array<{ id: string; name: string }>>([]);
   const [selectedView, setSelectedView] = useState<string>("team");
   const [loading, setLoading] = useState(true);
+  const [hasAccess, setHasAccess] = useState(false);
 
   useEffect(() => {
-    loadAgents();
-    loadTeamMetrics();
+    checkAccess();
   }, []);
 
-  useEffect(() => {
-    if (selectedView === "team") {
-      loadTeamMetrics();
-    } else {
-      loadAgentMetrics(selectedView);
+  const checkAccess = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push("/login");
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+
+      // Only admin and team_lead can access this page
+      if (profile && (profile.role === "admin" || profile.role === "team_lead")) {
+        setHasAccess(true);
+        loadAgents();
+        loadTeamMetrics();
+      } else {
+        // Redirect agents to their personal performance page
+        router.push("/performance");
+      }
+    } catch (error) {
+      console.error("Error checking access:", error);
+      router.push("/dashboard");
     }
-  }, [selectedView]);
+  };
+
+  useEffect(() => {
+    if (hasAccess) {
+      if (selectedView === "team") {
+        loadTeamMetrics();
+      } else {
+        loadAgentMetrics(selectedView);
+      }
+    }
+  }, [selectedView, hasAccess]);
 
   const loadAgents = async () => {
     try {

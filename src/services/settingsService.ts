@@ -22,12 +22,9 @@ export const getSetting = async (key: string): Promise<SystemSetting | null> => 
     .from("system_settings")
     .select("*")
     .eq("key", key)
-    .single();
+    .maybeSingle();
 
-  if (error) {
-    if (error.code === "PGRST116") return null; // Not found
-    throw error;
-  }
+  if (error) throw error;
   return data;
 };
 
@@ -135,5 +132,28 @@ export const updateSecuritySettings = async (settings: Record<string, any>) => {
     "security_settings",
     settings,
     "Security configuration"
+  );
+};
+
+// Get Google Calendar configuration
+export const getGoogleCalendarConfig = async () => {
+  const setting = await getSetting("google_calendar_config");
+  return setting?.value || {
+    client_id: "",
+    client_secret: "",
+    redirect_uri: "",
+  };
+};
+
+// Update Google Calendar configuration
+export const updateGoogleCalendarConfig = async (config: {
+  client_id: string;
+  client_secret: string;
+  redirect_uri: string;
+}) => {
+  return updateSetting(
+    "google_calendar_config",
+    config,
+    "Google Calendar OAuth configuration"
   );
 };

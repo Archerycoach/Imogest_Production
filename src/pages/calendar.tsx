@@ -7,12 +7,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { getCalendarEvents, createCalendarEvent, deleteCalendarEvent, updateCalendarEvent } from "@/services/calendarService";
 import { getLeads } from "@/services/leadsService";
 import { getProperties } from "@/services/propertiesService";
 import { getAllTasks, updateTask, deleteTask } from "@/services/tasksService";
+import { getGoogleCredentials } from "@/services/googleCalendarService";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, Clock, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Clock, ChevronLeft, ChevronRight, RefreshCw, Calendar as CalendarIcon, Link } from "lucide-react";
+import { GoogleCalendarConnect } from "@/components/GoogleCalendarConnect";
 import type { Lead, Property } from "@/types";
 
 type ViewMode = "day" | "week" | "month";
@@ -30,6 +33,10 @@ export default function Calendar() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [draggedItem, setDraggedItem] = useState<{ id: string; type: "event" | "task"; startTime: string } | null>(null);
   const [showTaskModal, setShowTaskModal] = useState(false);
+  const [showGoogleConnect, setShowGoogleConnect] = useState(false);
+  const [googleConnected, setGoogleConnected] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [googleConfigured, setGoogleConfigured] = useState(false);
   const [editingTask, setEditingTask] = useState({
     id: "",
     title: "",
@@ -50,6 +57,8 @@ export default function Calendar() {
 
   useEffect(() => {
     checkAuth();
+    checkGoogleConfiguration();
+    checkGoogleConnection();
   }, []);
 
   const checkAuth = async () => {
@@ -59,6 +68,127 @@ export default function Calendar() {
       return;
     }
     loadData();
+  };
+
+  const checkGoogleConfiguration = () => {
+    // Check if Google OAuth is configured
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+    const configured = !!(clientId && clientId !== "your_client_id_here.apps.googleusercontent.com");
+    setGoogleConfigured(configured);
+  };
+
+  const checkGoogleConnection = async () => {
+    try {
+      const credentials = await getGoogleCredentials();
+      setGoogleConnected(!!credentials);
+    } catch (error) {
+      setGoogleConnected(false);
+    }
+  };
+
+  const handleGoogleConnect = () => {
+    if (!googleConfigured) {
+      alert("⚠️ Configuração Google Calendar Necessária\n\nAs credenciais OAuth do Google não estão configuradas.\n\nPor favor, siga o guia rápido em GOOGLE_CALENDAR_QUICK_SETUP.md para configurar a integração.");
+      return;
+    }
+    setShowGoogleConnect(true);
+  };
+
+  const syncWithGoogleCalendar = async () => {
+    if (!googleConnected) {
+      alert("Por favor conecte sua conta Google Calendar primeiro");
+      setShowGoogleConnect(true);
+      return;
+    }
+
+    try {
+      setSyncing(true);
+      
+      // Import events from Google Calendar
+      const response = await fetch("/api/google-calendar/list-events");
+      const googleEvents = await response.json();
+
+      if (googleEvents.error) {
+        throw new Error(googleEvents.error);
+      }
+
+      // Sync events to our database
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      for (const event of googleEvents.events || []) {
+        // Check if event already exists
+        const { data: existing } = await supabase
+          .from("calendar_events")
+          .select("id")
+          .eq("google_event_id", event.id)
+          .single();
+
+        if (!existing) {
+          // Create new event
+          await createCalendarEvent({
+            title: event.summary || "Evento sem título",
+            description: event.description || null,
+            event_type: "other",
+            start_time: event.start.dateTime || event.start.date,
+            end_time: event.end.dateTime || event.end.date,
+            lead_id: null,
+            property_id: null,
+            user_id: session.user.id,
+            google_event_id: event.id,
+          });
+        }
+      }
+
+      await loadData();
+      alert("Sincronização concluída com sucesso!");
+    } catch (error) {
+      console.error("Error syncing with Google Calendar:", error);
+      alert("Erro ao sincronizar com Google Calendar. Tente novamente.");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const exportToGoogleCalendar = async (eventId: string) => {
+    if (!googleConnected) {
+      alert("Por favor conecte sua conta Google Calendar primeiro");
+      setShowGoogleConnect(true);
+      return;
+    }
+
+    try {
+      const event = events.find(e => e.id === eventId);
+      if (!event) return;
+
+      const response = await fetch("/api/google-calendar/create-event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          summary: event.title,
+          description: event.description,
+          start: { dateTime: event.start_time },
+          end: { dateTime: event.end_time },
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      // Update event with Google event ID
+      await updateCalendarEvent(eventId, {
+        google_event_id: result.event.id,
+      });
+
+      alert("Evento exportado para Google Calendar com sucesso!");
+      await loadData();
+    } catch (error) {
+      console.error("Error exporting to Google Calendar:", error);
+      alert("Erro ao exportar para Google Calendar. Tente novamente.");
+    }
   };
 
   const loadData = async () => {
@@ -432,6 +562,24 @@ export default function Calendar() {
 
   return (
     <Layout title="Agenda">
+      {showGoogleConnect && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowGoogleConnect(false)}>
+          <div className="w-full max-w-md m-4" onClick={(e) => e.stopPropagation()}>
+            <GoogleCalendarConnect 
+              isConnected={googleConnected}
+              onConnect={() => {
+                setGoogleConnected(true);
+                setShowGoogleConnect(false);
+              }}
+              onDisconnect={() => {
+                setGoogleConnected(false);
+                setShowGoogleConnect(false);
+              }}
+            />
+          </div>
+        </div>
+      )}
+
       {showTaskModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={handleCloseTaskModal}>
           <Card className="w-full max-w-lg m-4" onClick={(e) => e.stopPropagation()}>
@@ -529,10 +677,40 @@ export default function Calendar() {
             <h1 className="text-3xl font-bold text-gray-900">Agenda</h1>
             <p className="text-gray-600 mt-1">Gerir eventos e compromissos</p>
           </div>
-          <Button onClick={() => setShowForm(true)} className="bg-purple-600 hover:bg-purple-700">
-            <Plus className="h-5 w-5 mr-2" />
-            Novo Evento
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              onClick={handleGoogleConnect}
+              className="flex items-center gap-2"
+            >
+              {googleConnected ? (
+                <>
+                  <CalendarIcon className="h-4 w-4" />
+                  Conectado
+                </>
+              ) : (
+                <>
+                  <Link className="h-4 w-4" />
+                  Conectar Google
+                </>
+              )}
+            </Button>
+            {googleConnected && (
+              <Button 
+                variant="outline"
+                onClick={syncWithGoogleCalendar}
+                disabled={syncing}
+                className="flex items-center gap-2"
+              >
+                <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
+                {syncing ? "A sincronizar..." : "Sincronizar"}
+              </Button>
+            )}
+            <Button onClick={() => setShowForm(true)} className="bg-purple-600 hover:bg-purple-700">
+              <Plus className="h-5 w-5 mr-2" />
+              Novo Evento
+            </Button>
+          </div>
         </div>
 
         {showForm && (
@@ -723,16 +901,15 @@ export default function Calendar() {
                               ? "bg-blue-50 hover:bg-blue-100" 
                               : "bg-purple-50 hover:bg-purple-100"
                           }`}
-                          onClick={() => {
-                            if (event.event_type === "task") {
-                              handleTaskClick(event);
-                            } else {
-                              handleEventClick(event);
-                            }
-                          }}
                         >
                           <div className="flex items-start justify-between">
-                            <div className="flex-1">
+                            <div className="flex-1" onClick={() => {
+                              if (event.event_type === "task") {
+                                handleTaskClick(event);
+                              } else {
+                                handleEventClick(event);
+                              }
+                            }}>
                               <div className="flex items-center gap-2">
                                 <h3 className="font-semibold">{event.title}</h3>
                                 {event.event_type === "task" && event.task_status && (
@@ -746,6 +923,12 @@ export default function Calendar() {
                                     {event.task_status === "completed" ? "Concluída" : 
                                      event.task_status === "in_progress" ? "Em Progresso" : "Pendente"}
                                   </span>
+                                )}
+                                {event.google_event_id && (
+                                  <Badge variant="outline" className="text-xs">
+                                    <CalendarIcon className="h-3 w-3 mr-1" />
+                                    Google
+                                  </Badge>
                                 )}
                               </div>
                               {event.description && (
@@ -773,6 +956,20 @@ export default function Calendar() {
                                 )}
                               </div>
                             </div>
+                            {googleConnected && googleConfigured && event.event_type !== "task" && !event.google_event_id && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  exportToGoogleCalendar(event.id);
+                                }}
+                                className="ml-2"
+                                title="Exportar para Google Calendar"
+                              >
+                                <CalendarIcon className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
                         </div>
                       ))

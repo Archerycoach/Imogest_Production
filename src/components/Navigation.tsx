@@ -118,9 +118,39 @@ export function Navigation() {
     { icon: BarChart3, label: "Relatórios", path: "/reports", section: "main" },
   ];
 
+  const [userRole, setUserRole] = useState<string>("");
+
+  useEffect(() => {
+    const getUserRole = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("role")
+            .eq("id", user.id)
+            .single();
+          
+          if (profile) {
+            setUserRole(profile.role);
+          }
+        }
+      } catch (error) {
+        console.error("Error getting user role:", error);
+      }
+    };
+    getUserRole();
+  }, []);
+
   const toolsItems: NavItem[] = [
     { icon: Calculator, label: "Financiamento", path: "/financing", section: "tools" },
-    { icon: Trophy, label: "Performance", path: "/team-dashboard", section: "tools" },
+    // Show "Performance" for agents, "Performance Equipa" for admin/team_lead
+    ...(userRole === "agent" 
+      ? [{ icon: Trophy, label: "Performance", path: "/performance", section: "tools" as const }]
+      : userRole === "admin" || userRole === "team_lead"
+      ? [{ icon: Trophy, label: "Performance Equipa", path: "/team-dashboard", section: "tools" as const }]
+      : []
+    ),
     { icon: FolderOpen, label: "Documentos", path: "/documents", section: "tools" },
   ];
 

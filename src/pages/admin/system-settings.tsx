@@ -16,6 +16,8 @@ import {
   updatePipelineConfig,
   getRequiredFieldsConfig,
   updateRequiredFieldsConfig,
+  getGoogleCalendarConfig,
+  updateGoogleCalendarConfig,
 } from "@/services/settingsService";
 import { getSession } from "@/services/authService";
 import { getUserProfile } from "@/services/profileService";
@@ -49,6 +51,13 @@ export default function SystemSettings() {
     leads: [] as string[],
     properties: [] as string[],
     tasks: [] as string[],
+  });
+
+  // Google Calendar configuration
+  const [googleCalendar, setGoogleCalendar] = useState({
+    client_id: "",
+    client_secret: "",
+    redirect_uri: "",
   });
 
   useEffect(() => {
@@ -85,15 +94,17 @@ export default function SystemSettings() {
 
   const loadSettings = async () => {
     try {
-      const [modulesData, pipelineData, fieldsData] = await Promise.all([
+      const [modulesData, pipelineData, fieldsData, googleData] = await Promise.all([
         getModulesConfig(),
         getPipelineConfig(),
         getRequiredFieldsConfig(),
+        getGoogleCalendarConfig(),
       ]);
 
       setModules(modulesData as any);
       setPipeline(pipelineData as any);
       setRequiredFields(fieldsData as any);
+      setGoogleCalendar(googleData as any);
     } catch (error) {
       console.error("Error loading settings:", error);
       toast({
@@ -157,6 +168,102 @@ export default function SystemSettings() {
       toast({
         title: "Erro",
         description: "Erro ao guardar campos obrigatórios",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveGoogleCalendar = async () => {
+    setSaving(true);
+    try {
+      // Validate fields
+      if (!googleCalendar.client_id || !googleCalendar.client_secret || !googleCalendar.redirect_uri) {
+        toast({
+          title: "Erro de Validação",
+          description: "Todos os campos são obrigatórios",
+          variant: "destructive",
+        });
+        setSaving(false);
+        return;
+      }
+
+      // Validate Client ID format
+      if (!googleCalendar.client_id.includes(".apps.googleusercontent.com")) {
+        toast({
+          title: "Erro de Validação",
+          description: "Client ID deve terminar com .apps.googleusercontent.com",
+          variant: "destructive",
+        });
+        setSaving(false);
+        return;
+      }
+
+      // Validate Client Secret format
+      if (!googleCalendar.client_secret.startsWith("GOCSPX-")) {
+        toast({
+          title: "Erro de Validação",
+          description: "Client Secret deve começar com GOCSPX-",
+          variant: "destructive",
+        });
+        setSaving(false);
+        return;
+      }
+
+      await updateGoogleCalendarConfig(googleCalendar);
+      toast({
+        title: "Sucesso",
+        description: "Configuração Google Calendar atualizada com sucesso. Reinicie o servidor para aplicar as alterações.",
+      });
+    } catch (error) {
+      console.error("Error saving Google Calendar config:", error);
+      toast({
+        title: "Erro",
+        description: "Erro ao guardar configuração Google Calendar",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRestartServer = async () => {
+    setSaving(true);
+    try {
+      const session = await getSession();
+      if (!session) {
+        toast({
+          title: "Erro",
+          description: "Sessão expirada. Faça login novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const response = await fetch("/api/admin/restart-server", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Erro ao reiniciar servidor");
+      }
+
+      toast({
+        title: "✅ Sucesso",
+        description: "Servidor reiniciado com sucesso! As novas configurações estão ativas.",
+      });
+    } catch (error) {
+      console.error("Error restarting server:", error);
+      toast({
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Erro ao reiniciar servidor",
         variant: "destructive",
       });
     } finally {
@@ -485,6 +592,162 @@ export default function SystemSettings() {
                         </>
                       )}
                     </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Google Calendar Integration */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  📅 Integração Google Calendar
+                </CardTitle>
+                <CardDescription>
+                  Configurar credenciais OAuth para sincronização com Google Calendar
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                    <p className="text-sm text-blue-900">
+                      <strong>📚 Como obter as credenciais:</strong>
+                    </p>
+                    <ol className="text-sm text-blue-900 mt-2 space-y-1 ml-4 list-decimal">
+                      <li>Aceda a <a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer" className="underline font-semibold">Google Cloud Console</a></li>
+                      <li>Crie um projeto ou selecione um existente</li>
+                      <li>Ative a <strong>Google Calendar API</strong></li>
+                      <li>Configure a tela de consentimento OAuth</li>
+                      <li>Crie credenciais OAuth 2.0 (Aplicativo da Web)</li>
+                      <li>Adicione a URI de redirecionamento abaixo</li>
+                      <li>Copie o Client ID e Client Secret aqui</li>
+                    </ol>
+                    <p className="text-sm text-blue-900 mt-3">
+                      📖 <strong>Guia completo:</strong> GOOGLE_CALENDAR_QUICK_SETUP.md
+                    </p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="google-client-id" className="text-base font-semibold">
+                        Client ID *
+                      </Label>
+                      <p className="text-sm text-slate-500 mb-2">
+                        ID do cliente OAuth 2.0 (termina com .apps.googleusercontent.com)
+                      </p>
+                      <Input
+                        id="google-client-id"
+                        type="text"
+                        placeholder="123456789012-abc123def456.apps.googleusercontent.com"
+                        value={googleCalendar.client_id}
+                        onChange={(e) =>
+                          setGoogleCalendar({ ...googleCalendar, client_id: e.target.value })
+                        }
+                        className="font-mono text-sm"
+                      />
+                    </div>
+
+                    <Separator />
+
+                    <div>
+                      <Label htmlFor="google-client-secret" className="text-base font-semibold">
+                        Client Secret *
+                      </Label>
+                      <p className="text-sm text-slate-500 mb-2">
+                        Segredo do cliente OAuth 2.0 (começa com GOCSPX-)
+                      </p>
+                      <Input
+                        id="google-client-secret"
+                        type="password"
+                        placeholder="GOCSPX-abcdefghijklmnopqrstuvwxyz"
+                        value={googleCalendar.client_secret}
+                        onChange={(e) =>
+                          setGoogleCalendar({ ...googleCalendar, client_secret: e.target.value })
+                        }
+                        className="font-mono text-sm"
+                      />
+                    </div>
+
+                    <Separator />
+
+                    <div>
+                      <Label htmlFor="google-redirect-uri" className="text-base font-semibold">
+                        Redirect URI *
+                      </Label>
+                      <p className="text-sm text-slate-500 mb-2">
+                        URI de redirecionamento após autorização OAuth
+                      </p>
+                      <Input
+                        id="google-redirect-uri"
+                        type="text"
+                        placeholder="https://seu-dominio.com/api/google-calendar/callback"
+                        value={googleCalendar.redirect_uri}
+                        onChange={(e) =>
+                          setGoogleCalendar({ ...googleCalendar, redirect_uri: e.target.value })
+                        }
+                        className="font-mono text-sm"
+                      />
+                      <p className="text-xs text-slate-500 mt-1">
+                        💡 Para desenvolvimento: http://localhost:3000/api/google-calendar/callback
+                      </p>
+                    </div>
+
+                    <Separator />
+
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                      <p className="text-sm text-yellow-900">
+                        ⚠️ <strong>Importante:</strong> Após guardar as configurações, é necessário reiniciar o servidor para aplicar as alterações.
+                      </p>
+                      <p className="text-sm text-yellow-900 mt-2">
+                        Execute: <code className="bg-yellow-100 px-2 py-1 rounded">pm2 restart all</code>
+                      </p>
+                    </div>
+
+                    <div className="flex justify-between items-center pt-4">
+                      <div className="text-sm text-slate-600">
+                        {googleCalendar.client_id && googleCalendar.client_secret && googleCalendar.redirect_uri ? (
+                          <Badge className="bg-green-100 text-green-800">
+                            ✅ Configuração Completa
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-slate-600">
+                            ⚠️ Configuração Incompleta
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button onClick={handleSaveGoogleCalendar} disabled={saving}>
+                          {saving ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              A guardar...
+                            </>
+                          ) : (
+                            <>
+                              <Save className="h-4 w-4 mr-2" />
+                              Guardar Configuração
+                            </>
+                          )}
+                        </Button>
+                        <Button 
+                          onClick={handleRestartServer} 
+                          disabled={saving}
+                          variant="outline"
+                          className="border-blue-300 text-blue-600 hover:bg-blue-50"
+                        >
+                          {saving ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              A reiniciar...
+                            </>
+                          ) : (
+                            <>
+                              🔄 Reiniciar Servidor
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </CardContent>
