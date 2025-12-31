@@ -57,6 +57,7 @@ export type Database = {
         Row: {
           all_day: boolean | null
           attendees: string[] | null
+          contact_id: string | null
           created_at: string | null
           custom_fields: Json | null
           description: string | null
@@ -77,6 +78,7 @@ export type Database = {
         Insert: {
           all_day?: boolean | null
           attendees?: string[] | null
+          contact_id?: string | null
           created_at?: string | null
           custom_fields?: Json | null
           description?: string | null
@@ -97,6 +99,7 @@ export type Database = {
         Update: {
           all_day?: boolean | null
           attendees?: string[] | null
+          contact_id?: string | null
           created_at?: string | null
           custom_fields?: Json | null
           description?: string | null
@@ -115,6 +118,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "calendar_events_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "calendar_events_lead_id_fkey"
             columns: ["lead_id"]
@@ -315,6 +325,42 @@ export type Database = {
           },
         ]
       }
+      integration_settings: {
+        Row: {
+          created_at: string | null
+          id: string
+          integration_name: string
+          is_active: boolean | null
+          last_tested_at: string | null
+          settings: Json
+          test_message: string | null
+          test_status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          integration_name: string
+          is_active?: boolean | null
+          last_tested_at?: string | null
+          settings?: Json
+          test_message?: string | null
+          test_status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          integration_name?: string
+          is_active?: boolean | null
+          last_tested_at?: string | null
+          settings?: Json
+          test_message?: string | null
+          test_status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       interactions: {
         Row: {
           contact_id: string | null
@@ -450,6 +496,7 @@ export type Database = {
           contact_id: string | null
           created_at: string | null
           custom_fields: Json | null
+          desired_price: number | null
           email: string | null
           id: string
           last_contact_date: string | null
@@ -458,9 +505,11 @@ export type Database = {
           max_area: number | null
           min_area: number | null
           name: string
+          needs_financing: boolean | null
           next_follow_up: string | null
           notes: string | null
           phone: string | null
+          property_area: number | null
           property_type: string | null
           score: number | null
           source: string | null
@@ -480,6 +529,7 @@ export type Database = {
           contact_id?: string | null
           created_at?: string | null
           custom_fields?: Json | null
+          desired_price?: number | null
           email?: string | null
           id?: string
           last_contact_date?: string | null
@@ -488,9 +538,11 @@ export type Database = {
           max_area?: number | null
           min_area?: number | null
           name: string
+          needs_financing?: boolean | null
           next_follow_up?: string | null
           notes?: string | null
           phone?: string | null
+          property_area?: number | null
           property_type?: string | null
           score?: number | null
           source?: string | null
@@ -510,6 +562,7 @@ export type Database = {
           contact_id?: string | null
           created_at?: string | null
           custom_fields?: Json | null
+          desired_price?: number | null
           email?: string | null
           id?: string
           last_contact_date?: string | null
@@ -518,9 +571,11 @@ export type Database = {
           max_area?: number | null
           min_area?: number | null
           name?: string
+          needs_financing?: boolean | null
           next_follow_up?: string | null
           notes?: string | null
           phone?: string | null
+          property_area?: number | null
           property_type?: string | null
           score?: number | null
           source?: string | null

@@ -30,6 +30,7 @@ const mapDbEventToFrontend = (dbEvent: DbCalendarEvent): CalendarEvent => ({
   attendees: Array.isArray(dbEvent.attendees) ? (dbEvent.attendees as string[]) : [],
   leadId: dbEvent.lead_id || undefined,
   propertyId: dbEvent.property_id || undefined,
+  contactId: dbEvent.contact_id || undefined, // Add contactId mapping
   googleEventId: dbEvent.google_event_id || undefined,
   googleSynced: !!dbEvent.google_event_id,
   eventType: dbEvent.event_type || "meeting",
@@ -89,7 +90,7 @@ export const getCalendarEvent = async (id: string): Promise<CalendarEvent | null
 };
 
 // Create new calendar event
-export const createCalendarEvent = async (event: CalendarEventInsert): Promise<CalendarEvent> => {
+export const createCalendarEvent = async (event: CalendarEventInsert & { contact_id?: string | null }): Promise<CalendarEvent> => {
   // Validate dates only if end_time is provided
   if (event.end_time && new Date(event.end_time) <= new Date(event.start_time)) {
     throw new Error("A data de fim deve ser posterior à data de início");
@@ -111,6 +112,9 @@ export const createCalendarEvent = async (event: CalendarEventInsert): Promise<C
 
   return mapDbEventToFrontend(data);
 };
+
+// Alias for compatibility
+export const createEvent = createCalendarEvent;
 
 // Update calendar event
 export const updateCalendarEvent = async (id: string, updates: CalendarEventUpdate): Promise<CalendarEvent> => {

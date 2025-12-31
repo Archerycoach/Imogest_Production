@@ -8,68 +8,119 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Phone, Mail, MessageSquare, Calendar, FileText, User } from "lucide-react";
-import { getInteractions, addInteraction, getLeads } from "@/lib/storage";
-import { Interaction, InteractionType, Lead } from "@/types";
+import { Plus, Search, Phone, Mail, MessageSquare, Calendar, FileText, User, Video } from "lucide-react";
+import { getInteractions, createInteraction, type InteractionWithDetails } from "@/services/interactionsService";
+import { getLeads, type LeadWithContacts } from "@/services/leadsService";
+import { getContacts } from "@/services/contactsService";
+import { useToast } from "@/hooks/use-toast";
+
+type InteractionType = "call" | "email" | "whatsapp" | "meeting" | "note" | "sms" | "video_call";
 
 export default function Interactions() {
-  const [interactions, setInteractions] = useState<Interaction[]>([]);
-  const [leads, setLeads] = useState<Lead[]>([]);
+  const [interactions, setInteractions] = useState<InteractionWithDetails[]>([]);
+  const [leads, setLeads] = useState<LeadWithContacts[]>([]);
+  const [contacts, setContacts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<string>("all");
-  const [filterLeadId, setFilterLeadId] = useState<string>("all");
+  const [filterEntityType, setFilterEntityType] = useState<string>("all");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
+    entityType: "lead" as "lead" | "contact",
     leadId: "",
+    contactId: "",
     type: "call" as InteractionType,
-    notes: "",
+    subject: "",
+    content: "",
     outcome: "",
-    nextAction: "",
   });
+  const { toast } = useToast();
 
   useEffect(() => {
     loadData();
   }, []);
 
-  const loadData = () => {
-    setInteractions(getInteractions());
-    setLeads(getLeads());
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const [interactionsData, leadsData, contactsData] = await Promise.all([
+        getInteractions(),
+        getLeads(),
+        getContacts(),
+      ]);
+      setInteractions(interactionsData);
+      setLeads(leadsData);
+      setContacts(contactsData);
+    } catch (error) {
+      console.error("Error loading data:", error);
+      toast({
+        title: "Erro ao carregar dados",
+        description: "Ocorreu um erro ao carregar os dados.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const newInteraction: Interaction = {
-      id: Date.now().toString(),
-      ...formData,
-      timestamp: new Date().toISOString(),
-    };
-    addInteraction(newInteraction);
+    try {
+      await createInteraction({
+        interaction_type: formData.type,
+        subject: formData.subject || null,
+        content: formData.content || null,
+        outcome: formData.outcome || null,
+        lead_id: formData.entityType === "lead" ? formData.leadId || null : null,
+        contact_id: formData.entityType === "contact" ? formData.contactId || null : null,
+        property_id: null,
+      });
 
-    resetForm();
-    loadData();
-    setIsDialogOpen(false);
+      toast({
+        title: "Interação criada!",
+        description: "A interação foi registrada com sucesso.",
+      });
+
+      resetForm();
+      setIsDialogOpen(false);
+      loadData();
+    } catch (error: any) {
+      console.error("Error creating interaction:", error);
+      toast({
+        title: "Erro ao criar interação",
+        description: error.message || "Ocorreu um erro ao criar a interação.",
+        variant: "destructive",
+      });
+    }
   };
 
   const resetForm = () => {
     setFormData({
+      entityType: "lead",
       leadId: "",
+      contactId: "",
       type: "call",
-      notes: "",
+      subject: "",
+      content: "",
       outcome: "",
-      nextAction: "",
     });
   };
 
   const filteredInteractions = interactions.filter((interaction) => {
-    const lead = leads.find((l) => l.id === interaction.leadId);
-    const matchesSearch = lead
-      ? lead.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        interaction.notes.toLowerCase().includes(searchTerm.toLowerCase())
-      : false;
-    const matchesType = filterType === "all" || interaction.type === filterType;
-    const matchesLead = filterLeadId === "all" || interaction.leadId === filterLeadId;
-    return matchesSearch && matchesType && matchesLead;
+    const entityName = interaction.lead?.name || interaction.contact?.name || "";
+    const matchesSearch =
+      entityName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (interaction.content?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false) ||
+      (interaction.subject?.toLowerCase().includes(searchTerm.toLowerCase()) ?? false);
+
+    const matchesType = filterType === "all" || interaction.interaction_type === filterType;
+    const matchesEntity =
+      filterEntityType === "all" ||
+      (filterEntityType === "lead" && interaction.lead_id) ||
+      (filterEntityType === "contact" && interaction.contact_id);
+
+    return matchesSearch && matchesType && matchesEntity;
   });
 
   const getInteractionIcon = (type: InteractionType) => {
@@ -84,6 +135,10 @@ export default function Interactions() {
         return Calendar;
       case "note":
         return FileText;
+      case "sms":
+        return MessageSquare;
+      case "video_call":
+        return Video;
       default:
         return FileText;
     }
@@ -101,10 +156,45 @@ export default function Interactions() {
         return "bg-orange-100 text-orange-700";
       case "note":
         return "bg-slate-100 text-slate-700";
+      case "sms":
+        return "bg-pink-100 text-pink-700";
+      case "video_call":
+        return "bg-indigo-100 text-indigo-700";
       default:
         return "bg-slate-100 text-slate-700";
     }
   };
+
+  const getInteractionLabel = (type: InteractionType) => {
+    switch (type) {
+      case "call":
+        return "Ligação";
+      case "email":
+        return "Email";
+      case "whatsapp":
+        return "WhatsApp";
+      case "meeting":
+        return "Reunião";
+      case "note":
+        return "Nota";
+      case "sms":
+        return "SMS";
+      case "video_call":
+        return "Videochamada";
+      default:
+        return type;
+    }
+  };
+
+  if (loading) {
+    return (
+      <Layout title="Interações">
+        <div className="flex justify-center p-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout title="Interações">
@@ -114,7 +204,7 @@ export default function Interactions() {
             <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
               Histórico de Interações
             </h1>
-            <p className="text-slate-600">Timeline completo de atividades com leads</p>
+            <p className="text-slate-600">Timeline completo de atividades com leads e contactos</p>
           </div>
           <Dialog
             open={isDialogOpen}
@@ -136,24 +226,66 @@ export default function Interactions() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="leadId">Lead *</Label>
-                    <Select value={formData.leadId} onValueChange={(value) => setFormData({ ...formData, leadId: value })}>
+                    <Label htmlFor="entityType">Associar com *</Label>
+                    <Select
+                      value={formData.entityType}
+                      onValueChange={(value: "lead" | "contact") =>
+                        setFormData({ ...formData, entityType: value, leadId: "", contactId: "" })
+                      }
+                    >
                       <SelectTrigger>
-                        <SelectValue placeholder="Selecione um lead" />
+                        <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {leads.map((lead) => (
-                          <SelectItem key={lead.id} value={lead.id}>
-                            {lead.name}
-                          </SelectItem>
-                        ))}
+                        <SelectItem value="lead">Lead</SelectItem>
+                        <SelectItem value="contact">Contacto</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
+                  {formData.entityType === "lead" ? (
+                    <div>
+                      <Label htmlFor="leadId">Lead *</Label>
+                      <Select value={formData.leadId} onValueChange={(value) => setFormData({ ...formData, leadId: value })}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione uma lead" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {leads.map((lead) => (
+                            <SelectItem key={lead.id} value={lead.id}>
+                              {lead.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : (
+                    <div>
+                      <Label htmlFor="contactId">Contacto *</Label>
+                      <Select
+                        value={formData.contactId}
+                        onValueChange={(value) => setFormData({ ...formData, contactId: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione um contacto" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {contacts.map((contact) => (
+                            <SelectItem key={contact.id} value={contact.id}>
+                              {contact.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
                   <div>
                     <Label htmlFor="type">Tipo de Interação *</Label>
-                    <Select value={formData.type} onValueChange={(value: InteractionType) => setFormData({ ...formData, type: value })}>
+                    <Select
+                      value={formData.type}
+                      onValueChange={(value: InteractionType) => setFormData({ ...formData, type: value })}
+                    >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
@@ -161,41 +293,43 @@ export default function Interactions() {
                         <SelectItem value="call">Ligação</SelectItem>
                         <SelectItem value="email">Email</SelectItem>
                         <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                        <SelectItem value="sms">SMS</SelectItem>
                         <SelectItem value="meeting">Reunião</SelectItem>
+                        <SelectItem value="video_call">Videochamada</SelectItem>
                         <SelectItem value="note">Nota</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
+                  <div>
+                    <Label htmlFor="subject">Assunto</Label>
+                    <Input
+                      id="subject"
+                      value={formData.subject}
+                      onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
+                      placeholder="Ex: Apresentação de imóvel"
+                    />
+                  </div>
+
                   <div className="col-span-2">
-                    <Label htmlFor="notes">Notas da Interação *</Label>
+                    <Label htmlFor="content">Notas da Interação *</Label>
                     <Textarea
-                      id="notes"
-                      value={formData.notes}
-                      onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                      id="content"
+                      value={formData.content}
+                      onChange={(e) => setFormData({ ...formData, content: e.target.value })}
                       required
                       placeholder="Descreva o que foi discutido..."
                       rows={4}
                     />
                   </div>
 
-                  <div>
+                  <div className="col-span-2">
                     <Label htmlFor="outcome">Resultado</Label>
                     <Input
                       id="outcome"
                       value={formData.outcome}
                       onChange={(e) => setFormData({ ...formData, outcome: e.target.value })}
-                      placeholder="Ex: Interessado, Não atende, etc."
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="nextAction">Próxima Ação</Label>
-                    <Input
-                      id="nextAction"
-                      value={formData.nextAction}
-                      onChange={(e) => setFormData({ ...formData, nextAction: e.target.value })}
-                      placeholder="Ex: Agendar visita"
+                      placeholder="Ex: Interessado, Não atende, Agendou visita, etc."
                     />
                   </div>
                 </div>
@@ -234,21 +368,20 @@ export default function Interactions() {
                   <SelectItem value="call">Ligação</SelectItem>
                   <SelectItem value="email">Email</SelectItem>
                   <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                  <SelectItem value="sms">SMS</SelectItem>
                   <SelectItem value="meeting">Reunião</SelectItem>
+                  <SelectItem value="video_call">Videochamada</SelectItem>
                   <SelectItem value="note">Nota</SelectItem>
                 </SelectContent>
               </Select>
-              <Select value={filterLeadId} onValueChange={setFilterLeadId}>
+              <Select value={filterEntityType} onValueChange={setFilterEntityType}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Lead" />
+                  <SelectValue placeholder="Filtrar por" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todos os Leads</SelectItem>
-                  {leads.map((lead) => (
-                    <SelectItem key={lead.id} value={lead.id}>
-                      {lead.name}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="all">Leads e Contactos</SelectItem>
+                  <SelectItem value="lead">Apenas Leads</SelectItem>
+                  <SelectItem value="contact">Apenas Contactos</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -265,53 +398,48 @@ export default function Interactions() {
               </CardContent>
             </Card>
           ) : (
-            filteredInteractions
-              .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-              .map((interaction) => {
-                const lead = leads.find((l) => l.id === interaction.leadId);
-                const Icon = getInteractionIcon(interaction.type);
+            filteredInteractions.map((interaction) => {
+              const Icon = getInteractionIcon(interaction.interaction_type as InteractionType);
+              const entityName = interaction.lead?.name || interaction.contact?.name || "Entidade não encontrada";
+              const entityType = interaction.lead_id ? "Lead" : interaction.contact_id ? "Contacto" : "Sem associação";
 
-                return (
-                  <Card key={interaction.id} className="border-0 shadow-lg hover:shadow-xl transition-all duration-300">
-                    <CardContent className="p-6">
-                      <div className="flex items-start gap-4">
-                        <div className={`p-3 rounded-xl ${getInteractionColor(interaction.type)}`}>
-                          <Icon className="h-6 w-6" />
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-start justify-between mb-2">
-                            <div>
-                              <h3 className="font-bold text-lg text-slate-900">{lead?.name || "Lead não encontrado"}</h3>
-                              <p className="text-sm text-slate-500">
-                                {new Date(interaction.timestamp).toLocaleString("pt-BR")}
-                              </p>
-                            </div>
-                            <Badge className={`${getInteractionColor(interaction.type)} hover:${getInteractionColor(interaction.type)}`}>
-                              {interaction.type === "call" ? "Ligação" :
-                               interaction.type === "email" ? "Email" :
-                               interaction.type === "whatsapp" ? "WhatsApp" :
-                               interaction.type === "meeting" ? "Reunião" : "Nota"}
-                            </Badge>
-                          </div>
-                          <p className="text-slate-700 mb-3">{interaction.notes}</p>
-                          {interaction.outcome && (
-                            <div className="mb-2">
-                              <span className="text-sm font-semibold text-slate-600">Resultado: </span>
-                              <span className="text-sm text-slate-700">{interaction.outcome}</span>
-                            </div>
-                          )}
-                          {interaction.nextAction && (
-                            <div>
-                              <span className="text-sm font-semibold text-slate-600">Próxima Ação: </span>
-                              <span className="text-sm text-slate-700">{interaction.nextAction}</span>
-                            </div>
-                          )}
-                        </div>
+              return (
+                <Card key={interaction.id} className="border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+                  <CardContent className="p-6">
+                    <div className="flex items-start gap-4">
+                      <div className={`p-3 rounded-xl ${getInteractionColor(interaction.interaction_type as InteractionType)}`}>
+                        <Icon className="h-6 w-6" />
                       </div>
-                    </CardContent>
-                  </Card>
-                );
-              })
+                      <div className="flex-1">
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <h3 className="font-bold text-lg text-slate-900">{entityName}</h3>
+                            <p className="text-sm text-slate-500">
+                              {new Date(interaction.interaction_date).toLocaleString("pt-BR")} • {entityType}
+                            </p>
+                          </div>
+                          <Badge
+                            className={`${getInteractionColor(interaction.interaction_type as InteractionType)} hover:${getInteractionColor(interaction.interaction_type as InteractionType)}`}
+                          >
+                            {getInteractionLabel(interaction.interaction_type as InteractionType)}
+                          </Badge>
+                        </div>
+                        {interaction.subject && (
+                          <h4 className="font-semibold text-slate-800 mb-2">{interaction.subject}</h4>
+                        )}
+                        {interaction.content && <p className="text-slate-700 mb-3">{interaction.content}</p>}
+                        {interaction.outcome && (
+                          <div>
+                            <span className="text-sm font-semibold text-slate-600">Resultado: </span>
+                            <span className="text-sm text-slate-700">{interaction.outcome}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })
           )}
         </div>
       </div>

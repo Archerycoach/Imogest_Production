@@ -32,6 +32,85 @@ export const parseExcelFile = async (file: File): Promise<any[]> => {
   });
 };
 
+// Parse date from Excel (handles DD/MM/YYYY, YYYY-MM-DD, or Excel serial number)
+const parseDate = (value: any): string | null => {
+  if (!value) return null;
+  
+  // If it's already a valid ISO string
+  if (typeof value === "string" && value.match(/^\d{4}-\d{2}-\d{2}/)) {
+    return new Date(value).toISOString();
+  }
+  
+  // If it's a string date (DD/MM/YYYY)
+  if (typeof value === "string" && value.match(/^\d{2}\/\d{2}\/\d{4}/)) {
+    const [day, month, year] = value.split("/");
+    return new Date(`${year}-${month}-${day}`).toISOString();
+  }
+  
+  // If it's an Excel serial number
+  if (typeof value === "number") {
+    const excelEpoch = new Date(1899, 11, 30);
+    const date = new Date(excelEpoch.getTime() + value * 86400000);
+    return date.toISOString();
+  }
+  
+  // Try to parse as Date
+  try {
+    const date = new Date(value);
+    if (!isNaN(date.getTime())) {
+      return date.toISOString();
+    }
+  } catch (e) {
+    // Ignore parse errors
+  }
+  
+  return null;
+};
+
+// Parse budget (handles currency symbols and thousands separators)
+const parseBudget = (value: any): number | null => {
+  if (!value) return null;
+  
+  // Remove currency symbols and spaces
+  const cleanValue = String(value)
+    .replace(/[€$£\s]/g, "")
+    .replace(/\./g, "") // Remove thousands separator (.)
+    .replace(/,/g, "."); // Convert decimal separator (,) to (.)
+  
+  const number = parseFloat(cleanValue);
+  return isNaN(number) ? null : number;
+};
+
+// Normalize lead type
+const normalizeLeadType = (value: any): "buyer" | "seller" | "both" => {
+  if (!value) return "buyer";
+  
+  const normalized = String(value).toLowerCase().trim();
+  
+  if (normalized.includes("comprador") || normalized === "buyer") return "buyer";
+  if (normalized.includes("vendedor") || normalized === "seller") return "seller";
+  if (normalized.includes("ambos") || normalized === "both") return "both";
+  
+  return "buyer";
+};
+
+// Normalize status
+const normalizeStatus = (value: any): "new" | "contacted" | "qualified" | "proposal" | "negotiation" | "won" | "lost" => {
+  if (!value) return "new";
+  
+  const normalized = String(value).toLowerCase().trim();
+  
+  if (normalized.includes("novo") || normalized === "new") return "new";
+  if (normalized.includes("contactado") || normalized === "contacted") return "contacted";
+  if (normalized.includes("qualificado") || normalized === "qualified") return "qualified";
+  if (normalized.includes("proposta") || normalized === "proposal") return "proposal";
+  if (normalized.includes("negociação") || normalized === "negotiation") return "negotiation";
+  if (normalized.includes("ganho") || normalized === "won") return "won";
+  if (normalized.includes("perdido") || normalized === "lost") return "lost";
+  
+  return "new";
+};
+
 export const importLeads = async (data: any[]) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
@@ -94,7 +173,7 @@ export const importProperties = async (data: any[]) => {
         bathrooms: row.bathrooms ? Number(row.bathrooms) : 0,
         bedrooms: row.bedrooms ? Number(row.bedrooms) : 0,
         status: "available",
-        property_type: (row.property_type || "apartment") as any, // Added property_type
+        property_type: (row.property_type || "apartment") as any,
         user_id: user.id
       };
 

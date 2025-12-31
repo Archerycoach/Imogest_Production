@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import { ArrowLeft, Save, Loader2 } from "lucide-react";
+import { ArrowLeft, Save, Loader2, MessageSquare, Send, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,8 @@ import { getSession } from "@/services/authService";
 import { getUserProfile } from "@/services/profileService";
 import { Layout } from "@/components/Layout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { supabase } from "@/integrations/supabase/client";
+import { getIntegration, updateIntegration } from "@/services/integrationsService";
 
 export default function SystemSettings() {
   const router = useRouter();
@@ -60,6 +63,14 @@ export default function SystemSettings() {
     redirect_uri: "",
   });
 
+  // WhatsApp configuration
+  const [whatsappEnabled, setWhatsappEnabled] = useState(false);
+  const [whatsappPhoneNumberId, setWhatsappPhoneNumberId] = useState("");
+  const [whatsappAccessToken, setWhatsappAccessToken] = useState("");
+  const [whatsappTime, setWhatsappTime] = useState("08:00");
+  const [testingWhatsapp, setTestingWhatsapp] = useState(false);
+  const [savingWhatsapp, setSavingWhatsapp] = useState(false);
+
   useEffect(() => {
     checkAccess();
   }, []);
@@ -94,17 +105,25 @@ export default function SystemSettings() {
 
   const loadSettings = async () => {
     try {
-      const [modulesData, pipelineData, fieldsData, googleData] = await Promise.all([
+      const [modulesData, pipelineData, fieldsData, googleData, whatsappData] = await Promise.all([
         getModulesConfig(),
         getPipelineConfig(),
         getRequiredFieldsConfig(),
         getGoogleCalendarConfig(),
+        getIntegration("whatsapp"),
       ]);
 
       setModules(modulesData as any);
       setPipeline(pipelineData as any);
       setRequiredFields(fieldsData as any);
       setGoogleCalendar(googleData as any);
+
+      // Load WhatsApp configuration
+      if (whatsappData) {
+        setWhatsappEnabled(whatsappData.is_active);
+        setWhatsappPhoneNumberId(whatsappData.settings.phoneNumberId || "");
+        setWhatsappAccessToken(whatsappData.settings.accessToken || "");
+      }
     } catch (error) {
       console.error("Error loading settings:", error);
       toast({
@@ -112,6 +131,41 @@ export default function SystemSettings() {
         description: "Erro ao carregar configurações",
         variant: "destructive",
       });
+    }
+  };
+
+  const handleSaveWhatsApp = async () => {
+    setSavingWhatsapp(true);
+    try {
+      // Validate fields
+      if (whatsappEnabled && (!whatsappPhoneNumberId || !whatsappAccessToken)) {
+        toast({
+          title: "Erro de Validação",
+          description: "Phone Number ID e Access Token são obrigatórios quando a integração está ativa.",
+          variant: "destructive",
+        });
+        setSavingWhatsapp(false);
+        return;
+      }
+
+      await updateIntegration("whatsapp", {
+        phoneNumberId: whatsappPhoneNumberId,
+        accessToken: whatsappAccessToken,
+      }, whatsappEnabled);
+
+      toast({
+        title: "✅ Sucesso",
+        description: "Configurações do WhatsApp guardadas com sucesso!",
+      });
+    } catch (error) {
+      console.error("Error saving WhatsApp config:", error);
+      toast({
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Erro ao guardar configurações do WhatsApp",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingWhatsapp(false);
     }
   };
 
@@ -268,6 +322,33 @@ export default function SystemSettings() {
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Test WhatsApp daily notification
+  const handleTestWhatsAppNotification = async () => {
+    setTestingWhatsapp(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
+
+      const response = await supabase.functions.invoke("daily-tasks-whatsapp");
+      
+      if (response.error) throw response.error;
+
+      toast({
+        title: "Teste Enviado!",
+        description: "Verifique o console ou o WhatsApp para ver os resultados.",
+      });
+    } catch (error: any) {
+      console.error("Error testing WhatsApp notification:", error);
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao testar notificação WhatsApp",
+        variant: "destructive",
+      });
+    } finally {
+      setTestingWhatsapp(false);
     }
   };
 
@@ -750,6 +831,178 @@ export default function SystemSettings() {
                     </div>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* WhatsApp Daily Notifications */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <MessageSquare className="h-5 w-5" />
+                  Notificações WhatsApp Diárias
+                </CardTitle>
+                <CardDescription>
+                  Configure o envio automático de tarefas diárias via WhatsApp
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label>Ativar Notificações Automáticas</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Enviar lista de tarefas diárias via WhatsApp
+                    </p>
+                  </div>
+                  <Switch
+                    checked={whatsappEnabled}
+                    onCheckedChange={setWhatsappEnabled}
+                  />
+                </div>
+
+                {whatsappEnabled && (
+                  <>
+                    <Separator />
+
+                    <div className="space-y-4">
+                      <div>
+                        <Label htmlFor="whatsapp-phone-id" className="text-base font-semibold">
+                          Phone Number ID *
+                        </Label>
+                        <p className="text-sm text-slate-500 mb-2">
+                          ID do número de telefone do WhatsApp Business API
+                        </p>
+                        <Input
+                          id="whatsapp-phone-id"
+                          type="text"
+                          placeholder="123456789012345"
+                          value={whatsappPhoneNumberId}
+                          onChange={(e) => setWhatsappPhoneNumberId(e.target.value)}
+                          className="font-mono text-sm"
+                        />
+                      </div>
+
+                      <Separator />
+
+                      <div>
+                        <Label htmlFor="whatsapp-token" className="text-base font-semibold">
+                          Access Token *
+                        </Label>
+                        <p className="text-sm text-slate-500 mb-2">
+                          Token de acesso permanente do WhatsApp Business API
+                        </p>
+                        <Input
+                          id="whatsapp-token"
+                          type="password"
+                          placeholder="EAAxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                          value={whatsappAccessToken}
+                          onChange={(e) => setWhatsappAccessToken(e.target.value)}
+                          className="font-mono text-sm"
+                        />
+                      </div>
+
+                      <Separator />
+
+                      <div className="space-y-2">
+                        <Label htmlFor="whatsapp-time">Horário de Envio</Label>
+                        <Input
+                          id="whatsapp-time"
+                          type="time"
+                          value={whatsappTime}
+                          onChange={(e) => setWhatsappTime(e.target.value)}
+                        />
+                        <p className="text-sm text-muted-foreground">
+                          Horário em que as notificações serão enviadas (horário de Lisboa)
+                        </p>
+                      </div>
+
+                      <Separator />
+
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <p className="text-sm text-blue-900">
+                          <strong>📚 Como obter as credenciais:</strong>
+                        </p>
+                        <ol className="text-sm text-blue-900 mt-2 space-y-1 ml-4 list-decimal">
+                          <li>Aceda a <a href="https://business.facebook.com/settings/whatsapp-business-accounts" target="_blank" rel="noopener noreferrer" className="underline font-semibold">WhatsApp Business</a></li>
+                          <li>Configure uma conta WhatsApp Business API</li>
+                          <li>Copie o <strong>Phone Number ID</strong></li>
+                          <li>Gere um <strong>Access Token</strong> permanente</li>
+                          <li>Configure os números de telefone dos utilizadores nos perfis</li>
+                        </ol>
+                      </div>
+
+                      <div className="bg-muted p-4 rounded-lg space-y-2">
+                        <h4 className="font-semibold text-sm">Como Funciona:</h4>
+                        <ul className="text-sm space-y-1 text-muted-foreground">
+                          <li>• Todos os agentes, team leads e admins recebem a lista</li>
+                          <li>• Apenas utilizadores com número de telefone configurado</li>
+                          <li>• Tarefas agrupadas por prioridade (Alta, Média, Baixa)</li>
+                          <li>• Inclui horário e cliente/lead associado</li>
+                          <li>• Apenas tarefas pendentes do dia</li>
+                        </ul>
+                      </div>
+
+                      <div className="flex gap-2 pt-4">
+                        <Button
+                          onClick={handleSaveWhatsApp}
+                          disabled={savingWhatsapp}
+                          className="flex-1"
+                        >
+                          {savingWhatsapp ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              A guardar...
+                            </>
+                          ) : (
+                            <>
+                              <Save className="mr-2 h-4 w-4" />
+                              Guardar Configurações
+                            </>
+                          )}
+                        </Button>
+
+                        <Button
+                          onClick={handleTestWhatsAppNotification}
+                          disabled={testingWhatsapp || !whatsappPhoneNumberId || !whatsappAccessToken}
+                          variant="outline"
+                          className="flex-1"
+                        >
+                          {testingWhatsapp ? (
+                            <>
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              Enviando Teste...
+                            </>
+                          ) : (
+                            <>
+                              <Send className="mr-2 h-4 w-4" />
+                              Testar Notificação Agora
+                            </>
+                          )}
+                        </Button>
+                      </div>
+
+                      {whatsappPhoneNumberId && whatsappAccessToken ? (
+                        <Badge className="bg-green-100 text-green-800 w-full justify-center">
+                          ✅ Credenciais Configuradas
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-slate-600 w-full justify-center">
+                          ⚠️ Preencha as credenciais acima
+                        </Badge>
+                      )}
+                    </div>
+
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertTitle>Configuração Necessária</AlertTitle>
+                      <AlertDescription>
+                        Para ativar o envio automático via WhatsApp Business API:
+                        <br />• Configure Phone Number ID e Access Token acima
+                        <br />• Adicione número de telefone no perfil de cada utilizador (formato: +351912345678)
+                        <br />• As credenciais são sincronizadas automaticamente com o Supabase Edge Functions
+                      </AlertDescription>
+                    </Alert>
+                  </>
+                )}
               </CardContent>
             </Card>
           </div>

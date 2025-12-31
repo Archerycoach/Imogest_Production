@@ -141,6 +141,7 @@ export interface CalendarEvent {
   attendees: string[];
   leadId?: string;
   propertyId?: string;
+  contactId?: string; // Add contactId
   googleEventId?: string;
   googleSynced?: boolean;
   eventType?: string;

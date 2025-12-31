@@ -434,28 +434,45 @@ export const updatePaymentSettings = async (key: string, value: any) => {
  */
 export const createUser = async (userData: CreateUserData) => {
   try {
-    const { data: { session } } = await supabase.auth.getSession();
+    console.log("[AdminService] Starting createUser process...");
     
-    if (!session?.access_token) {
-      console.error("[AdminService] No active session found");
-      throw new Error("Sessão expirada. Por favor, faça login novamente.");
+    // Get current authenticated user
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    
+    if (userError || !user) {
+      console.error("[AdminService] Failed to get authenticated user:", userError);
+      throw new Error("Não autorizado. Por favor, faça login novamente.");
     }
+    
+    console.log("[AdminService] Authenticated user:", user.id);
 
-    console.log("[AdminService] Sending create user request...");
-
+    // Make API request with userId in body
     const response = await fetch("/api/admin/create-user", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify(userData),
+      body: JSON.stringify({
+        userId: user.id, // Send userId instead of token
+        ...userData
+      }),
     });
 
     const result = await response.json();
-    console.log("[AdminService] API response:", result);
+    console.log("[AdminService] API response status:", response.status);
+    console.log("[AdminService] API response body:", result);
 
     if (!response.ok) {
+      // Handle specific error codes
+      if (result.code === "INSUFFICIENT_PERMISSIONS") {
+        throw new Error("Não tem permissões suficientes para criar utilizadores.");
+      } else if (result.code === "USER_NOT_FOUND") {
+        throw new Error("Utilizador não encontrado. Por favor, faça login novamente.");
+      } else if (result.code === "MISSING_ENV") {
+        throw new Error("Erro de configuração do servidor. Contacte o suporte.");
+      } else if (result.code === "EMAIL_EXISTS") {
+        throw new Error("Este email já está registado no sistema.");
+      }
       throw new Error(result.error || "Erro ao criar utilizador");
     }
 
@@ -463,6 +480,7 @@ export const createUser = async (userData: CreateUserData) => {
       throw new Error(result.error || "Falha ao criar utilizador");
     }
 
+    console.log("[AdminService] User created successfully");
     return result;
   } catch (error: any) {
     console.error("[AdminService] Error in createUser:", error);
@@ -514,7 +532,7 @@ export const getAppBranding = async (): Promise<AppBranding> => {
     .from("system_settings")
     .select("value")
     .eq("key", "app_branding")
-    .single();
+    .maybeSingle();
 
   if (error) throw error;
   

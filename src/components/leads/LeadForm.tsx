@@ -39,7 +39,16 @@ export function LeadForm({ initialData, onSuccess, onCancel }: LeadFormProps) {
     notes: "",
     budget: "",
     location_preference: "",
-    source: "website"
+    source: "website",
+    // Buyer specific fields
+    property_type: "",
+    bedrooms: "",
+    min_area: "",
+    needs_financing: false,
+    // Seller specific fields
+    bathrooms: "",
+    property_area: "",
+    desired_price: "",
   });
 
   useEffect(() => {
@@ -53,7 +62,14 @@ export function LeadForm({ initialData, onSuccess, onCancel }: LeadFormProps) {
         notes: initialData.notes || "",
         budget: initialData.budget ? initialData.budget.toString() : "",
         location_preference: initialData.location_preference || "",
-        source: initialData.source || "website"
+        source: initialData.source || "website",
+        property_type: initialData.property_type || "",
+        bedrooms: initialData.bedrooms ? initialData.bedrooms.toString() : "",
+        min_area: initialData.min_area ? initialData.min_area.toString() : "",
+        needs_financing: initialData.needs_financing || false,
+        bathrooms: initialData.bathrooms ? initialData.bathrooms.toString() : "",
+        property_area: initialData.property_area ? initialData.property_area.toString() : "",
+        desired_price: initialData.desired_price ? initialData.desired_price.toString() : "",
       });
     }
   }, [initialData]);
@@ -83,6 +99,13 @@ export function LeadForm({ initialData, onSuccess, onCancel }: LeadFormProps) {
         budget: formData.budget ? Number(formData.budget) : null,
         location_preference: formData.location_preference,
         source: formData.source as any,
+        property_type: formData.property_type || null,
+        bedrooms: formData.bedrooms ? Number(formData.bedrooms) : null,
+        min_area: formData.min_area ? Number(formData.min_area) : null,
+        needs_financing: formData.needs_financing,
+        bathrooms: formData.bathrooms ? Number(formData.bathrooms) : null,
+        property_area: formData.property_area ? Number(formData.property_area) : null,
+        desired_price: formData.desired_price ? Number(formData.desired_price) : null,
         user_id: user.id
       };
 
@@ -113,141 +136,293 @@ export function LeadForm({ initialData, onSuccess, onCancel }: LeadFormProps) {
     }
   };
 
+  const isBuyer = formData.lead_type === "buyer" || formData.lead_type === "both";
+  const isSeller = formData.lead_type === "seller" || formData.lead_type === "both";
+
   return (
     <Dialog open={true} onOpenChange={(open) => !open && onCancel()}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{initialData ? "Editar Lead" : "Novo Lead"}</DialogTitle>
+          <DialogTitle className="text-2xl">{initialData ? "Editar Lead" : "Nova Lead"}</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Basic Information */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-gray-900 border-b pb-2">Informação Básica</h3>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Nome *</Label>
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  placeholder="Nome completo"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="phone">Telefone</Label>
+                <Input
+                  id="phone"
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  placeholder="+351..."
+                />
+              </div>
+            </div>
+
             <div className="space-y-2">
-              <Label htmlFor="name">Nome *</Label>
+              <Label htmlFor="email">Email</Label>
               <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Nome completo"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="phone">Telefone</Label>
-              <Input
-                id="phone"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                placeholder="+351..."
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              placeholder="email@exemplo.com"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="lead_type">Tipo</Label>
-              <Select
-                value={formData.lead_type}
-                onValueChange={(value) => setFormData({ ...formData, lead_type: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="buyer">Comprador</SelectItem>
-                  <SelectItem value="seller">Vendedor</SelectItem>
-                  <SelectItem value="both">Ambos</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="status">Estado</Label>
-              <Select
-                value={formData.status}
-                onValueChange={(value) => setFormData({ ...formData, status: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione estado" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="new">Novo</SelectItem>
-                  <SelectItem value="contacted">Contactado</SelectItem>
-                  <SelectItem value="qualified">Qualificado</SelectItem>
-                  <SelectItem value="proposal">Proposta</SelectItem>
-                  <SelectItem value="negotiation">Negociação</SelectItem>
-                  <SelectItem value="won">Ganho</SelectItem>
-                  <SelectItem value="lost">Perdido</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="budget">Orçamento (€)</Label>
-              <Input
-                id="budget"
-                type="number"
-                value={formData.budget}
-                onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
-                placeholder="0.00"
+                id="email"
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                placeholder="email@exemplo.com"
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="source">Origem</Label>
-              <Select
-                value={formData.source}
-                onValueChange={(value) => setFormData({ ...formData, source: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione origem" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="website">Website</SelectItem>
-                  <SelectItem value="referral">Referência</SelectItem>
-                  <SelectItem value="social_media">Redes Sociais</SelectItem>
-                  <SelectItem value="cold_call">Prospeção</SelectItem>
-                  <SelectItem value="event">Evento</SelectItem>
-                  <SelectItem value="other">Outro</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="lead_type">Tipo *</Label>
+                <Select
+                  value={formData.lead_type}
+                  onValueChange={(value) => setFormData({ ...formData, lead_type: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="buyer">Comprador</SelectItem>
+                    <SelectItem value="seller">Vendedor</SelectItem>
+                    <SelectItem value="both">Ambos</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="status">Estado</Label>
+                <Select
+                  value={formData.status}
+                  onValueChange={(value) => setFormData({ ...formData, status: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione estado" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="new">Novo</SelectItem>
+                    <SelectItem value="contacted">Contactado</SelectItem>
+                    <SelectItem value="qualified">Qualificado</SelectItem>
+                    <SelectItem value="proposal">Proposta</SelectItem>
+                    <SelectItem value="negotiation">Negociação</SelectItem>
+                    <SelectItem value="won">Ganho</SelectItem>
+                    <SelectItem value="lost">Perdido</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="source">Origem</Label>
+                <Select
+                  value={formData.source}
+                  onValueChange={(value) => setFormData({ ...formData, source: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione origem" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="website">Website</SelectItem>
+                    <SelectItem value="referral">Referência</SelectItem>
+                    <SelectItem value="social_media">Redes Sociais</SelectItem>
+                    <SelectItem value="cold_call">Prospeção</SelectItem>
+                    <SelectItem value="event">Evento</SelectItem>
+                    <SelectItem value="other">Outro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="location">Preferência de Localização</Label>
-            <Input
-              id="location"
-              value={formData.location_preference}
-              onChange={(e) => setFormData({ ...formData, location_preference: e.target.value })}
-              placeholder="Ex: Lisboa, Centro"
-            />
-          </div>
+          {/* Buyer Specific Fields */}
+          {isBuyer && (
+            <div className="space-y-4 bg-blue-50 p-4 rounded-lg">
+              <h3 className="text-lg font-semibold text-blue-900 border-b border-blue-200 pb-2">
+                Informação do Comprador
+              </h3>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="property_type">Tipo de Imóvel</Label>
+                  <Select
+                    value={formData.property_type}
+                    onValueChange={(value) => setFormData({ ...formData, property_type: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione tipo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="apartment">Apartamento</SelectItem>
+                      <SelectItem value="house">Moradia</SelectItem>
+                      <SelectItem value="land">Terreno</SelectItem>
+                      <SelectItem value="commercial">Comercial</SelectItem>
+                      <SelectItem value="office">Escritório</SelectItem>
+                      <SelectItem value="warehouse">Armazém</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
+                <div className="space-y-2">
+                  <Label htmlFor="num_bedrooms">Número de Quartos</Label>
+                  <Input
+                    id="num_bedrooms"
+                    type="number"
+                    min="0"
+                    value={formData.bedrooms}
+                    onChange={(e) => setFormData({ ...formData, bedrooms: e.target.value })}
+                    placeholder="Ex: 2"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="min_area">Área Mínima (m²)</Label>
+                  <Input
+                    id="min_area"
+                    type="number"
+                    min="0"
+                    value={formData.min_area}
+                    onChange={(e) => setFormData({ ...formData, min_area: e.target.value })}
+                    placeholder="Ex: 80"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="budget">Orçamento Máximo (€)</Label>
+                  <Input
+                    id="budget"
+                    type="number"
+                    min="0"
+                    value={formData.budget}
+                    onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
+                    placeholder="Ex: 250000"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="location_preference">Localização Preferida</Label>
+                  <Input
+                    id="location_preference"
+                    value={formData.location_preference}
+                    onChange={(e) => setFormData({ ...formData, location_preference: e.target.value })}
+                    placeholder="Ex: Lisboa, Cascais, Oeiras"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="needs_financing" className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="needs_financing"
+                      checked={formData.needs_financing}
+                      onChange={(e) => setFormData({ ...formData, needs_financing: e.target.checked })}
+                      className="w-4 h-4 rounded border-gray-300"
+                    />
+                    Vai recorrer a crédito?
+                  </Label>
+                  <p className="text-xs text-gray-500">Marque se o comprador precisa de financiamento</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Seller Specific Fields */}
+          {isSeller && (
+            <div className="space-y-4 bg-green-50 p-4 rounded-lg">
+              <h3 className="text-lg font-semibold text-green-900 border-b border-green-200 pb-2">
+                Informação do Vendedor
+              </h3>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="seller_location">Localização do Imóvel</Label>
+                  <Input
+                    id="seller_location"
+                    value={formData.location_preference}
+                    onChange={(e) => setFormData({ ...formData, location_preference: e.target.value })}
+                    placeholder="Ex: Rua X, Lisboa"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="seller_bedrooms">Número de Quartos</Label>
+                  <Input
+                    id="seller_bedrooms"
+                    type="number"
+                    min="0"
+                    value={formData.bedrooms}
+                    onChange={(e) => setFormData({ ...formData, bedrooms: e.target.value })}
+                    placeholder="Ex: 3"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="num_bathrooms">Número de Casas de Banho</Label>
+                  <Input
+                    id="num_bathrooms"
+                    type="number"
+                    min="0"
+                    value={formData.bathrooms}
+                    onChange={(e) => setFormData({ ...formData, bathrooms: e.target.value })}
+                    placeholder="Ex: 2"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="property_area">Área do Imóvel (m²)</Label>
+                  <Input
+                    id="property_area"
+                    type="number"
+                    min="0"
+                    value={formData.property_area}
+                    onChange={(e) => setFormData({ ...formData, property_area: e.target.value })}
+                    placeholder="Ex: 120"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="desired_price">Preço Pretendido (€)</Label>
+                <Input
+                  id="desired_price"
+                  type="number"
+                  min="0"
+                  value={formData.desired_price}
+                  onChange={(e) => setFormData({ ...formData, desired_price: e.target.value })}
+                  placeholder="Ex: 350000"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Notes */}
           <div className="space-y-2">
             <Label htmlFor="notes">Notas</Label>
             <Textarea
               id="notes"
               value={formData.notes}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              placeholder="Observações importantes..."
+              placeholder="Observações importantes, preferências específicas, etc..."
               rows={3}
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-4">
+          <div className="flex justify-end gap-2 pt-4 border-t">
             <Button
               type="button"
               variant="outline"
@@ -256,8 +431,8 @@ export function LeadForm({ initialData, onSuccess, onCancel }: LeadFormProps) {
             >
               Cancelar
             </Button>
-            <Button type="submit" disabled={loading}>
-              {loading ? "A guardar..." : initialData ? "Atualizar" : "Criar Lead"}
+            <Button type="submit" disabled={loading} className="bg-blue-600 hover:bg-blue-700">
+              {loading ? "A guardar..." : initialData ? "Atualizar Lead" : "Criar Lead"}
             </Button>
           </div>
         </form>

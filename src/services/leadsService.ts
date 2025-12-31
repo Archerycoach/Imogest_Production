@@ -248,13 +248,12 @@ export const getLeadStats = async () => {
 // Assign lead to user
 export const assignLead = async (leadId: string, userId: string): Promise<void> => {
   try {
-    // assigned_to column removed in V2, logic needs to change or be removed
-    // For now, logging warning as functionality is deprecated
-    console.warn("Assigning leads is deprecated in V2 schema");
-    
-    /* 
-    await updateLead(leadId, { assigned_to: userId }); 
-    */
+    const { error } = await supabase
+      .from("leads")
+      .update({ assigned_to: userId } as any)
+      .eq("id", leadId);
+
+    if (error) throw error;
   } catch (error: any) {
     console.error("[LeadsService] Error in assignLead:", error);
     throw error;

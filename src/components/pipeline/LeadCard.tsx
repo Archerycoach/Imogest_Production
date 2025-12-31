@@ -3,6 +3,16 @@ import { useDraggable } from "@dnd-kit/core";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,10 +23,20 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Mail, Phone, Euro, Calendar, MessageCircle, UserCheck, Edit, Trash2 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Mail, Phone, Euro, Calendar, MessageCircle, UserCheck, Edit, Trash2, FileText, CalendarDays } from "lucide-react";
 import type { LeadWithContacts } from "@/services/leadsService";
 import { convertLeadToContact } from "@/services/contactsService";
+import { createInteraction } from "@/services/interactionsService";
 import { useToast } from "@/hooks/use-toast";
+import { QuickTaskDialog } from "@/components/QuickTaskDialog";
+import { QuickEventDialog } from "@/components/QuickEventDialog";
 
 interface LeadCardProps {
   lead: LeadWithContacts;
@@ -28,7 +48,17 @@ interface LeadCardProps {
 export function LeadCard({ lead, onClick, onDelete, onConvertSuccess }: LeadCardProps) {
   const [convertDialogOpen, setConvertDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [interactionDialogOpen, setInteractionDialogOpen] = useState(false);
   const [converting, setConverting] = useState(false);
+  const [creatingInteraction, setCreatingInteraction] = useState(false);
+  const [interactionForm, setInteractionForm] = useState({
+    type: "call" as "call" | "email" | "whatsapp" | "meeting" | "note" | "sms" | "video_call",
+    subject: "",
+    content: "",
+    outcome: "",
+  });
+  const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [eventDialogOpen, setEventDialogOpen] = useState(false);
   const { toast } = useToast();
 
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -188,6 +218,48 @@ export function LeadCard({ lead, onClick, onDelete, onConvertSuccess }: LeadCard
     }
   };
 
+  const handleInteractionClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setInteractionForm({
+      type: "call",
+      subject: "",
+      content: "",
+      outcome: "",
+    });
+    setInteractionDialogOpen(true);
+  };
+
+  const handleCreateInteraction = async () => {
+    try {
+      setCreatingInteraction(true);
+      await createInteraction({
+        interaction_type: interactionForm.type,
+        subject: interactionForm.subject || null,
+        content: interactionForm.content || null,
+        outcome: interactionForm.outcome || null,
+        lead_id: lead.id,
+        contact_id: null,
+        property_id: null,
+      });
+
+      toast({
+        title: "Interação criada!",
+        description: "A interação foi registrada com sucesso.",
+      });
+
+      setInteractionDialogOpen(false);
+    } catch (error: any) {
+      console.error("Error creating interaction:", error);
+      toast({
+        title: "Erro ao criar interação",
+        description: error.message || "Ocorreu um erro ao criar a interação.",
+        variant: "destructive",
+      });
+    } finally {
+      setCreatingInteraction(false);
+    }
+  };
+
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
     setDeleteDialogOpen(true);
@@ -211,6 +283,16 @@ export function LeadCard({ lead, onClick, onDelete, onConvertSuccess }: LeadCard
         });
       }
     }
+  };
+
+  const handleTaskClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setTaskDialogOpen(true);
+  };
+
+  const handleEventClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEventDialogOpen(true);
   };
 
   const formatDate = (dateString: string) => {
@@ -320,6 +402,36 @@ export function LeadCard({ lead, onClick, onDelete, onConvertSuccess }: LeadCard
             </Button>
           </div>
 
+          {/* Interaction, Convert and Edit Buttons */}
+          <div className="grid grid-cols-3 gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleTaskClick}
+              className="text-blue-600 border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+              title="Nova Tarefa"
+            >
+              <CalendarDays className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleEventClick}
+              className="text-purple-600 border-purple-200 hover:bg-purple-50 hover:text-purple-700"
+              title="Novo Evento"
+            >
+              <Calendar className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleInteractionClick}
+              className="text-indigo-600 border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
+            >
+              <FileText className="h-4 w-4" />
+            </Button>
+          </div>
+
           {/* Convert and Edit Buttons */}
           <div className="grid grid-cols-2 gap-2">
             <Button
@@ -328,16 +440,14 @@ export function LeadCard({ lead, onClick, onDelete, onConvertSuccess }: LeadCard
               onClick={handleConvertClick}
               className="text-blue-600 border-blue-200 hover:bg-blue-50 hover:text-blue-700"
             >
-              <UserCheck className="h-4 w-4 mr-1" />
-              Converter
+              <UserCheck className="h-4 w-4" />
             </Button>
             <Button
               variant="outline"
               size="sm"
               onClick={onClick}
             >
-              <Edit className="h-4 w-4 mr-1" />
-              Editar
+              <Edit className="h-4 w-4" />
             </Button>
           </div>
         </div>
@@ -398,6 +508,110 @@ export function LeadCard({ lead, onClick, onDelete, onConvertSuccess }: LeadCard
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Interaction Dialog */}
+      <Dialog open={interactionDialogOpen} onOpenChange={setInteractionDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Nova Interação com {lead.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="type">Tipo de Interação *</Label>
+              <Select
+                value={interactionForm.type}
+                onValueChange={(value: any) =>
+                  setInteractionForm({ ...interactionForm, type: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="call">Ligação</SelectItem>
+                  <SelectItem value="email">Email</SelectItem>
+                  <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                  <SelectItem value="sms">SMS</SelectItem>
+                  <SelectItem value="meeting">Reunião</SelectItem>
+                  <SelectItem value="video_call">Videochamada</SelectItem>
+                  <SelectItem value="note">Nota</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="subject">Assunto</Label>
+              <Input
+                id="subject"
+                value={interactionForm.subject}
+                onChange={(e) =>
+                  setInteractionForm({ ...interactionForm, subject: e.target.value })
+                }
+                placeholder="Ex: Apresentação de imóvel"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="content">Notas da Interação</Label>
+              <Textarea
+                id="content"
+                value={interactionForm.content}
+                onChange={(e) =>
+                  setInteractionForm({ ...interactionForm, content: e.target.value })
+                }
+                placeholder="Descreva o que foi discutido..."
+                rows={4}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="outcome">Resultado</Label>
+              <Input
+                id="outcome"
+                value={interactionForm.outcome}
+                onChange={(e) =>
+                  setInteractionForm({ ...interactionForm, outcome: e.target.value })
+                }
+                placeholder="Ex: Interessado, Não atende, Agendou visita, etc."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setInteractionDialogOpen(false)}
+              disabled={creatingInteraction}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleCreateInteraction}
+              disabled={creatingInteraction}
+              className="bg-gradient-to-r from-blue-600 to-purple-600"
+            >
+              {creatingInteraction ? "Criando..." : "Criar Interação"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Quick Task Dialog */}
+      <QuickTaskDialog
+        open={taskDialogOpen}
+        onOpenChange={setTaskDialogOpen}
+        leadId={lead.id}
+        contactId={null}
+        entityName={lead.name}
+      />
+
+      {/* Quick Event Dialog */}
+      <QuickEventDialog
+        open={eventDialogOpen}
+        onOpenChange={setEventDialogOpen}
+        leadId={lead.id}
+        contactId={null}
+        entityName={lead.name}
+      />
     </>
   );
 }

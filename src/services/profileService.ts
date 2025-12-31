@@ -77,3 +77,45 @@ export const deleteAvatar = async (avatarUrl: string) => {
 
   if (error) throw error;
 };
+
+// Get all users for assignment (team leads see their team, admins see everyone)
+export const getUsersForAssignment = async () => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  // Get current user's profile to check role
+  const { data: currentProfile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  if (!currentProfile) throw new Error("Profile not found");
+
+  const isAdmin = currentProfile.role === "admin";
+  const isTeamLead = currentProfile.role === "team_lead";
+
+  if (!isAdmin && !isTeamLead) {
+    throw new Error("Permission denied: Only team leads and admins can assign leads");
+  }
+
+  let query = supabase
+    .from("profiles")
+    .select("id, full_name, email, role")
+    .order("full_name");
+
+  // If team lead, only show their team members
+  if (isTeamLead && !isAdmin) {
+    // Team leads can only see agents (not other team leads or admins)
+    query = query.eq("role", "agent");
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error("Error fetching users for assignment:", error);
+    throw error;
+  }
+
+  return data || [];
+};

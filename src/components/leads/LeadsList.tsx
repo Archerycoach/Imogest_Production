@@ -13,10 +13,40 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Search, Edit, Trash2, Phone, Mail, Euro, Calendar, MessageCircle, UserCheck } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Search, Edit, Trash2, Phone, Mail, Euro, Calendar, MessageCircle, UserCheck, FileText, Eye, Clock, Plus, MessageSquare, CheckCircle, Users, User, CalendarDays, DollarSign, MapPin, Home, BedDouble, Bath, Ruler, Banknote } from "lucide-react";
 import type { LeadWithContacts } from "@/services/leadsService";
+import { assignLead } from "@/services/leadsService";
 import { convertLeadToContact } from "@/services/contactsService";
+import { createInteraction, getInteractionsByLead } from "@/services/interactionsService";
+import type { InteractionWithDetails } from "@/services/interactionsService";
 import { useToast } from "@/hooks/use-toast";
+import { useEffect } from "react";
+import { getUserProfile, getUsersForAssignment } from "@/services/profileService";
+import { QuickTaskDialog } from "@/components/QuickTaskDialog";
+import { QuickEventDialog } from "@/components/QuickEventDialog";
+import { 
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger 
+} from "@/components/ui/dropdown-menu";
 
 interface LeadsListProps {
   leads: LeadWithContacts[];
@@ -24,15 +54,50 @@ interface LeadsListProps {
   onDelete: (id: string) => void;
   isLoading?: boolean;
   onConvertSuccess?: () => void;
+  onRefresh?: () => void;
 }
 
-export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess }: LeadsListProps) {
+export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess, onRefresh }: LeadsListProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<string>("all");
-  const [convertDialogOpen, setConvertDialogOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<LeadWithContacts | null>(null);
+  const [convertDialogOpen, setConvertDialogOpen] = useState(false);
+  const [interactionDialogOpen, setInteractionDialogOpen] = useState(false);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const [leadInteractions, setLeadInteractions] = useState<any[]>([]);
+  const [loadingInteractions, setLoadingInteractions] = useState(false);
   const [converting, setConverting] = useState(false);
+  const [creatingInteraction, setCreatingInteraction] = useState(false);
+  const [interactionForm, setInteractionForm] = useState({
+    type: "phone_call",
+    subject: "",
+    content: "",
+    outcome: "",
+  });
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [availableAgents, setAvailableAgents] = useState<any[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState("");
+  const [assigning, setAssigning] = useState(false);
+  const [currentUserRole, setCurrentUserRole] = useState<string>("");
   const { toast } = useToast();
+  const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [eventDialogOpen, setEventDialogOpen] = useState(false);
+  const [selectedLeadForTask, setSelectedLeadForTask] = useState<LeadWithContacts | null>(null);
+
+  useEffect(() => {
+    loadCurrentUserRole();
+  }, []);
+
+  const loadCurrentUserRole = async () => {
+    try {
+      const profile = await getUserProfile();
+      if (profile) {
+        setCurrentUserRole(profile.role);
+      }
+    } catch (error) {
+      console.error("Error loading user role:", error);
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -112,13 +177,8 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
       return;
     }
 
-    // Remove all non-numeric characters
     const cleanPhone = lead.phone.replace(/\D/g, "");
-    
-    // If doesn't start with country code, add Portugal's +351
     const phoneWithCountry = cleanPhone.startsWith("351") ? cleanPhone : `351${cleanPhone}`;
-    
-    // Open WhatsApp with the phone number
     const whatsappUrl = `https://wa.me/${phoneWithCountry}`;
     window.open(whatsappUrl, "_blank");
   };
@@ -133,7 +193,6 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
       return;
     }
 
-    // Open default email client
     window.location.href = `mailto:${lead.email}`;
   };
 
@@ -147,13 +206,8 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
       return;
     }
 
-    // Remove all non-numeric characters
     const cleanPhone = lead.phone.replace(/\D/g, "");
-    
-    // If doesn't start with country code, add Portugal's +351
     const phoneWithCountry = cleanPhone.startsWith("351") ? cleanPhone : `351${cleanPhone}`;
-    
-    // Open SMS app
     window.location.href = `sms:+${phoneWithCountry}`;
   };
 
@@ -192,6 +246,187 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
     }
   };
 
+  const handleInteractionClick = (lead: LeadWithContacts) => {
+    setSelectedLead(lead);
+    setInteractionForm({
+      type: "call",
+      subject: "",
+      content: "",
+      outcome: "",
+    });
+    setInteractionDialogOpen(true);
+  };
+
+  const handleCreateInteraction = async () => {
+    if (!selectedLead) return;
+
+    try {
+      setCreatingInteraction(true);
+      await createInteraction({
+        interaction_type: interactionForm.type,
+        subject: interactionForm.subject || null,
+        content: interactionForm.content || null,
+        outcome: interactionForm.outcome || null,
+        lead_id: selectedLead.id,
+        contact_id: null,
+        property_id: null,
+      });
+
+      toast({
+        title: "Interação criada!",
+        description: "A interação foi registrada com sucesso.",
+      });
+
+      setInteractionDialogOpen(false);
+      setSelectedLead(null);
+    } catch (error: any) {
+      console.error("Error creating interaction:", error);
+      toast({
+        title: "Erro ao criar interação",
+        description: error.message || "Ocorreu um erro ao criar a interação.",
+        variant: "destructive",
+      });
+    } finally {
+      setCreatingInteraction(false);
+    }
+  };
+
+  const handleAssignClick = async (lead: any) => {
+    try {
+      setSelectedLead(lead);
+      setSelectedAgentId(lead.assigned_to || "");
+      
+      const agents = await getUsersForAssignment();
+      setAvailableAgents(agents);
+      setAssignDialogOpen(true);
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao carregar agentes disponíveis",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleAssignLead = async () => {
+    if (!selectedLead || !selectedAgentId) return;
+
+    try {
+      setAssigning(true);
+      
+      await assignLead(selectedLead.id, selectedAgentId);
+      
+      toast({
+        title: "Sucesso",
+        description: "Lead atribuída com sucesso!",
+      });
+      
+      setAssignDialogOpen(false);
+      onRefresh?.();
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao atribuir lead",
+        variant: "destructive",
+      });
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  const canAssignLeads = currentUserRole === "admin" || currentUserRole === "team_lead";
+
+  const handleViewDetails = async (lead: LeadWithContacts) => {
+    setSelectedLead(lead);
+    setDetailsDialogOpen(true);
+    setLoadingInteractions(true);
+    
+    try {
+      const interactions = await getInteractionsByLead(lead.id);
+      setLeadInteractions(interactions);
+    } catch (error) {
+      console.error("Error loading interactions:", error);
+      toast({
+        title: "Erro ao carregar interações",
+        description: "Não foi possível carregar o histórico de interações.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingInteractions(false);
+    }
+  };
+
+  const handleTaskClick = (lead: LeadWithContacts) => {
+    setSelectedLeadForTask(lead);
+    setTaskDialogOpen(true);
+  };
+
+  const handleEventClick = (lead: LeadWithContacts) => {
+    setSelectedLeadForTask(lead);
+    setEventDialogOpen(true);
+  };
+
+  const getInteractionIcon = (type: string) => {
+    switch (type) {
+      case "call":
+        return <Phone className="h-4 w-4" />;
+      case "email":
+        return <Mail className="h-4 w-4" />;
+      case "whatsapp":
+      case "sms":
+        return <MessageCircle className="h-4 w-4" />;
+      case "meeting":
+      case "video_call":
+        return <Calendar className="h-4 w-4" />;
+      case "note":
+        return <FileText className="h-4 w-4" />;
+      default:
+        return <MessageCircle className="h-4 w-4" />;
+    }
+  };
+
+  const getInteractionTypeLabel = (type: string) => {
+    switch (type) {
+      case "call":
+        return "Ligação";
+      case "email":
+        return "Email";
+      case "whatsapp":
+        return "WhatsApp";
+      case "sms":
+        return "SMS";
+      case "meeting":
+        return "Reunião";
+      case "video_call":
+        return "Videochamada";
+      case "note":
+        return "Nota";
+      default:
+        return type;
+    }
+  };
+
+  const getInteractionTypeColor = (type: string) => {
+    switch (type) {
+      case "phone_call":
+        return "text-blue-600 bg-blue-50";
+      case "email":
+        return "text-purple-600 bg-purple-50";
+      case "whatsapp":
+        return "text-green-600 bg-green-50";
+      case "sms":
+        return "text-orange-600 bg-orange-50";
+      case "meeting":
+        return "text-indigo-600 bg-indigo-50";
+      case "video_call":
+        return "text-pink-600 bg-pink-50";
+      case "note":
+        return "text-gray-600 bg-gray-50";
+      default:
+        return "text-gray-600 bg-gray-50";
+    }
+  };
+
   const formatDate = (dateString: string) => {
     if (!dateString) return "-";
     const date = new Date(dateString);
@@ -217,7 +452,11 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
       lead.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       lead.phone?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    const matchesType = filterType === "all" || lead.lead_type === filterType;
+    // Lead "both" appears in both "buyer" and "seller" filters
+    const matchesType = 
+      filterType === "all" || 
+      lead.lead_type === filterType ||
+      (lead.lead_type === "both" && (filterType === "buyer" || filterType === "seller"));
 
     return matchesSearch && matchesType;
   });
@@ -244,7 +483,7 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
           />
         </div>
 
-        {/* Filter Tabs */}
+        {/* Filter Tabs - WITHOUT "Ambos" button */}
         <div className="flex gap-2">
           <Button
             variant={filterType === "all" ? "default" : "outline"}
@@ -267,13 +506,6 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
           >
             Vendedores
           </Button>
-          <Button
-            variant={filterType === "both" ? "default" : "outline"}
-            onClick={() => setFilterType("both")}
-            className={filterType === "both" ? "bg-blue-600 hover:bg-blue-700" : ""}
-          >
-            Ambos
-          </Button>
         </div>
 
         {/* Leads Grid */}
@@ -285,16 +517,26 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredLeads.map((lead) => (
               <Card key={lead.id} className="relative p-6 hover:shadow-lg transition-shadow">
-                {/* Delete Button - Top Right */}
-                <button
-                  onClick={() => onDelete(lead.id)}
-                  className="absolute top-4 right-4 text-red-500 hover:text-red-700 transition-colors"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                {/* Edit and Delete Buttons - Top Right */}
+                <div className="absolute top-4 right-4 flex gap-2">
+                  <button
+                    onClick={() => onEdit(lead)}
+                    className="text-blue-500 hover:text-blue-700 transition-colors"
+                    title="Editar"
+                  >
+                    <Edit className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => onDelete(lead.id)}
+                    className="text-red-500 hover:text-red-700 transition-colors"
+                    title="Apagar"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
 
                 {/* Lead Name */}
-                <h3 className="text-lg font-semibold text-gray-900 mb-3 pr-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3 pr-16">
                   {lead.name}
                 </h3>
 
@@ -309,78 +551,210 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
                 </div>
 
                 {/* Contact Information */}
-                <div className="space-y-2 mb-4 text-sm text-gray-600">
-                  {lead.email && (
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-gray-400" />
-                      <span className="truncate">{lead.email}</span>
-                    </div>
-                  )}
-                  {lead.phone && (
-                    <div className="flex items-center gap-2">
-                      <Phone className="h-4 w-4 text-gray-400" />
-                      <span>{lead.phone}</span>
-                    </div>
-                  )}
+                <div className="space-y-3 mb-4 text-sm text-gray-600">
                   <div className="flex items-center gap-2">
-                    <Euro className="h-4 w-4 text-gray-400" />
-                    <span>Até {formatBudget(lead.budget)}</span>
+                    <Mail className="h-4 w-4 text-gray-400 shrink-0" />
+                    <span className="truncate">{lead.email || "Sem email"}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-gray-400" />
+                    <Phone className="h-4 w-4 text-gray-400 shrink-0" />
+                    <span>{lead.phone || "Sem telefone"}</span>
+                  </div>
+
+                  {/* Buyer Specific Fields */}
+                  {(lead.lead_type === 'buyer' || lead.lead_type === 'both') && (
+                    lead.property_type || lead.location_preference || lead.bedrooms || lead.min_area || lead.budget || lead.needs_financing
+                  ) && (
+                    <div className="mt-3 pt-3 border-t border-gray-100 bg-blue-50/50 p-3 rounded-md space-y-2">
+                      <p className="font-semibold text-blue-900 mb-2 text-sm">Preferências de Compra:</p>
+                      {lead.property_type && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Home className="h-4 w-4 text-blue-600" />
+                          <span className="capitalize">
+                            {lead.property_type === 'apartment' ? 'Apartamento' : 
+                             lead.property_type === 'house' ? 'Moradia' : 
+                             lead.property_type === 'land' ? 'Terreno' :
+                             lead.property_type === 'commercial' ? 'Comercial' :
+                             lead.property_type === 'office' ? 'Escritório' :
+                             lead.property_type === 'warehouse' ? 'Armazém' :
+                             lead.property_type}
+                          </span>
+                        </div>
+                      )}
+                      {lead.location_preference && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <MapPin className="h-4 w-4 text-blue-600" />
+                          <span>{lead.location_preference}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-4 flex-wrap">
+                        {lead.bedrooms && (
+                          <div className="flex items-center gap-1.5 text-sm">
+                            <BedDouble className="h-4 w-4 text-blue-600" />
+                            <span className="font-medium">T{lead.bedrooms}</span>
+                          </div>
+                        )}
+                        {lead.min_area && (
+                          <div className="flex items-center gap-1.5 text-sm">
+                            <Ruler className="h-4 w-4 text-blue-600" />
+                            <span>{lead.min_area}m² min</span>
+                          </div>
+                        )}
+                      </div>
+                      {lead.budget && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Euro className="h-4 w-4 text-blue-600" />
+                          <span className="font-medium">Até {formatBudget(lead.budget)}</span>
+                        </div>
+                      )}
+                      {lead.needs_financing && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Banknote className="h-4 w-4 text-blue-600" />
+                          <span className="text-blue-800 font-semibold bg-blue-100 px-2 py-0.5 rounded">
+                            Recorre a Crédito
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Seller Specific Fields */}
+                  {(lead.lead_type === 'seller' || lead.lead_type === 'both') && (
+                    lead.location_preference || lead.bedrooms || lead.bathrooms || lead.property_area || lead.desired_price
+                  ) && (
+                    <div className="mt-3 pt-3 border-t border-gray-100 bg-green-50/50 p-3 rounded-md space-y-2">
+                      <p className="font-semibold text-green-900 mb-2 text-sm">Imóvel para Venda:</p>
+                      {lead.location_preference && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <MapPin className="h-4 w-4 text-green-600" />
+                          <span>{lead.location_preference}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-4 flex-wrap">
+                        {lead.bedrooms && (
+                          <div className="flex items-center gap-1.5 text-sm">
+                            <BedDouble className="h-4 w-4 text-green-600" />
+                            <span className="font-medium">T{lead.bedrooms}</span>
+                          </div>
+                        )}
+                        {lead.bathrooms && (
+                          <div className="flex items-center gap-1.5 text-sm">
+                            <Bath className="h-4 w-4 text-green-600" />
+                            <span>{lead.bathrooms} WC</span>
+                          </div>
+                        )}
+                      </div>
+                      {lead.property_area && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Ruler className="h-4 w-4 text-green-600" />
+                          <span className="font-medium">{lead.property_area} m²</span>
+                        </div>
+                      )}
+                      {lead.desired_price && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Euro className="h-4 w-4 text-green-600" />
+                          <span className="font-semibold text-green-800">{formatBudget(lead.desired_price)}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  <div className="flex items-center gap-2 pt-2 text-xs text-gray-400">
+                    <Calendar className="h-3 w-3" />
                     <span>Criado a {formatDate(lead.created_at)}</span>
                   </div>
                 </div>
 
                 {/* Action Buttons */}
                 <div className="space-y-2">
-                  {/* Email, SMS and WhatsApp Buttons */}
-                  <div className="grid grid-cols-3 gap-2">
+                  {/* Quick Communication */}
+                  <div className="flex gap-2">
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleEmail(lead)}
-                      className="text-purple-600 border-purple-200 hover:bg-purple-50 hover:text-purple-700"
+                      onClick={() => window.open(`mailto:${lead.email}`)}
+                      className="flex-1"
                     >
-                      <Mail className="h-4 w-4" />
+                      <Mail className="h-4 w-4 mr-1" />
+                      <span className="text-xs">Email</span>
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleSMS(lead)}
-                      className="text-orange-600 border-orange-200 hover:bg-orange-50 hover:text-orange-700"
+                      onClick={() => window.open(`sms:${lead.phone}`)}
+                      className="flex-1"
                     >
-                      <MessageCircle className="h-4 w-4" />
+                      <MessageSquare className="h-4 w-4 mr-1" />
+                      <span className="text-xs">SMS</span>
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleWhatsApp(lead)}
-                      className="text-green-600 border-green-200 hover:bg-green-50 hover:text-green-700"
+                      onClick={() =>
+                        window.open(`https://wa.me/${lead.phone?.replace(/[^0-9]/g, "")}`)
+                      }
+                      className="flex-1"
                     >
-                      <MessageCircle className="h-4 w-4" />
+                      <MessageCircle className="h-4 w-4 mr-1" />
+                      <span className="text-xs">WhatsApp</span>
                     </Button>
                   </div>
 
-                  {/* Convert and Edit Buttons */}
-                  <div className="grid grid-cols-2 gap-2">
+                  {/* Management Actions */}
+                  <div className="flex gap-2">
+                    {/* Ver Detalhes */}
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleConvertClick(lead)}
-                      className="text-blue-600 border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                      onClick={() => handleViewDetails(lead)}
+                      className="flex-1"
+                      title="Ver Detalhes"
                     >
-                      <UserCheck className="h-4 w-4 mr-1" />
-                      Converter
+                      <Eye className="h-4 w-4 mr-1" />
+                      <span className="text-xs">Ver</span>
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => onEdit(lead)}
-                    >
-                      <Edit className="h-4 w-4 mr-1" />
-                      Editar
-                    </Button>
+
+                    {/* Actions Dropdown Menu */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm" className="flex-1">
+                          <Plus className="h-4 w-4 mr-1" />
+                          <span className="text-xs">Ações</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-56">
+                        <DropdownMenuItem onClick={() => handleTaskClick(lead)}>
+                          <CalendarDays className="h-4 w-4 mr-2 text-blue-600" />
+                          Nova Tarefa
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleEventClick(lead)}>
+                          <Calendar className="h-4 w-4 mr-2 text-purple-600" />
+                          Novo Evento
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleInteractionClick(lead)}>
+                          <FileText className="h-4 w-4 mr-2 text-orange-600" />
+                          Nova Interação
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleConvertClick(lead)}>
+                          <CheckCircle className="h-4 w-4 mr-2 text-green-600" />
+                          Converter em Contacto
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+
+                    {/* Atribuir Agente (só admin/team_lead) */}
+                    {canAssignLeads && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleAssignClick(lead)}
+                        className="flex-1"
+                        title="Atribuir Agente"
+                      >
+                        <Users className="h-4 w-4 mr-1" />
+                        <span className="text-xs">Atribuir</span>
+                      </Button>
+                    )}
                   </div>
                 </div>
               </Card>
@@ -419,6 +793,349 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Interaction Dialog */}
+      <Dialog open={interactionDialogOpen} onOpenChange={setInteractionDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Nova Interação com {selectedLead?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="type">Tipo de Interação *</Label>
+              <Select
+                value={interactionForm.type}
+                onValueChange={(value: any) =>
+                  setInteractionForm({ ...interactionForm, type: value })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="call">Ligação</SelectItem>
+                  <SelectItem value="email">Email</SelectItem>
+                  <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                  <SelectItem value="sms">SMS</SelectItem>
+                  <SelectItem value="meeting">Reunião</SelectItem>
+                  <SelectItem value="video_call">Videochamada</SelectItem>
+                  <SelectItem value="note">Nota</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="subject">Assunto</Label>
+              <Input
+                id="subject"
+                value={interactionForm.subject}
+                onChange={(e) =>
+                  setInteractionForm({ ...interactionForm, subject: e.target.value })
+                }
+                placeholder="Ex: Apresentação de imóvel"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="content">Notas da Interação</Label>
+              <Textarea
+                id="content"
+                value={interactionForm.content}
+                onChange={(e) =>
+                  setInteractionForm({ ...interactionForm, content: e.target.value })
+                }
+                placeholder="Descreva o que foi discutido..."
+                rows={4}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="outcome">Resultado</Label>
+              <Input
+                id="outcome"
+                value={interactionForm.outcome}
+                onChange={(e) =>
+                  setInteractionForm({ ...interactionForm, outcome: e.target.value })
+                }
+                placeholder="Ex: Interessado, Não atende, Agendou visita, etc."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setInteractionDialogOpen(false)}
+              disabled={creatingInteraction}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleCreateInteraction}
+              disabled={!interactionForm.type || creatingInteraction}
+              className="bg-gradient-to-r from-blue-600 to-purple-600"
+            >
+              {creatingInteraction ? "Criando..." : "Criar Interação"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Details Dialog with Interactions Timeline */}
+      <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Detalhes da Lead - {selectedLead?.name}</DialogTitle>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-y-auto space-y-6">
+            {/* Lead Information */}
+            <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
+              <div>
+                <p className="text-sm text-gray-500">Nome</p>
+                <p className="font-medium">{selectedLead?.name}</p>
+              </div>
+              {selectedLead?.email && (
+                <div>
+                  <p className="text-sm text-gray-500">Email</p>
+                  <p className="font-medium">{selectedLead.email}</p>
+                </div>
+              )}
+              {selectedLead?.phone && (
+                <div>
+                  <p className="text-sm text-gray-500">Telefone</p>
+                  <p className="font-medium">{selectedLead.phone}</p>
+                </div>
+              )}
+              <div>
+                <p className="text-sm text-gray-500">Tipo</p>
+                <Badge variant="outline" className={getTypeColor(selectedLead?.lead_type || "")}>
+                  {getTypeLabel(selectedLead?.lead_type || "")}
+                </Badge>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Status</p>
+                <Badge variant="outline" className={getStatusColor(selectedLead?.status || "")}>
+                  {getStatusLabel(selectedLead?.status || "")}
+                </Badge>
+              </div>
+              {selectedLead?.budget && (
+                <div>
+                  <p className="text-sm text-gray-500">Orçamento</p>
+                  <p className="font-medium">{formatBudget(selectedLead.budget)}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Lead Info */}
+            <div className="space-y-2 text-sm">
+              {selectedLead?.email && (
+                <div className="flex items-center gap-2 text-gray-600">
+                  <Mail className="h-4 w-4" />
+                  <span>{selectedLead.email}</span>
+                </div>
+              )}
+              {selectedLead?.phone && (
+                <div className="flex items-center gap-2 text-gray-600">
+                  <Phone className="h-4 w-4" />
+                  <span>{selectedLead.phone}</span>
+                </div>
+              )}
+              {selectedLead?.budget && (
+                <div className="flex items-center gap-2 text-gray-600">
+                  <DollarSign className="h-4 w-4" />
+                  <span>Até €{selectedLead.budget.toLocaleString()}</span>
+                </div>
+              )}
+              {selectedLead?.created_at && (
+                <div className="flex items-center gap-2 text-gray-600">
+                  <Calendar className="h-4 w-4" />
+                  <span>
+                    Criado a {new Date(selectedLead.created_at).toLocaleDateString()}
+                  </span>
+                </div>
+              )}
+              {selectedLead?.assigned_user && (
+                <div className="flex items-center gap-2 text-gray-600">
+                  <User className="h-4 w-4" />
+                  <span className="font-medium">
+                    Atribuído a: {selectedLead.assigned_user.full_name || selectedLead.assigned_user.email}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Interactions Timeline */}
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Clock className="h-5 w-5 text-primary" />
+                  Histórico de Comunicação
+                </h3>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setDetailsDialogOpen(false);
+                    setTimeout(() => handleInteractionClick(selectedLead!), 100);
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Nova Interação
+                </Button>
+              </div>
+
+              {loadingInteractions ? (
+                <div className="flex justify-center p-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                </div>
+              ) : leadInteractions.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>Nenhuma interação registrada ainda</p>
+                  <p className="text-sm">Clique em "Nova Interação" para começar</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {leadInteractions.map((interaction) => (
+                    <Card key={interaction.id} className="p-4">
+                      <div className="flex items-start gap-3">
+                        <div className={`p-2 rounded-full ${getInteractionTypeColor(interaction.interaction_type)}`}>
+                          {getInteractionIcon(interaction.interaction_type)}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-start justify-between mb-2">
+                            <div>
+                              <p className="font-medium">
+                                {getInteractionTypeLabel(interaction.interaction_type)}
+                                {interaction.subject && ` - ${interaction.subject}`}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                {new Date(interaction.interaction_date).toLocaleString("pt-PT", {
+                                  day: "2-digit",
+                                  month: "2-digit",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </p>
+                            </div>
+                            {interaction.outcome && (
+                              <Badge variant="secondary" className="text-xs">
+                                {interaction.outcome}
+                              </Badge>
+                            )}
+                          </div>
+                          {interaction.content && (
+                            <p className="text-sm text-gray-600 whitespace-pre-wrap">
+                              {interaction.content}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button onClick={() => setDetailsDialogOpen(false)}>
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Assign Agent Dialog */}
+      <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Atribuir Lead a Agente</DialogTitle>
+            <DialogDescription>
+              Selecione o agente que ficará responsável por esta lead
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedLead && (
+            <div className="space-y-4">
+              <div className="p-3 bg-gray-50 rounded-lg">
+                <p className="font-medium">{selectedLead.name}</p>
+                <p className="text-sm text-gray-600">{selectedLead.email}</p>
+              </div>
+
+              <div>
+                <Label htmlFor="agent">Agente</Label>
+                <Select
+                  value={selectedAgentId}
+                  onValueChange={setSelectedAgentId}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um agente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unassigned">Nenhum (não atribuído)</SelectItem>
+                    {availableAgents.map((agent) => (
+                      <SelectItem key={agent.id} value={agent.id}>
+                        <div className="flex items-center gap-2">
+                          <span>{agent.full_name || agent.email}</span>
+                          {agent.role === "team_lead" && (
+                            <Badge variant="outline" className="text-xs">
+                              Team Lead
+                            </Badge>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setAssignDialogOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleAssignLead}
+              disabled={assigning}
+            >
+              {assigning ? "Atribuindo..." : "Atribuir"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Quick Task Dialog */}
+      {selectedLeadForTask && (
+        <QuickTaskDialog
+          open={taskDialogOpen}
+          onOpenChange={setTaskDialogOpen}
+          leadId={selectedLeadForTask.id}
+          contactId={null}
+          entityName={selectedLeadForTask.name}
+          onSuccess={() => {
+            setSelectedLeadForTask(null);
+          }}
+        />
+      )}
+
+      {/* Quick Event Dialog */}
+      {selectedLeadForTask && (
+        <QuickEventDialog
+          open={eventDialogOpen}
+          onOpenChange={setEventDialogOpen}
+          leadId={selectedLeadForTask.id}
+          contactId={null}
+          entityName={selectedLeadForTask.name}
+          onSuccess={() => {
+            setSelectedLeadForTask(null);
+          }}
+        />
+      )}
     </>
   );
 }

@@ -2,29 +2,27 @@ import { useEffect, useState } from "react";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   Users, 
-  Building2, 
-  CheckSquare, 
-  Calendar,
+  Clock,
+  Award,
+  Filter,
   TrendingUp,
   TrendingDown,
-  DollarSign,
   Target,
-  Clock,
-  Award
+  DollarSign,
+  Calendar
 } from "lucide-react";
-import { useRouter } from "next/router";
 import { getLeads } from "@/services/leadsService";
 import { getProperties } from "@/services/propertiesService";
 import { getTasks } from "@/services/tasksService";
 import { getCalendarEvents } from "@/services/calendarService";
+import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 
 type Lead = Database["public"]["Tables"]["leads"]["Row"];
-type Property = Database["public"]["Tables"]["properties"]["Row"];
-type Task = Database["public"]["Tables"]["tasks"]["Row"];
-type CalendarEvent = Database["public"]["Tables"]["calendar_events"]["Row"];
+type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 
 interface Stats {
   totalLeads: number;
@@ -50,7 +48,6 @@ interface ChartData {
 }
 
 export default function Dashboard() {
-  const router = useRouter();
   const [stats, setStats] = useState<Stats>({
     totalLeads: 0,
     activeLeads: 0,
@@ -69,19 +66,117 @@ export default function Dashboard() {
   });
   const [chartData, setChartData] = useState<ChartData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState<3 | 6 | 12>(6);
+  const [selectedAgent, setSelectedAgent] = useState<string>("all");
+  const [agents, setAgents] = useState<Profile[]>([]);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   useEffect(() => {
-    loadDashboardData();
+    checkUserRole();
   }, []);
+
+  useEffect(() => {
+    if (userRole && currentUserId) {
+      loadAgents();
+    }
+  }, [userRole, currentUserId]);
+
+  useEffect(() => {
+    if (userRole && currentUserId) {
+      loadDashboardData();
+    }
+  }, [period, selectedAgent, userRole, currentUserId]);
+
+  const checkUserRole = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+
+      setUserRole(profile?.role || null);
+      setCurrentUserId(user.id);
+    } catch (error) {
+      console.error("Error checking role:", error);
+    }
+  };
+
+  const loadAgents = async () => {
+    try {
+      if (userRole === "admin") {
+        // Admin vê todos os agentes
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("*")
+          .in("role", ["agent", "team_lead"])
+          .order("full_name");
+
+        setAgents(profiles || []);
+      } else if (userRole === "team_lead") {
+        // Team Lead vê apenas agentes assignados a ele
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("role", "agent")
+          .eq("team_lead_id", currentUserId)
+          .order("full_name");
+
+        setAgents(profiles || []);
+      }
+      // Agentes não precisam ver lista de agentes
+    } catch (error) {
+      console.error("Error loading agents:", error);
+    }
+  };
 
   const loadDashboardData = async () => {
     try {
-      const [leads, properties, tasks, events] = await Promise.all([
+      setLoading(true);
+      const [rawLeads, properties, rawTasks, events] = await Promise.all([
         getLeads(),
         getProperties(),
         getTasks(),
         getCalendarEvents(),
       ]);
+
+      // Filtrar leads baseado no role e seleção
+      let allLeads: Lead[] = [];
+      
+      if (userRole === "admin") {
+        // Admin vê tudo ou filtra por agente específico
+        allLeads = selectedAgent !== "all" 
+          ? rawLeads.filter(l => l.assigned_to === selectedAgent)
+          : rawLeads;
+      } else if (userRole === "team_lead") {
+        // Team Lead vê apenas agentes da sua equipa
+        if (selectedAgent !== "all") {
+          // Agente específico da equipa
+          allLeads = rawLeads.filter(l => l.assigned_to === selectedAgent);
+        } else {
+          // Todos os agentes da equipa
+          const teamAgentIds = agents.map(a => a.id);
+          allLeads = rawLeads.filter(l => l.assigned_to && teamAgentIds.includes(l.assigned_to));
+        }
+      } else {
+        // Agente vê apenas suas próprias leads
+        allLeads = rawLeads.filter(l => l.assigned_to === currentUserId);
+      }
+
+      // Filtrar tasks baseado no role
+      let tasks = rawTasks;
+      if (userRole === "team_lead") {
+        const teamAgentIds = agents.map(a => a.id);
+        tasks = selectedAgent !== "all"
+          ? rawTasks.filter(t => t.assigned_to === selectedAgent)
+          : rawTasks.filter(t => t.assigned_to && teamAgentIds.includes(t.assigned_to));
+      } else if (userRole === "agent") {
+        tasks = rawTasks.filter(t => t.assigned_to === currentUserId);
+      }
 
       // Calculate metrics
       const now = new Date();
@@ -89,17 +184,17 @@ export default function Dashboard() {
       const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
 
-      const activeLeads = leads.filter(l => 
+      const activeLeads = allLeads.filter(l => 
         !["won", "lost"].includes(l.status || "")
       ).length;
-      const wonLeads = leads.filter(l => l.status === "won").length;
-      const lostLeads = leads.filter(l => l.status === "lost").length;
+      const wonLeads = allLeads.filter(l => l.status === "won").length;
+      const lostLeads = allLeads.filter(l => l.status === "lost").length;
       
-      const leadsThisMonth = leads.filter(l => 
+      const leadsThisMonth = allLeads.filter(l => 
         new Date(l.created_at || "") >= startOfMonth
       ).length;
       
-      const leadsLastMonth = leads.filter(l => {
+      const leadsLastMonth = allLeads.filter(l => {
         const date = new Date(l.created_at || "");
         return date >= startOfLastMonth && date <= endOfLastMonth;
       }).length;
@@ -108,15 +203,15 @@ export default function Dashboard() {
         ? ((leadsThisMonth - leadsLastMonth) / leadsLastMonth) * 100 
         : 0;
 
-      const totalBudget = leads.reduce((sum, lead) => {
+      const totalBudget = allLeads.reduce((sum, lead) => {
         const budget = typeof lead.budget === "number" 
           ? lead.budget 
           : Number(lead.budget) || 0;
         return sum + budget;
       }, 0);
 
-      const averageBudget = leads.length > 0 ? totalBudget / leads.length : 0;
-      const conversionRate = leads.length > 0 ? (wonLeads / leads.length) * 100 : 0;
+      const averageBudget = allLeads.length > 0 ? totalBudget / allLeads.length : 0;
+      const conversionRate = allLeads.length > 0 ? (wonLeads / allLeads.length) * 100 : 0;
 
       const todayEvents = events.filter(e => {
         const eventDate = new Date(e.startTime || "");
@@ -126,32 +221,50 @@ export default function Dashboard() {
       const completedTasks = tasks.filter(t => t.status === "completed").length;
       const availableProperties = properties.filter(p => p.status === "available").length;
 
-      // Generate chart data (last 6 months)
+      // Generate chart data based on selected period
+      console.log("=== INICIANDO CÁLCULO DE GRÁFICO ===");
+      console.log("Total de leads na base:", allLeads.length);
+      console.log("Data atual:", now.toISOString());
+      
       const months: ChartData[] = [];
-      for (let i = 5; i >= 0; i--) {
+      
+      for (let i = period - 1; i >= 0; i--) {
         const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
         const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
         const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+        monthEnd.setHours(23, 59, 59, 999);
 
-        const monthLeads = leads.filter(l => {
-          const leadDate = new Date(l.created_at || "");
+        console.log(`\n--- MÊS ${i} (${date.toLocaleDateString("pt-PT", { month: "long", year: "numeric" })}) ---`);
+        console.log("Início:", monthStart.toISOString());
+        console.log("Fim:", monthEnd.toISOString());
+
+        const monthLeads = allLeads.filter(l => {
+          if (!l.created_at) return false;
+          const leadDate = new Date(l.created_at);
+          if (isNaN(leadDate.getTime())) return false;
           return leadDate >= monthStart && leadDate <= monthEnd;
-        }).length;
+        });
 
-        const monthWon = leads.filter(l => {
-          const leadDate = new Date(l.created_at || "");
-          return l.status === "won" && leadDate >= monthStart && leadDate <= monthEnd;
-        }).length;
+        monthLeads.forEach(lead => {
+          console.log(`  ✅ Lead encontrada: ${lead.name} criada em ${lead.created_at}`);
+        });
+
+        const monthWon = monthLeads.filter(l => l.status === "won");
+
+        console.log(`Total leads: ${monthLeads.length}, Ganhas: ${monthWon.length}`);
 
         months.push({
           month: date.toLocaleDateString("pt-PT", { month: "short" }),
-          leads: monthLeads,
-          won: monthWon,
+          leads: monthLeads.length,
+          won: monthWon.length,
         });
       }
 
+      console.log("\n=== DADOS FINAIS DO GRÁFICO ===");
+      console.log(months);
+
       setStats({
-        totalLeads: leads.length,
+        totalLeads: allLeads.length,
         activeLeads,
         wonLeads,
         lostLeads,
@@ -231,16 +344,57 @@ export default function Dashboard() {
     );
   }
 
+  const showFilters = userRole === "admin" || userRole === "team_lead";
+
   return (
     <Layout>
       <div className="min-h-screen bg-gray-50">
         <div className="container mx-auto p-6 space-y-6">
           {/* Header */}
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
               <h1 className="text-4xl font-bold text-gray-900">Dashboard</h1>
               <p className="text-gray-600 mt-1">Visão geral do seu negócio imobiliário</p>
             </div>
+
+            {/* Filters for Admin/Team Lead */}
+            {showFilters && (
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <Filter className="h-5 w-5 text-gray-500" />
+                  <span className="text-sm font-medium text-gray-700">Filtros:</span>
+                </div>
+
+                {/* Period Filter */}
+                <Select value={period.toString()} onValueChange={(value) => setPeriod(Number(value) as 3 | 6 | 12)}>
+                  <SelectTrigger className="w-[140px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="3">3 Meses</SelectItem>
+                    <SelectItem value="6">6 Meses</SelectItem>
+                    <SelectItem value="12">12 Meses</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {/* Agent Filter */}
+                <Select value={selectedAgent} onValueChange={setSelectedAgent}>
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">
+                      {userRole === "admin" ? "Todos os Agentes" : "Toda a Equipa"}
+                    </SelectItem>
+                    {agents.map((agent) => (
+                      <SelectItem key={agent.id} value={agent.id}>
+                        {agent.full_name || agent.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
           {/* Main Stats */}
@@ -341,36 +495,80 @@ export default function Dashboard() {
               {/* Chart */}
               <Card className="border-2 border-gray-200">
                 <CardHeader>
-                  <CardTitle>Evolução de Leads (Últimos 6 Meses)</CardTitle>
+                  <CardTitle>
+                    Evolução de Leads (Últimos {period} Meses)
+                    {selectedAgent !== "all" && (
+                      <span className="text-sm font-normal text-gray-500 ml-2">
+                        - {agents.find(a => a.id === selectedAgent)?.full_name || "Agente"}
+                      </span>
+                    )}
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="h-64 flex items-end justify-between gap-4">
-                    {chartData.map((data, index) => (
-                      <div key={index} className="flex-1 flex flex-col items-center gap-2">
-                        <div className="w-full flex flex-col gap-1">
-                          <div 
-                            className="w-full bg-green-500 rounded-t transition-all hover:bg-green-600"
-                            style={{ height: `${(data.won / Math.max(...chartData.map(d => d.leads))) * 200}px` }}
-                            title={`${data.won} ganhos`}
-                          />
-                          <div 
-                            className="w-full bg-blue-500 rounded-t transition-all hover:bg-blue-600"
-                            style={{ height: `${(data.leads / Math.max(...chartData.map(d => d.leads))) * 200}px` }}
-                            title={`${data.leads} leads`}
-                          />
-                        </div>
-                        <span className="text-xs text-gray-600 font-medium">{data.month}</span>
-                      </div>
-                    ))}
+                  <div className="h-80 w-full">
+                    <div className="flex items-end justify-between gap-4 h-64 pb-8 px-4">
+                      {chartData.map((data, index) => {
+                        const maxLeads = Math.max(...chartData.map(d => d.leads), 1);
+                        
+                        const totalHeight = data.leads === 0 
+                          ? 0 
+                          : Math.max((data.leads / maxLeads) * 100, 15);
+                        
+                        const wonHeight = data.won === 0 
+                          ? 0 
+                          : Math.max((data.won / maxLeads) * 100, 8);
+                        
+                        return (
+                          <div key={index} className="flex-1 flex flex-col items-center gap-2 group">
+                            <div className="w-full flex items-end justify-center gap-2 h-52">
+                              {/* Blue Bar - Total Leads */}
+                              <div className="relative flex-1 flex flex-col justify-end max-w-[40px]">
+                                {data.leads > 0 ? (
+                                  <div 
+                                    className="w-full bg-blue-500 rounded-t transition-all hover:bg-blue-600 cursor-pointer relative"
+                                    style={{ height: `${totalHeight}%` }}
+                                    title={`${data.leads} leads totais`}
+                                  >
+                                    <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-semibold text-gray-700 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                                      {data.leads}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <div className="w-full h-2 bg-gray-100 rounded opacity-30" />
+                                )}
+                              </div>
+                              
+                              {/* Green Bar - Won Leads */}
+                              <div className="relative flex-1 flex flex-col justify-end max-w-[40px]">
+                                {data.won > 0 ? (
+                                  <div 
+                                    className="w-full bg-green-500 rounded-t transition-all hover:bg-green-600 cursor-pointer relative"
+                                    style={{ height: `${wonHeight}%` }}
+                                    title={`${data.won} leads ganhos`}
+                                  >
+                                    <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-semibold text-gray-700 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                                      {data.won}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <div className="w-full h-2 bg-gray-100 rounded opacity-30" />
+                                )}
+                              </div>
+                            </div>
+                            <span className="text-xs text-gray-600 font-medium uppercase">{data.month}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div className="flex items-center justify-center gap-6 mt-4">
+                  <div className="flex items-center justify-center gap-6 mt-4 pt-4 border-t">
                     <div className="flex items-center gap-2">
                       <div className="w-4 h-4 bg-blue-500 rounded"></div>
-                      <span className="text-sm text-gray-600">Total Leads</span>
+                      <span className="text-sm text-gray-600 font-medium">Total Leads</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="w-4 h-4 bg-green-500 rounded"></div>
-                      <span className="text-sm text-gray-600">Leads Ganhos</span>
+                      <span className="text-sm text-gray-600 font-medium">Leads Ganhos</span>
                     </div>
                   </div>
                 </CardContent>

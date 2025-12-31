@@ -133,11 +133,21 @@ export default function AdminUsersPage() {
       console.log("[Users Page] Users reloaded. Current count:", users.length);
     } catch (error: any) {
       console.error("Error creating user:", error);
-      toast({
-        title: "❌ Erro",
-        description: error.message || "Erro ao criar utilizador.",
-        variant: "destructive",
-      });
+      
+      // Check if it's an auth error and suggest refresh
+      if (error.message?.includes("Token inválido") || error.message?.includes("Sessão expirada")) {
+        toast({
+          title: "❌ Sessão Expirada",
+          description: "Por favor, faça logout e login novamente para continuar.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "❌ Erro",
+          description: error.message || "Erro ao criar utilizador.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setCreating(false);
     }

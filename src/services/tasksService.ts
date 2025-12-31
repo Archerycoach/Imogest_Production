@@ -40,14 +40,23 @@ export const getTask = async (id: string): Promise<Task | null> => {
 };
 
 // Create new task
-export const createTask = async (task: TaskInsert) => {
+export const createTask = async (task: TaskInsert & { lead_id?: string | null, contact_id?: string | null }) => {
+  // Map frontend IDs to database columns
+  const dbTask = {
+    ...task,
+    related_lead_id: task.lead_id || task.related_lead_id,
+    related_contact_id: task.contact_id || task.related_contact_id,
+    status: task.status as any,
+    priority: task.priority as any
+  };
+  
+  // Remove frontend-only properties if they exist
+  delete (dbTask as any).lead_id;
+  delete (dbTask as any).contact_id;
+
   const { data, error } = await supabase
     .from("tasks")
-    .insert({
-      ...task,
-      status: task.status as any,
-      priority: task.priority as any
-    })
+    .insert(dbTask)
     .select()
     .single();
 

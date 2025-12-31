@@ -1,6 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { User, Session } from "@supabase/supabase-js";
-import { getUserWithRetry, getSessionWithRetry } from "@/lib/supabaseRetry";
 
 export interface AuthUser {
   id: string;
@@ -34,65 +33,41 @@ const getURL = () => {
   return url
 }
 
-// Get current user with retry logic
-export const getCurrentUser = async (): Promise<User | null> => {
-  try {
-    const userData = await getUserWithRetry(supabase, {
-      maxRetries: 3,
-      delayMs: 500,
-    });
-    return userData?.user || null;
-  } catch (error) {
-    console.error("[Auth] Failed to get current user after retries:", error);
-    return null;
-  }
+// Get current user
+export const getCurrentUser = async (): Promise<AuthUser | null> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  return user ? {
+    id: user.id,
+    email: user.email || "",
+    user_metadata: user.user_metadata,
+    created_at: user.created_at
+  } : null;
 };
 
-// Check if user is authenticated with retry logic
-export const isAuthenticated = async (): Promise<boolean> => {
-  try {
-    const userData = await getUserWithRetry(supabase, {
-      maxRetries: 2,
-      delayMs: 500,
-    });
-    return !!userData?.user;
-  } catch (error) {
-    console.error("[Auth] Failed to check authentication:", error);
-    return false;
-  }
+// Get current session
+export const getCurrentSession = async (): Promise<Session | null> => {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session;
 };
-
-// Get session with retry logic
-export const getSession = async () => {
-  try {
-    const sessionData = await getSessionWithRetry(supabase, {
-      maxRetries: 2,
-      delayMs: 500,
-    });
-    return sessionData?.session || null;
-  } catch (error) {
-    console.error("[Auth] Failed to get session:", error);
-    return null;
-  }
-};
-
-export const getCurrentSession = getSession; // Alias for backward compatibility
 
 // Sign up with email and password
-export const signUpWithEmail = async (email: string, password: string, userData?: { name?: string } | string): Promise<{ user: AuthUser | null; error: AuthError | null }> => {
+export const signUp = async (email: string, password: string, fullName?: string): Promise<{ user: AuthUser | null; error: AuthError | null }> => {
   try {
-    // Handle overload where 3rd arg is string (legacy name) or object
-    const metadata = typeof userData === 'string' 
-      ? { full_name: userData } 
-      : userData || {};
+    const options: any = {
+      emailRedirectTo: `${getURL()}auth/confirm-email`
+    };
+
+    if (fullName) {
+      options.data = {
+        full_name: fullName,
+        name: fullName
+      };
+    }
 
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        emailRedirectTo: `${getURL()}auth/confirm-email`,
-        data: metadata
-      }
+      options
     });
 
     if (error) {
@@ -107,16 +82,16 @@ export const signUpWithEmail = async (email: string, password: string, userData?
     } : null;
 
     return { user: authUser, error: null };
-  } catch (error: any) {
+  } catch (error) {
     return { 
       user: null, 
-      error: { message: error.message || "An unexpected error occurred during sign up" } 
+      error: { message: "An unexpected error occurred during sign up" } 
     };
   }
 };
 
 // Sign in with email and password
-export const signInWithEmail = async (email: string, password: string): Promise<{ user: AuthUser | null; error: AuthError | null }> => {
+export const signIn = async (email: string, password: string): Promise<{ user: AuthUser | null; error: AuthError | null }> => {
   try {
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
@@ -135,10 +110,10 @@ export const signInWithEmail = async (email: string, password: string): Promise<
     } : null;
 
     return { user: authUser, error: null };
-  } catch (error: any) {
+  } catch (error) {
     return { 
       user: null, 
-      error: { message: error.message || "An unexpected error occurred during sign in" } 
+      error: { message: "An unexpected error occurred during sign in" } 
     };
   }
 };
@@ -158,15 +133,15 @@ export const signInWithGoogle = async (): Promise<{ error: AuthError | null }> =
     }
 
     return { error: null };
-  } catch (error: any) {
+  } catch (error) {
     return { 
-      error: { message: error.message || "An unexpected error occurred during Google sign in" } 
+      error: { message: "An unexpected error occurred during Google sign in" } 
     };
   }
 };
 
 // Sign out
-export const logout = async (): Promise<{ error: AuthError | null }> => {
+export const signOut = async (): Promise<{ error: AuthError | null }> => {
   try {
     const { error } = await supabase.auth.signOut();
     
@@ -175,28 +150,9 @@ export const logout = async (): Promise<{ error: AuthError | null }> => {
     }
 
     return { error: null };
-  } catch (error: any) {
+  } catch (error) {
     return { 
       error: { message: "An unexpected error occurred during sign out" } 
-    };
-  }
-};
-
-export const signOut = logout; // Alias
-
-// Update password
-export const updatePassword = async (password: string): Promise<{ error: AuthError | null }> => {
-  try {
-    const { error } = await supabase.auth.updateUser({ password });
-
-    if (error) {
-      return { error: { message: error.message } };
-    }
-
-    return { error: null };
-  } catch (error: any) {
-    return { 
-      error: { message: "An unexpected error occurred during password update" } 
     };
   }
 };
@@ -213,19 +169,36 @@ export const resetPassword = async (email: string): Promise<{ error: AuthError |
     }
 
     return { error: null };
-  } catch (error: any) {
+  } catch (error) {
     return { 
       error: { message: "An unexpected error occurred during password reset" } 
     };
   }
 };
 
-// Confirm email
+// Update password
+export const updatePassword = async (password: string): Promise<{ error: AuthError | null }> => {
+  try {
+    const { error } = await supabase.auth.updateUser({ password });
+
+    if (error) {
+      return { error: { message: error.message } };
+    }
+
+    return { error: null };
+  } catch (error) {
+    return { 
+      error: { message: "An unexpected error occurred during password update" } 
+    };
+  }
+};
+
+// Confirm email (REQUIRED)
 export const confirmEmail = async (token: string, type: 'signup' | 'recovery' | 'email_change' = 'signup'): Promise<{ user: AuthUser | null; error: AuthError | null }> => {
   try {
     const { data, error } = await supabase.auth.verifyOtp({
       token_hash: token,
-      type: type as any
+      type: type
     });
 
     if (error) {
@@ -240,7 +213,7 @@ export const confirmEmail = async (token: string, type: 'signup' | 'recovery' | 
     } : null;
 
     return { user: authUser, error: null };
-  } catch (error: any) {
+  } catch (error) {
     return { 
       user: null, 
       error: { message: "An unexpected error occurred during email confirmation" } 
@@ -253,13 +226,21 @@ export const onAuthStateChange = (callback: (event: string, session: Session | n
   return supabase.auth.onAuthStateChange(callback);
 };
 
-// Default export object for backward compatibility if any
+// Compatibility Aliases
+export const logout = signOut;
+export const getSession = getCurrentSession;
+export const signInWithEmail = signIn;
+export const signUpWithEmail = signUp;
+
+// Default export object for backwards compatibility
 export const authService = {
   getCurrentUser,
   getCurrentSession,
   getSession,
-  signUp: signUpWithEmail,
-  signIn: signInWithEmail,
+  signUp,
+  signUpWithEmail,
+  signIn,
+  signInWithEmail,
   signInWithGoogle,
   signOut,
   logout,

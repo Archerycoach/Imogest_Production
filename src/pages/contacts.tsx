@@ -21,9 +21,18 @@ import {
 } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { QuickTaskDialog } from "@/components/QuickTaskDialog";
+import { QuickEventDialog } from "@/components/QuickEventDialog";
 import {
   Search,
   Plus,
@@ -35,6 +44,10 @@ import {
   Gift,
   MessageSquare,
   MessageCircle,
+  FileText,
+  Eye,
+  Clock,
+  CalendarDays,
 } from "lucide-react";
 import {
   getContacts,
@@ -45,6 +58,8 @@ import {
   getUpcomingBirthdays,
   configureAutoMessages,
 } from "@/services/contactsService";
+import { createInteraction, getInteractionsByContact } from "@/services/interactionsService";
+import type { InteractionWithDetails } from "@/services/interactionsService";
 import { useToast } from "@/hooks/use-toast";
 
 export default function ContactsPage() {
@@ -54,7 +69,13 @@ export default function ContactsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [autoMessageDialogOpen, setAutoMessageDialogOpen] = useState(false);
+  const [interactionDialogOpen, setInteractionDialogOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<any>(null);
+  const [selectedContact, setSelectedContact] = useState<any>(null);
+  const [creatingInteraction, setCreatingInteraction] = useState(false);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const [contactInteractions, setContactInteractions] = useState<InteractionWithDetails[]>([]);
+  const [loadingInteractions, setLoadingInteractions] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -66,6 +87,15 @@ export default function ContactsPage() {
     birthday_enabled: false,
     custom_dates: [] as Array<{ date: string; message: string; enabled: boolean }>,
   });
+  const [interactionForm, setInteractionForm] = useState({
+    type: "call" as "call" | "email" | "whatsapp" | "meeting" | "note" | "sms" | "video_call",
+    subject: "",
+    content: "",
+    outcome: "",
+  });
+  const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [eventDialogOpen, setEventDialogOpen] = useState(false);
+  const [selectedContactForTask, setSelectedContactForTask] = useState<any>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -197,6 +227,142 @@ export default function ContactsPage() {
         description: "Ocorreu um erro ao guardar a configuração.",
         variant: "destructive",
       });
+    }
+  };
+
+  const handleInteractionClick = (contact: any) => {
+    setSelectedContact(contact);
+    setInteractionForm({
+      type: "call",
+      subject: "",
+      content: "",
+      outcome: "",
+    });
+    setInteractionDialogOpen(true);
+  };
+
+  const handleCreateInteraction = async () => {
+    if (!selectedContact) return;
+
+    try {
+      setCreatingInteraction(true);
+      await createInteraction({
+        interaction_type: interactionForm.type,
+        subject: interactionForm.subject || null,
+        content: interactionForm.content || null,
+        outcome: interactionForm.outcome || null,
+        lead_id: null,
+        contact_id: selectedContact.id,
+        property_id: null,
+      });
+
+      toast({
+        title: "Interação criada!",
+        description: "A interação foi registrada com sucesso.",
+      });
+
+      setInteractionDialogOpen(false);
+      setSelectedContact(null);
+    } catch (error: any) {
+      console.error("Error creating interaction:", error);
+      toast({
+        title: "Erro ao criar interação",
+        description: error.message || "Ocorreu um erro ao criar a interação.",
+        variant: "destructive",
+      });
+    } finally {
+      setCreatingInteraction(false);
+    }
+  };
+
+  const handleViewDetails = async (contact: any) => {
+    setSelectedContact(contact);
+    setDetailsDialogOpen(true);
+    setLoadingInteractions(true);
+    
+    try {
+      const interactions = await getInteractionsByContact(contact.id);
+      setContactInteractions(interactions);
+    } catch (error) {
+      console.error("Error loading interactions:", error);
+      toast({
+        title: "Erro ao carregar interações",
+        description: "Não foi possível carregar o histórico de interações.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingInteractions(false);
+    }
+  };
+
+  const handleTaskClick = (contact: any) => {
+    setSelectedContactForTask(contact);
+    setTaskDialogOpen(true);
+  };
+
+  const handleEventClick = (contact: any) => {
+    setSelectedContactForTask(contact);
+    setEventDialogOpen(true);
+  };
+
+  const getInteractionIcon = (type: string) => {
+    switch (type) {
+      case "call":
+        return <Phone className="h-4 w-4" />;
+      case "email":
+        return <Mail className="h-4 w-4" />;
+      case "whatsapp":
+      case "sms":
+        return <MessageCircle className="h-4 w-4" />;
+      case "meeting":
+      case "video_call":
+        return <Calendar className="h-4 w-4" />;
+      case "note":
+        return <FileText className="h-4 w-4" />;
+      default:
+        return <MessageCircle className="h-4 w-4" />;
+    }
+  };
+
+  const getInteractionTypeLabel = (type: string) => {
+    switch (type) {
+      case "call":
+        return "Ligação";
+      case "email":
+        return "Email";
+      case "whatsapp":
+        return "WhatsApp";
+      case "sms":
+        return "SMS";
+      case "meeting":
+        return "Reunião";
+      case "video_call":
+        return "Videochamada";
+      case "note":
+        return "Nota";
+      default:
+        return type;
+    }
+  };
+
+  const getInteractionTypeColor = (type: string) => {
+    switch (type) {
+      case "call":
+        return "text-blue-600 bg-blue-50";
+      case "email":
+        return "text-purple-600 bg-purple-50";
+      case "whatsapp":
+        return "text-green-600 bg-green-50";
+      case "sms":
+        return "text-orange-600 bg-orange-50";
+      case "meeting":
+        return "text-indigo-600 bg-indigo-50";
+      case "video_call":
+        return "text-pink-600 bg-pink-50";
+      case "note":
+        return "text-gray-600 bg-gray-50";
+      default:
+        return "text-gray-600 bg-gray-50";
     }
   };
 
@@ -358,6 +524,33 @@ export default function ContactsPage() {
                             <Button
                               variant="ghost"
                               size="icon"
+                              onClick={() => handleViewDetails(contact)}
+                              className="hover:bg-cyan-50 text-cyan-600"
+                              title="Ver Detalhes"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleTaskClick(contact)}
+                              className="hover:bg-blue-50 text-blue-600"
+                              title="Nova Tarefa"
+                            >
+                              <CalendarDays className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEventClick(contact)}
+                              className="hover:bg-purple-50 text-purple-600"
+                              title="Novo Evento"
+                            >
+                              <Calendar className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               onClick={() => {
                                 if (!contact.email) {
                                   toast({
@@ -415,6 +608,15 @@ export default function ContactsPage() {
                               title="WhatsApp"
                             >
                               <MessageCircle className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleInteractionClick(contact)}
+                              className="hover:bg-indigo-50 text-indigo-600"
+                              title="Nova Interação"
+                            >
+                              <FileText className="h-4 w-4" />
                             </Button>
                             <Button
                               variant="ghost"
@@ -618,7 +820,237 @@ export default function ContactsPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Interaction Dialog */}
+        <Dialog open={interactionDialogOpen} onOpenChange={setInteractionDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Nova Interação com {selectedContact?.name}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="type">Tipo de Interação *</Label>
+                <Select
+                  value={interactionForm.type}
+                  onValueChange={(value: any) =>
+                    setInteractionForm({ ...interactionForm, type: value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="call">Ligação</SelectItem>
+                    <SelectItem value="email">Email</SelectItem>
+                    <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                    <SelectItem value="sms">SMS</SelectItem>
+                    <SelectItem value="meeting">Reunião</SelectItem>
+                    <SelectItem value="video_call">Videochamada</SelectItem>
+                    <SelectItem value="note">Nota</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="subject">Assunto</Label>
+                <Input
+                  id="subject"
+                  value={interactionForm.subject}
+                  onChange={(e) =>
+                    setInteractionForm({ ...interactionForm, subject: e.target.value })
+                  }
+                  placeholder="Ex: Apresentação de imóvel"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="content">Notas da Interação</Label>
+                <Textarea
+                  id="content"
+                  value={interactionForm.content}
+                  onChange={(e) =>
+                    setInteractionForm({ ...interactionForm, content: e.target.value })
+                  }
+                  placeholder="Descreva o que foi discutido..."
+                  rows={4}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="outcome">Resultado</Label>
+                <Input
+                  id="outcome"
+                  value={interactionForm.outcome}
+                  onChange={(e) =>
+                    setInteractionForm({ ...interactionForm, outcome: e.target.value })
+                  }
+                  placeholder="Ex: Interessado, Não atende, Agendou visita, etc."
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setInteractionDialogOpen(false)}
+                disabled={creatingInteraction}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleCreateInteraction}
+                disabled={creatingInteraction}
+                className="bg-gradient-to-r from-blue-600 to-purple-600"
+              >
+                {creatingInteraction ? "Criando..." : "Criar Interação"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
+
+      {/* Details Dialog with Interactions Timeline */}
+      <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Detalhes do Contacto - {selectedContact?.name}</DialogTitle>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-y-auto space-y-6">
+            {/* Contact Information */}
+            <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
+              <div>
+                <p className="text-sm text-gray-500">Nome</p>
+                <p className="font-medium">{selectedContact?.name}</p>
+              </div>
+              {selectedContact?.email && (
+                <div>
+                  <p className="text-sm text-gray-500">Email</p>
+                  <p className="font-medium">{selectedContact.email}</p>
+                </div>
+              )}
+              {selectedContact?.phone && (
+                <div>
+                  <p className="text-sm text-gray-500">Telefone</p>
+                  <p className="font-medium">{selectedContact.phone}</p>
+                </div>
+              )}
+              {selectedContact?.birth_date && (
+                <div>
+                  <p className="text-sm text-gray-500">Aniversário</p>
+                  <p className="font-medium">{formatDate(selectedContact.birth_date)}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Interactions Timeline */}
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Clock className="h-5 w-5 text-primary" />
+                  Histórico de Comunicação
+                </h3>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setDetailsDialogOpen(false);
+                    setTimeout(() => handleInteractionClick(selectedContact!), 100);
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Nova Interação
+                </Button>
+              </div>
+
+              {loadingInteractions ? (
+                <div className="flex justify-center p-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                </div>
+              ) : contactInteractions.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>Nenhuma interação registrada ainda</p>
+                  <p className="text-sm">Clique em "Nova Interação" para começar</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {contactInteractions.map((interaction) => (
+                    <Card key={interaction.id} className="p-4">
+                      <div className="flex items-start gap-3">
+                        <div className={`p-2 rounded-full ${getInteractionTypeColor(interaction.interaction_type)}`}>
+                          {getInteractionIcon(interaction.interaction_type)}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-start justify-between mb-2">
+                            <div>
+                              <p className="font-medium">
+                                {getInteractionTypeLabel(interaction.interaction_type)}
+                                {interaction.subject && ` - ${interaction.subject}`}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                {new Date(interaction.interaction_date).toLocaleString("pt-PT", {
+                                  day: "2-digit",
+                                  month: "2-digit",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </p>
+                            </div>
+                            {interaction.outcome && (
+                              <Badge variant="secondary" className="text-xs">
+                                {interaction.outcome}
+                              </Badge>
+                            )}
+                          </div>
+                          {interaction.content && (
+                            <p className="text-sm text-gray-600 whitespace-pre-wrap">
+                              {interaction.content}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button onClick={() => setDetailsDialogOpen(false)}>
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Quick Task Dialog */}
+      {selectedContactForTask && (
+        <QuickTaskDialog
+          open={taskDialogOpen}
+          onOpenChange={setTaskDialogOpen}
+          leadId={null}
+          contactId={selectedContactForTask.id}
+          entityName={selectedContactForTask.name}
+          onSuccess={() => {
+            setSelectedContactForTask(null);
+          }}
+        />
+      )}
+
+      {/* Quick Event Dialog */}
+      {selectedContactForTask && (
+        <QuickEventDialog
+          open={eventDialogOpen}
+          onOpenChange={setEventDialogOpen}
+          leadId={null}
+          contactId={selectedContactForTask.id}
+          entityName={selectedContactForTask.name}
+          onSuccess={() => {
+            setSelectedContactForTask(null);
+          }}
+        />
+      )}
     </Layout>
   );
 }

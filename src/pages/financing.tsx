@@ -10,7 +10,8 @@ import {
   calculateMortgage,
   type FinancingParams,
 } from "@/services/financingService";
-import * as XLSX from "xlsx";
+import { jsPDF } from "jspdf";
+import "jspdf-autotable";
 
 interface ExtraCosts {
   imt: number;
@@ -58,42 +59,243 @@ export default function FinancingPage() {
   const handleExport = () => {
     if (!result || !extraCosts) return;
 
-    const workbook = XLSX.utils.book_new();
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    
+    // Header with title
+    doc.setFillColor(59, 130, 246); // Blue
+    doc.rect(0, 0, pageWidth, 35, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(22);
+    doc.setFont("helvetica", "bold");
+    doc.text("SIMULAÇÃO DE FINANCIAMENTO HABITAÇÃO", pageWidth / 2, 15, { align: "center" });
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Gerado em: ${new Date().toLocaleDateString("pt-PT")}`, pageWidth / 2, 25, { align: "center" });
 
-    const summaryData = [
-      ["SIMULAÇÃO DE FINANCIAMENTO HABITAÇÃO"],
-      [""],
-      ["DADOS DO IMÓVEL"],
-      ["Valor do Imóvel", `€${params.propertyValue.toLocaleString()}`],
-      ["Entrada", `€${params.downPayment.toLocaleString()}`],
-      ["Montante a Financiar", `€${(params.propertyValue - params.downPayment).toLocaleString()}`],
-      [""],
-      ["CONDIÇÕES DO CRÉDITO"],
-      ["Taxa Euribor", `${params.interestRate}%`],
-      ["Spread do Banco", `${params.spread}%`],
-      ["Taxa Total", `${(params.interestRate + params.spread).toFixed(2)}%`],
-      ["Prazo", `${params.loanTermYears} anos (${params.loanTermYears * 12} meses)`],
-      [""],
-      ["RESUMO FINANCEIRO"],
-      ["Prestação Mensal", `€${result.monthlyPayment.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}`],
-      ["Total a Pagar", `€${result.totalPayment.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}`],
-      ["Total de Juros", `€${result.totalInterest.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}`],
-      [""],
-      ["CUSTOS ADICIONAIS"],
-      ["IMT", `${imtPercentage}%`, `€${extraCosts.imt.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}`],
-      ["Imposto de Selo", `${stampDutyPercentage}%`, `€${extraCosts.stampDuty.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}`],
-      ["Escritura", "", `€${extraCosts.deed.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}`],
-      ["Registo Predial", "", `€${extraCosts.registry.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}`],
-      ["Total de Custos", "", `€${extraCosts.total.toLocaleString("pt-PT", { minimumFractionDigits: 2 })}`],
-      [""],
-      ["INVESTIMENTO TOTAL INICIAL"],
-      ["Entrada + Custos", "", `€${(params.downPayment + extraCosts.total).toLocaleString("pt-PT", { minimumFractionDigits: 2 })}`],
+    // Reset text color for body
+    doc.setTextColor(0, 0, 0);
+    let yPos = 45;
+
+    // Section 1: Dados do Imóvel
+    doc.setFillColor(243, 244, 246); // Gray background
+    doc.rect(10, yPos, pageWidth - 20, 8, "F");
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(31, 41, 55);
+    doc.text("DADOS DO IMÓVEL", 15, yPos + 5);
+    yPos += 12;
+
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(55, 65, 81);
+    
+    const propertyData = [
+      ["Valor do Imóvel:", formatCurrency(params.propertyValue)],
+      ["Entrada:", formatCurrency(params.downPayment)],
+      ["Montante a Financiar:", formatCurrency(params.propertyValue - params.downPayment)],
     ];
 
-    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
-    XLSX.utils.book_append_sheet(workbook, summarySheet, "Resumo");
+    propertyData.forEach(([label, value]) => {
+      doc.text(label, 15, yPos);
+      doc.setFont("helvetica", "bold");
+      doc.text(value, pageWidth - 15, yPos, { align: "right" });
+      doc.setFont("helvetica", "normal");
+      yPos += 6;
+    });
 
-    XLSX.writeFile(workbook, `Simulacao_Financiamento_${new Date().toISOString().split("T")[0]}.xlsx`);
+    yPos += 5;
+
+    // Section 2: Condições do Crédito
+    doc.setFillColor(243, 244, 246);
+    doc.rect(10, yPos, pageWidth - 20, 8, "F");
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(31, 41, 55);
+    doc.text("CONDIÇÕES DO CRÉDITO", 15, yPos + 5);
+    yPos += 12;
+
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(55, 65, 81);
+
+    const loanData = [
+      ["Taxa Euribor:", `${params.interestRate}%`],
+      ["Spread do Banco:", `${params.spread}%`],
+      ["Taxa Total:", `${(params.interestRate + params.spread).toFixed(2)}%`],
+      ["Prazo:", `${params.loanTermYears} anos (${params.loanTermYears * 12} meses)`],
+    ];
+
+    loanData.forEach(([label, value]) => {
+      doc.text(label, 15, yPos);
+      doc.setFont("helvetica", "bold");
+      doc.text(value, pageWidth - 15, yPos, { align: "right" });
+      doc.setFont("helvetica", "normal");
+      yPos += 6;
+    });
+
+    yPos += 5;
+
+    // Section 3: Resumo Financeiro (Highlight boxes)
+    doc.setFillColor(243, 244, 246);
+    doc.rect(10, yPos, pageWidth - 20, 8, "F");
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(31, 41, 55);
+    doc.text("RESUMO FINANCEIRO", 15, yPos + 5);
+    yPos += 12;
+
+    // Highlight boxes for key metrics
+    const boxWidth = (pageWidth - 35) / 2;
+    const boxHeight = 20;
+
+    // Monthly Payment
+    doc.setFillColor(219, 234, 254); // Light blue
+    doc.rect(10, yPos, boxWidth, boxHeight, "F");
+    doc.setDrawColor(59, 130, 246);
+    doc.rect(10, yPos, boxWidth, boxHeight);
+    doc.setFontSize(9);
+    doc.setTextColor(55, 65, 81);
+    doc.text("Prestação Mensal", 15, yPos + 6);
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(37, 99, 235);
+    doc.text(formatCurrency(result.monthlyPayment), boxWidth / 2 + 10, yPos + 15, { align: "center" });
+
+    // Total Payment
+    doc.setFillColor(220, 252, 231); // Light green
+    doc.rect(15 + boxWidth, yPos, boxWidth, boxHeight, "F");
+    doc.setDrawColor(34, 197, 94);
+    doc.rect(15 + boxWidth, yPos, boxWidth, boxHeight);
+    doc.setFontSize(9);
+    doc.setTextColor(55, 65, 81);
+    doc.text("Total a Pagar", 20 + boxWidth, yPos + 6);
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(22, 163, 74);
+    doc.text(formatCurrency(result.totalPayment), boxWidth + boxWidth / 2 + 15, yPos + 15, { align: "center" });
+
+    yPos += boxHeight + 5;
+
+    // Total Interest
+    doc.setFillColor(254, 243, 199); // Light orange
+    doc.rect(10, yPos, boxWidth, boxHeight, "F");
+    doc.setDrawColor(251, 146, 60);
+    doc.rect(10, yPos, boxWidth, boxHeight);
+    doc.setFontSize(9);
+    doc.setTextColor(55, 65, 81);
+    doc.text("Total de Juros", 15, yPos + 6);
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(234, 88, 12);
+    doc.text(formatCurrency(result.totalInterest), boxWidth / 2 + 10, yPos + 15, { align: "center" });
+
+    // Financed Amount
+    doc.setFillColor(243, 232, 255); // Light purple
+    doc.rect(15 + boxWidth, yPos, boxWidth, boxHeight, "F");
+    doc.setDrawColor(168, 85, 247);
+    doc.rect(15 + boxWidth, yPos, boxWidth, boxHeight);
+    doc.setFontSize(9);
+    doc.setTextColor(55, 65, 81);
+    doc.text("Montante Financiado", 20 + boxWidth, yPos + 6);
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(147, 51, 234);
+    doc.text(formatCurrency(params.propertyValue - params.downPayment), boxWidth + boxWidth / 2 + 15, yPos + 15, { align: "center" });
+
+    yPos += boxHeight + 10;
+
+    // Section 4: Custos Adicionais
+    doc.setFillColor(243, 244, 246);
+    doc.rect(10, yPos, pageWidth - 20, 8, "F");
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(31, 41, 55);
+    doc.text("CUSTOS ADICIONAIS", 15, yPos + 5);
+    yPos += 12;
+
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(55, 65, 81);
+
+    const costsData = [
+      [`IMT (${imtPercentage}%):`, formatCurrency(extraCosts.imt)],
+      [`Imposto de Selo (${stampDutyPercentage}%):`, formatCurrency(extraCosts.stampDuty)],
+      ["Escritura:", formatCurrency(extraCosts.deed)],
+      ["Registo Predial:", formatCurrency(extraCosts.registry)],
+    ];
+
+    costsData.forEach(([label, value]) => {
+      doc.text(label, 15, yPos);
+      doc.setFont("helvetica", "bold");
+      doc.text(value, pageWidth - 15, yPos, { align: "right" });
+      doc.setFont("helvetica", "normal");
+      yPos += 6;
+    });
+
+    // Total costs line
+    doc.setLineWidth(0.5);
+    doc.line(15, yPos, pageWidth - 15, yPos);
+    yPos += 6;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text("Total de Custos:", 15, yPos);
+    doc.setTextColor(220, 38, 38); // Red
+    doc.text(formatCurrency(extraCosts.total), pageWidth - 15, yPos, { align: "right" });
+
+    yPos += 10;
+
+    // Section 5: Investimento Total Inicial
+    doc.setFillColor(254, 226, 226); // Light red background
+    doc.rect(10, yPos, pageWidth - 20, 25, "F");
+    doc.setDrawColor(220, 38, 38);
+    doc.setLineWidth(1);
+    doc.rect(10, yPos, pageWidth - 20, 25);
+
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(31, 41, 55);
+    doc.text("INVESTIMENTO TOTAL INICIAL", 15, yPos + 7);
+    
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text("Entrada:", 15, yPos + 14);
+    doc.text(formatCurrency(params.downPayment), pageWidth - 15, yPos + 14, { align: "right" });
+    doc.text("Custos:", 15, yPos + 19);
+    doc.text(formatCurrency(extraCosts.total), pageWidth - 15, yPos + 19, { align: "right" });
+
+    yPos += 25;
+
+    // Grand total box
+    doc.setFillColor(220, 38, 38); // Red
+    doc.rect(10, yPos, pageWidth - 20, 12, "F");
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(255, 255, 255);
+    doc.text("TOTAL NECESSÁRIO:", 15, yPos + 8);
+    doc.setFontSize(14);
+    doc.text(formatCurrency(params.downPayment + extraCosts.total), pageWidth - 15, yPos + 8, { align: "right" });
+
+    // Footer
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "italic");
+    doc.setTextColor(107, 114, 128);
+    doc.text(
+      "Nota: Esta simulação é meramente indicativa. Os valores reais podem variar conforme condições específicas do banco e localização do imóvel.",
+      pageWidth / 2,
+      pageHeight - 15,
+      { align: "center", maxWidth: pageWidth - 30 }
+    );
+    doc.text(
+      "Consulte sempre um especialista em crédito habitação para informações precisas.",
+      pageWidth / 2,
+      pageHeight - 10,
+      { align: "center" }
+    );
+
+    // Save PDF
+    doc.save(`Simulacao_Financiamento_${new Date().toISOString().split("T")[0]}.pdf`);
   };
 
   const formatCurrency = (value: number) => {
@@ -118,7 +320,7 @@ export default function FinancingPage() {
           {result && (
             <Button onClick={handleExport} className="gap-2">
               <Download className="h-4 w-4" />
-              Exportar Simulação
+              Exportar PDF
             </Button>
           )}
         </div>
