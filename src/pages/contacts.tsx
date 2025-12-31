@@ -263,6 +263,12 @@ export default function ContactsPage() {
 
       setInteractionDialogOpen(false);
       setSelectedContact(null);
+      
+      // Refresh interactions list if details dialog is open
+      if (detailsDialogOpen) {
+        const interactions = await getInteractionsByContact(selectedContact.id);
+        setContactInteractions(interactions);
+      }
     } catch (error: any) {
       console.error("Error creating interaction:", error);
       toast({
