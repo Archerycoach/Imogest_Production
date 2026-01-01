@@ -88,6 +88,13 @@ export function GoogleCalendarConnect({
     // Validate environment variables
     const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
     
+    console.log("🔍 [GoogleCalendarConnect] Client ID from env:", clientId);
+    console.log("🔍 [GoogleCalendarConnect] Full env check:", {
+      hasClientId: !!clientId,
+      clientIdLength: clientId?.length,
+      clientIdFirst50: clientId?.substring(0, 50)
+    });
+    
     if (!clientId) {
       setError("Configuração OAuth incompleta. Variável NEXT_PUBLIC_GOOGLE_CLIENT_ID não está definida.");
       return;

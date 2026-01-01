@@ -32,11 +32,7 @@ export const getLeads = async () => {
     `)
     .order("created_at", { ascending: false });
 
-  if (error) {
-    console.error("[LeadsService] Error in getLeads:", error);
-    return [];
-  }
-
+  if (error) throw error;
   return (data as unknown) as Lead[];
 };
 
@@ -45,28 +41,22 @@ export const getAllLeads = getLeads;
 
 // Get single lead with full details
 export const getLead = async (id: string): Promise<LeadWithDetails | null> => {
-  try {
-    const { data, error } = await supabase
-      .from("leads")
-      .select(`
+  const { data, error } = await supabase
+    .from("leads")
+    .select(`
+      *,
+      assigned_user:profiles!leads_assigned_to_fkey(id, full_name, email),
+      property:properties(id, title, address),
+      interactions(
         *,
-        assigned_user:profiles!leads_assigned_to_fkey(id, full_name, email),
-        property:properties(id, title, address),
-        interactions(
-          *,
-          user:profiles!interactions_created_by_fkey(id, full_name, email)
-        )
-      `)
-      .eq("id", id)
-      .single();
+        user:profiles!interactions_created_by_fkey(id, full_name, email)
+      )
+    `)
+    .eq("id", id)
+    .single();
 
-    if (error) throw error;
-
-    return data as LeadWithDetails;
-  } catch (error: any) {
-    console.error("[LeadsService] Error in getLead:", error);
-    throw error;
-  }
+  if (error) throw error;
+  return data as LeadWithDetails;
 };
 
 // Create new lead
@@ -107,64 +97,47 @@ export const updateLead = async (id: string, updates: LeadUpdate) => {
 
 // Delete lead
 export const deleteLead = async (id: string): Promise<void> => {
-  try {
-    const { error } = await supabase
-      .from("leads")
-      .delete()
-      .eq("id", id);
+  const { error } = await supabase
+    .from("leads")
+    .delete()
+    .eq("id", id);
 
-    if (error) throw error;
-  } catch (error: any) {
-    console.error("[LeadsService] Error in deleteLead:", error);
-    throw error;
-  }
+  if (error) throw error;
 };
 
 // Add interaction to lead
 export const addLeadInteraction = async (
   interaction: InteractionInsert
 ): Promise<Interaction> => {
-  try {
-    const { data, error } = await supabase
-      .from("interactions")
-      .insert(interaction)
-      .select()
-      .single();
+  const { data, error } = await supabase
+    .from("interactions")
+    .insert(interaction)
+    .select()
+    .single();
 
-    if (error) throw error;
+  if (error) throw error;
 
-    // Update last_contact_date on the lead
-    await supabase
-      .from("leads")
-      .update({ last_contact_date: new Date().toISOString() })
-      .eq("id", interaction.lead_id);
+  await supabase
+    .from("leads")
+    .update({ last_contact_date: new Date().toISOString() })
+    .eq("id", interaction.lead_id);
 
-    return data;
-  } catch (error: any) {
-    console.error("[LeadsService] Error in addLeadInteraction:", error);
-    throw error;
-  }
+  return data;
 };
 
 // Get lead interactions
 export const getLeadInteractions = async (leadId: string): Promise<Interaction[]> => {
-  try {
-    const { data, error } = await supabase
-      .from("interactions")
-      .select(`
-        *,
-        user:profiles!interactions_created_by_fkey(id, full_name, email)
-      `)
-      .eq("lead_id", leadId)
-      .order("created_at", { ascending: false });
+  const { data, error } = await supabase
+    .from("interactions")
+    .select(`
+      *,
+      user:profiles!interactions_created_by_fkey(id, full_name, email)
+    `)
+    .eq("lead_id", leadId)
+    .order("created_at", { ascending: false });
 
-    if (error) throw error;
-
-    return data || [];
-  } catch (error: any) {
-    console.error("[LeadsService] Error in getLeadInteractions:", error);
-    throw error;
-  }
+  if (error) throw error;
+  return data || [];
 };
 
 // Get pipeline stages
@@ -184,35 +157,27 @@ export const getPipelineStages = async () => {
 export const updateLeadStatus = async (id: string, status: string) => {
   const { data, error } = await supabase
     .from("leads")
-    .update({ status: status as any }) // Cast to any to bypass strict enum check if string comes from UI
+    .update({ status: status as any })
     .eq("id", id)
     .select()
     .single();
 
-  if (error) {
-    console.error("[LeadsService] Error updating lead status:", error);
-    throw error;
-  }
+  if (error) throw error;
   return data;
 };
 
 // Get leads by stage (for pipeline view)
 export const getLeadsByStage = async (): Promise<Record<string, LeadWithDetails[]>> => {
-  try {
-    const leads = await getLeads();
-    const stages = await getPipelineStages();
+  const leads = await getLeads();
+  const stages = await getPipelineStages();
 
-    const leadsByStage: Record<string, LeadWithDetails[]> = {};
+  const leadsByStage: Record<string, LeadWithDetails[]> = {};
 
-    stages.forEach(stage => {
-      leadsByStage[stage.name] = leads.filter(lead => lead.status === stage.name.toLowerCase().replace(/\s+/g, '_'));
-    });
+  stages.forEach(stage => {
+    leadsByStage[stage.name] = leads.filter(lead => lead.status === stage.name.toLowerCase().replace(/\s+/g, '_'));
+  });
 
-    return leadsByStage;
-  } catch (error: any) {
-    console.error("[LeadsService] Error in getLeadsByStage:", error);
-    throw error;
-  }
+  return leadsByStage;
 };
 
 // Get lead statistics
@@ -221,10 +186,7 @@ export const getLeadStats = async () => {
     .from("leads")
     .select("status, lead_type"); 
 
-  if (error) {
-    console.error("[LeadsService] Error in getLeadStats:", error);
-    throw error;
-  }
+  if (error) throw error;
 
   const stats = {
     total: data.length,
@@ -234,7 +196,7 @@ export const getLeadStats = async () => {
     proposal: data.filter(l => l.status === "proposal").length,
     won: data.filter(l => l.status === "won").length,
     lost: data.filter(l => l.status === "lost").length,
-    negotiation: data.filter(l => l.status === "negotiation").length, // Added negotiation
+    negotiation: data.filter(l => l.status === "negotiation").length,
     buyers: data.filter(l => l.lead_type === "buyer" || l.lead_type === "both").length,
     sellers: data.filter(l => l.lead_type === "seller" || l.lead_type === "both").length,
     conversionRate: data.length > 0 
@@ -247,15 +209,10 @@ export const getLeadStats = async () => {
 
 // Assign lead to user
 export const assignLead = async (leadId: string, userId: string): Promise<void> => {
-  try {
-    const { error } = await supabase
-      .from("leads")
-      .update({ assigned_to: userId } as any)
-      .eq("id", leadId);
+  const { error } = await supabase
+    .from("leads")
+    .update({ assigned_to: userId } as any)
+    .eq("id", leadId);
 
-    if (error) throw error;
-  } catch (error: any) {
-    console.error("[LeadsService] Error in assignLead:", error);
-    throw error;
-  }
+  if (error) throw error;
 };

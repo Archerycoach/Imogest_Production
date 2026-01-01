@@ -11,11 +11,7 @@ export const getContacts = async (): Promise<Contact[]> => {
     .select("*")
     .order("created_at", { ascending: false });
 
-  if (error) {
-    console.error("Error fetching contacts:", error);
-    return [];
-  }
-  
+  if (error) throw error;
   return data || [];
 };
 
@@ -28,11 +24,7 @@ export const searchContacts = async (query: string): Promise<Contact[]> => {
     .or(`name.ilike.%${query}%,email.ilike.%${query}%,phone.ilike.%${query}%`)
     .order("created_at", { ascending: false });
 
-  if (error) {
-    console.error("Error searching contacts:", error);
-    return [];
-  }
-
+  if (error) throw error;
   return data || [];
 };
 
@@ -141,12 +133,8 @@ export const getUpcomingBirthdays = async (): Promise<Contact[]> => {
     .not("birth_date", "is", null)
     .order("birth_date", { ascending: true });
 
-  if (error) {
-    console.error("Error fetching birthdays:", error);
-    return [];
-  }
+  if (error) throw error;
 
-  // Filter birthdays in the next 30 days (considering year-agnostic dates)
   const filtered = (data || []).filter(contact => {
     if (!contact.birth_date) return false;
     

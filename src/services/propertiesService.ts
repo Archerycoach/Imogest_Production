@@ -24,52 +24,41 @@ export type PropertyWithDetails = Property & {
   } | null;
 };
 
+export interface PropertyMatch {
+  id: string;
+  property_id: string;
+  lead_id: string;
+  match_score: number;
+  created_at: string;
+  lead?: {
+    id: string;
+    name: string;
+    email: string | null;
+    phone: string | null;
+    status: string;
+  };
+}
+
 // Get all properties for current user
-export const getProperties = async (filters?: PropertyFilters) => {
-  let query = (supabase as any)
+export const getProperties = async (): Promise<Property[]> => {
+  const { data, error } = await supabase
     .from("properties")
-    .select(`
-      *,
-      agent:profiles!properties_user_id_fkey (
-        full_name,
-        email,
-        phone,
-        avatar_url
-      )
-    `)
+    .select("*")
     .order("created_at", { ascending: false });
 
-  if (filters?.status) {
-    query = query.eq("status", filters.status);
-  }
-
-  if (filters?.property_type) {
-    query = query.eq("property_type", filters.property_type);
-  }
-
-  const { data, error } = await query;
-
-  if (error) {
-    console.error("Error fetching properties:", error);
-    return [];
-  }
-
-  return (data as unknown) as PropertyWithDetails[];
+  if (error) throw error;
+  return data || [];
 };
 
 // Get single property by ID
 export const getProperty = async (id: string): Promise<Property | null> => {
-  const { data, error } = await (supabase as any)
+  const { data, error } = await supabase
     .from("properties")
     .select("*")
     .eq("id", id)
     .single();
 
-  if (error) {
-    console.error("Error fetching property:", error);
-    return null;
-  }
-
+  if (error) throw error;
   return data;
 };
 
@@ -108,7 +97,7 @@ export const updateProperty = async (id: string, updates: PropertyUpdate) => {
 
 // Delete property
 export const deleteProperty = async (id: string): Promise<void> => {
-  const { error } = await (supabase as any)
+  const { error } = await supabase
     .from("properties")
     .delete()
     .eq("id", id);
@@ -124,11 +113,7 @@ export const searchProperties = async (query: string): Promise<Property[]> => {
     .or(`title.ilike.%${query}%,address.ilike.%${query}%,city.ilike.%${query}%`)
     .order("created_at", { ascending: false });
 
-  if (error) {
-    console.error("Error searching properties:", error);
-    return [];
-  }
-
+  if (error) throw error;
   return data || [];
 };
 
@@ -140,11 +125,7 @@ export const getPropertiesByStatus = async (status: string): Promise<Property[]>
     .eq("status", status)
     .order("created_at", { ascending: false });
 
-  if (error) {
-    console.error("Error fetching properties by status:", error);
-    return [];
-  }
-
+  if (error) throw error;
   return data || [];
 };
 
@@ -156,11 +137,7 @@ export const getPropertiesByType = async (type: string): Promise<Property[]> => 
     .eq("type", type)
     .order("created_at", { ascending: false });
 
-  if (error) {
-    console.error("Error fetching properties by type:", error);
-    return [];
-  }
-
+  if (error) throw error;
   return data || [];
 };
 
@@ -184,4 +161,24 @@ export const uploadPropertyImage = async (file: File, propertyId: string): Promi
     .getPublicUrl(filePath);
 
   return publicUrl;
+};
+
+export const getPropertyMatches = async (propertyId: string): Promise<PropertyMatch[]> => {
+  const { data, error } = await supabase
+    .from("property_matches")
+    .select(`
+      *,
+      lead:leads!property_matches_lead_id_fkey(
+        id,
+        name,
+        email,
+        phone,
+        status
+      )
+    `)
+    .eq("property_id", propertyId)
+    .order("match_score", { ascending: false });
+
+  if (error) throw error;
+  return data || [];
 };

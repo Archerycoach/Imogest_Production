@@ -5,32 +5,8 @@ import type { Database } from './types';
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 
-// Better error handling for missing environment variables
 if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
-  // During build time, just log a warning instead of throwing
-  if (typeof window === 'undefined' && process.env.NODE_ENV === 'production') {
-    console.error(
-      '⚠️  Missing Supabase environment variables during build.\n' +
-      '   Please configure the following in Vercel:\n' +
-      '   - NEXT_PUBLIC_SUPABASE_URL\n' +
-      '   - NEXT_PUBLIC_SUPABASE_ANON_KEY\n' +
-      '\n' +
-      '   See VERCEL_DEPLOYMENT_GUIDE.md for detailed instructions.'
-    );
-  }
-  
-  // Only throw error at runtime on the client
-  if (typeof window !== 'undefined') {
-    throw new Error(
-      "Missing Supabase environment variables. Please check your .env.local file or Vercel environment variables."
-    );
-  }
+  console.error("❌ Supabase credentials missing! Check .env.local file.");
 }
 
-// Import the supabase client like this:
-// import { supabase } from "@/integrations/supabase/client";
-
-export const supabase = createClient<Database>(
-  SUPABASE_URL || 'https://placeholder.supabase.co',
-  SUPABASE_PUBLISHABLE_KEY || 'placeholder-key'
-);
+export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);

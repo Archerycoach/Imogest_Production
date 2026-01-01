@@ -40,6 +40,9 @@ CREATE TABLE IF NOT EXISTS contacts (
   position TEXT,
   notes TEXT,
   tags TEXT[],
+  lead_source_id UUID,
+  auto_message_config JSONB DEFAULT '{}'::jsonb,
+  birth_date DATE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -170,6 +173,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   -- Task info
   title TEXT NOT NULL,
   description TEXT,
+  notes TEXT,
   status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed', 'cancelled')),
   priority TEXT DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
   
@@ -321,6 +325,7 @@ CREATE TABLE IF NOT EXISTS notifications (
   -- Notification info
   title TEXT NOT NULL,
   message TEXT,
+  data JSONB DEFAULT '{}'::jsonb,
   notification_type TEXT DEFAULT 'info' CHECK (notification_type IN ('info', 'success', 'warning', 'error')),
   
   -- Status

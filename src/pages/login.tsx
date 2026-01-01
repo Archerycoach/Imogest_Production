@@ -6,12 +6,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Building2, Mail, Lock, Loader2 } from "lucide-react";
-import { signInWithEmail, signUpWithEmail, signInWithGoogle, getCurrentUser } from "@/services/authService";
+import { signInWithEmail, signUpWithEmail, getCurrentUser } from "@/services/authService";
 import { supabase } from "@/integrations/supabase/client";
 import Link from "next/link";
 import { ThemeSwitch } from "@/components/ThemeSwitch";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Login() {
+  const { toast } = useToast();
   const [isLogin, setIsLogin] = useState(true);
   const [activeTab, setActiveTab] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
@@ -51,19 +53,23 @@ export default function Login() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
     setLoading(true);
-
+    
     try {
-      const { error } = await signInWithEmail(loginEmail, loginPassword);
-      
-      if (error) {
-        setError(error.message);
-      } else {
-        router.push("/dashboard");
-      }
-    } catch (err: any) {
-      setError(err.message || "Erro ao fazer login");
+      await signInWithEmail(loginEmail, loginPassword);
+      // Success - redirect is handled by auth state listener or automatically
+      toast({
+        title: "Login efetuado com sucesso",
+        description: "Bem-vindo de volta!",
+      });
+      router.push("/");
+    } catch (error: any) {
+      console.error("Login error:", error);
+      toast({
+        title: "Erro no login",
+        description: error.message || "Email ou palavra-passe incorretos",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -75,41 +81,28 @@ export default function Login() {
     setError("");
 
     console.log("🔵 [Login] Starting registration process...");
-    console.log("🔵 [Login] Form data:", {
-      email: signupEmail,
-      name: signupName,
-      passwordLength: signupPassword.length
-    });
-
+    
     // Validation
     if (!signupName || !signupEmail || !signupPassword) {
-      console.log("❌ [Login] Form validation failed: missing fields");
       setError("Por favor, preencha todos os campos");
       setLoading(false);
       return;
     }
 
     if (signupPassword !== signupConfirmPassword) {
-      console.log("❌ [Login] Form validation failed: passwords don't match");
       setError("As palavras-passe não coincidem");
       setLoading(false);
       return;
     }
 
     if (signupPassword.length < 6) {
-      console.log("❌ [Login] Form validation failed: password too short");
       setError("A palavra-passe deve ter pelo menos 6 caracteres");
       setLoading(false);
       return;
     }
 
-    console.log("✅ [Login] Form validation passed");
-
     try {
-      console.log("🔵 [Login] Calling signUpWithEmail...");
       await signUpWithEmail(signupEmail, signupPassword, signupName);
-      
-      console.log("✅ [Login] Account created successfully");
       
       // Clear signup form
       setSignupName("");
@@ -128,16 +121,13 @@ export default function Login() {
       setLoginEmail(signupEmail);
       setLoginPassword("");
       
-      // Show success notification
-      alert("✅ Conta criada com sucesso! Por favor, faça login para continuar.");
+      setSuccess("Conta criada com sucesso! Por favor, faça login para continuar.");
       
-      console.log("🔵 [Login] Switched to login tab, user must login manually");
     } catch (error: any) {
       console.error("❌ [Login] Registration error:", error);
       setError(error.message || "Erro ao criar conta");
     } finally {
       setLoading(false);
-      console.log("🔵 [Login] Registration process completed");
     }
   };
 
@@ -315,11 +305,6 @@ export default function Login() {
                     "Criar Conta"
                   )}
                 </Button>
-
-                {/* Google OAuth - Temporarily disabled until configured in Supabase
-                <div className="relative my-4">
-                </div>
-                */}
               </form>
             </TabsContent>
           </Tabs>

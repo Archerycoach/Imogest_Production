@@ -187,8 +187,8 @@ export default function TeamWorkflowsPage() {
 
   const loadMyExecutions = async (uid: string) => {
     try {
-      const { data, error } = await supabase
-        .from("workflow_executions")
+      // Cast to any to avoid "Type instantiation is excessively deep" error with complex joins
+      const { data, error } = await (supabase.from("workflow_executions") as any)
         .select(`
           id,
           workflow_id,
@@ -204,15 +204,16 @@ export default function TeamWorkflowsPage() {
 
       if (error) throw error;
 
-      const executions = data?.map(e => ({
+      // Map the results
+      const executions: WorkflowExecution[] = (data || []).map((e: any) => ({
         id: e.id,
         workflow_id: e.workflow_id,
-        workflow_name: (e as any).lead_workflow_rules?.name || "Workflow",
+        workflow_name: e.lead_workflow_rules?.name || "Workflow",
         lead_id: e.lead_id,
-        lead_name: (e as any).leads?.name || "Lead",
+        lead_name: e.leads?.name || "Lead",
         status: e.status as "pending" | "completed" | "failed",
         executed_at: e.executed_at || ""
-      })) || [];
+      }));
 
       setMyExecutions(executions);
     } catch (error) {
