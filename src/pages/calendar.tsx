@@ -79,9 +79,29 @@ export default function Calendar() {
 
   const checkGoogleConnection = async () => {
     try {
+      console.log("🔍 Checking Google Calendar connection...");
       const credentials = await getGoogleCredentials();
-      setGoogleConnected(!!credentials);
+      const isConnected = !!credentials;
+      
+      console.log("Google Calendar connection status:", {
+        connected: isConnected,
+        hasCredentials: !!credentials,
+        details: credentials ? {
+          hasAccessToken: !!credentials.accessToken,
+          hasRefreshToken: !!credentials.refreshToken,
+          expiresAt: credentials.expiresAt
+        } : null
+      });
+      
+      setGoogleConnected(isConnected);
+      
+      if (isConnected) {
+        console.log("✅ Google Calendar is connected and ready");
+      } else {
+        console.log("❌ Google Calendar is not connected");
+      }
     } catch (error) {
+      console.error("Error checking Google Calendar connection:", error);
       setGoogleConnected(false);
     }
   };

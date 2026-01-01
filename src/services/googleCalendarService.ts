@@ -6,34 +6,61 @@ type CalendarEventInsert = Database["public"]["Tables"]["calendar_events"]["Inse
 
 // Helper to get Google Calendar credentials from user_integrations
 export const getGoogleCredentials = async () => {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      console.log("No authenticated user");
+      return null;
+    }
 
-  const { data, error } = await supabase
-    .from("user_integrations")
-    .select("*")
-    .eq("user_id", user.id)
-    .eq("integration_type", "google_calendar")
-    .eq("is_active", true)
-    .maybeSingle();
+    console.log("Checking Google Calendar credentials for user:", user.id);
 
-  if (error || !data) return null;
+    const { data, error } = await supabase
+      .from("user_integrations")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("integration_type", "google_calendar")
+      .eq("is_active", true)
+      .maybeSingle();
 
-  // Check if token is expired
-  const expiresAt = new Date(data.token_expiry);
-  const now = new Date();
-  
-  if (expiresAt <= now) {
-    // Token expired, need to refresh
-    console.log("Google Calendar token expired, needs refresh");
+    if (error) {
+      console.error("Error fetching Google Calendar credentials:", error);
+      return null;
+    }
+
+    if (!data) {
+      console.log("No active Google Calendar integration found");
+      return null;
+    }
+
+    console.log("Google Calendar integration found:", {
+      id: data.id,
+      has_access_token: !!data.access_token,
+      has_refresh_token: !!data.refresh_token,
+      token_expiry: data.token_expiry,
+      is_active: data.is_active
+    });
+
+    // Check if token is expired
+    const expiresAt = new Date(data.token_expiry);
+    const now = new Date();
+    
+    if (expiresAt <= now) {
+      console.log("⚠️ Google Calendar token expired, needs refresh");
+      return null;
+    }
+
+    console.log("✅ Google Calendar credentials valid");
+
+    return {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      expiresAt: data.token_expiry,
+    };
+  } catch (error) {
+    console.error("Exception in getGoogleCredentials:", error);
     return null;
   }
-
-  return {
-    accessToken: data.access_token,
-    refreshToken: data.refresh_token,
-    expiresAt: data.token_expiry,
-  };
 };
 
 // Store Google Calendar credentials in user_integrations
