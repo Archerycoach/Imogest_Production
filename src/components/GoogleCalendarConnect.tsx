@@ -31,8 +31,10 @@ export function GoogleCalendarConnect({
       return;
     }
     
-    // Redirect to auth endpoint
-    window.location.href = "/api/google-calendar/auth";
+    // Use window.location.assign for smoother navigation that preserves cookies
+    // This is better than window.location.href as it maintains session state
+    console.log("🚀 Redirecting to Google OAuth with session preservation...");
+    window.location.assign("/api/google-calendar/auth");
   };
 
   const handleDisconnect = async () => {

@@ -7,29 +7,38 @@ export default async function handler(
   res: NextApiResponse
 ) {
   try {
-    // Get authenticated user
+    console.log("=== Google Calendar Auth Endpoint Started ===");
+    console.log("Request headers:", {
+      cookie: req.headers.cookie ? "Present" : "Missing",
+      userAgent: req.headers["user-agent"],
+      referer: req.headers.referer,
+    });
+
+    // Get authenticated user from cookies
     const authHeader = req.headers.cookie || "";
+    console.log("Extracting access token from cookies...");
     const accessToken = extractAccessTokenFromCookie(authHeader);
     
     if (!accessToken) {
-      console.error("No access token found in cookies");
+      console.error("❌ No access token found in cookies");
       return res.redirect("/login?redirect=/admin/integrations&error=not_authenticated");
     }
 
+    console.log("✅ Access token found, validating user...");
     const { data: { user }, error: userError } = await supabase.auth.getUser(accessToken);
     
     if (userError || !user) {
-      console.error("Failed to get user:", userError?.message);
+      console.error("❌ Failed to get user:", userError?.message);
       return res.redirect("/login?redirect=/admin/integrations&error=not_authenticated");
     }
 
-    console.log("User authenticated for OAuth:", user.id);
+    console.log("✅ User authenticated for OAuth:", user.id);
 
     const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
 
     if (!clientId || !clientSecret) {
-      console.error("Missing Google OAuth credentials");
+      console.error("❌ Missing Google OAuth credentials");
       return res.redirect("/admin/integrations?google_calendar=error&reason=missing_credentials");
     }
 
@@ -38,6 +47,13 @@ export default async function handler(
     const isLocalhost = host.includes("localhost") || host.includes("127.0.0.1");
     const protocol = isLocalhost ? "http" : "https";
     const redirectUri = `${protocol}://${host}/api/google-calendar/callback`;
+
+    console.log("OAuth configuration:", {
+      host,
+      protocol,
+      redirectUri,
+      clientIdLength: clientId.length,
+    });
 
     const oauth2Client = new google.auth.OAuth2(
       clientId,
@@ -60,17 +76,27 @@ export default async function handler(
       state, // Pass user_id in state
     });
 
-    console.log("Redirecting to Google OAuth with user_id in state");
+    console.log("✅ Redirecting to Google OAuth with user_id in state");
+    console.log("=== Auth Endpoint Completed Successfully ===");
+    
+    // Set SameSite=None for cross-site OAuth flow
+    res.setHeader("Set-Cookie", [
+      `oauth_initiated=true; Path=/; HttpOnly; SameSite=None; Secure; Max-Age=300`,
+    ]);
+    
     res.redirect(authUrl);
   } catch (error: any) {
-    console.error("Error in Google Calendar auth:", error);
+    console.error("=== Auth Endpoint Error ===", error);
     res.redirect("/admin/integrations?google_calendar=error&reason=unknown");
   }
 }
 
 function extractAccessTokenFromCookie(cookieHeader: string): string | null {
   try {
-    if (!cookieHeader) return null;
+    if (!cookieHeader) {
+      console.log("No cookie header present");
+      return null;
+    }
 
     const cookies = cookieHeader.split(";").reduce((acc, cookie) => {
       const [key, value] = cookie.trim().split("=");
@@ -80,15 +106,22 @@ function extractAccessTokenFromCookie(cookieHeader: string): string | null {
       return acc;
     }, {} as Record<string, string>);
 
+    console.log("Cookies found:", Object.keys(cookies));
+
     const authCookieKey = Object.keys(cookies).find(key => 
       key.startsWith("sb-") && key.endsWith("-auth-token")
     );
 
-    if (!authCookieKey) return null;
+    if (!authCookieKey) {
+      console.log("No Supabase auth cookie found");
+      return null;
+    }
 
+    console.log("Found auth cookie:", authCookieKey);
     const authData = JSON.parse(decodeURIComponent(cookies[authCookieKey]));
     return authData.access_token || null;
   } catch (error) {
+    console.error("Error extracting access token from cookie:", error);
     return null;
   }
 }
