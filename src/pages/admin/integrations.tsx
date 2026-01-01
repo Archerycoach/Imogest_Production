@@ -75,8 +75,10 @@ export default function Integrations() {
       });
       // Clean URL
       window.history.replaceState({}, "", "/admin/integrations");
-      // Reload connection status
-      checkGoogleCalendarConnection();
+      // Force reload connection status after a short delay
+      setTimeout(() => {
+        checkGoogleCalendarConnection();
+      }, 1000);
     } else if (gcStatus === "error") {
       const reason = params.get("reason") || "unknown";
       toast({
@@ -90,13 +92,17 @@ export default function Integrations() {
 
   const checkGoogleCalendarConnection = async () => {
     try {
+      console.log("Checking Google Calendar connection status...");
       setCheckingGoogleCalendar(true);
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
+        console.log("No user authenticated");
         setGoogleCalendarConnected(false);
         return;
       }
+
+      console.log("Querying user_integrations for user:", user.id);
 
       const { data, error } = await supabase
         .from("user_integrations")
@@ -106,9 +112,24 @@ export default function Integrations() {
         .eq("is_active", true)
         .maybeSingle();
 
-      if (error) throw error;
+      if (error) {
+        console.error("Error checking Google Calendar connection:", error);
+        throw error;
+      }
       
-      setGoogleCalendarConnected(!!data);
+      const isConnected = !!data;
+      console.log("Google Calendar connected:", isConnected);
+      if (data) {
+        console.log("Connection details:", {
+          id: data.id,
+          created_at: data.created_at,
+          token_expiry: data.token_expiry,
+          has_access_token: !!data.access_token,
+          has_refresh_token: !!data.refresh_token,
+        });
+      }
+      
+      setGoogleCalendarConnected(isConnected);
     } catch (error: any) {
       console.error("Error checking Google Calendar connection:", error);
       setGoogleCalendarConnected(false);
@@ -147,7 +168,12 @@ export default function Integrations() {
   const loadIntegrations = async () => {
     try {
       setLoading(true);
+      console.log("=== LOADING INTEGRATIONS ===");
       const data = await getAllIntegrations();
+      console.log("Integrations loaded from database:", data);
+      console.log("Total integrations:", data.length);
+      console.log("Integration names:", data.map(i => i.integration_name));
+      
       setIntegrations(data);
 
       // Initialize form data
@@ -156,7 +182,9 @@ export default function Integrations() {
         initialFormData[integration.integration_name] = integration.settings;
       });
       setFormData(initialFormData);
+      console.log("=== INTEGRATIONS LOADED SUCCESSFULLY ===");
     } catch (error: any) {
+      console.error("=== ERROR LOADING INTEGRATIONS ===", error);
       toast({
         title: "Erro ao carregar integrações",
         description: error.message,
@@ -298,7 +326,86 @@ export default function Integrations() {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-6">
+            {/* OAuth Configuration Fields */}
+            <div className="space-y-4 p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-2 mb-3">
+                <AlertCircle className="h-4 w-4 text-blue-500" />
+                <h4 className="font-medium text-sm">Configuração OAuth (Opcional)</h4>
+              </div>
+              
+              {config.fields.map((field) => {
+                const fieldId = `${config.name}-${field.key}`;
+                const isPassword = field.type === "password";
+                const showPassword = showPasswords[fieldId];
+
+                return (
+                  <div key={field.key} className="space-y-2">
+                    <Label htmlFor={fieldId} className="text-sm">
+                      {field.label}
+                      {field.required && <span className="text-red-500 ml-1">*</span>}
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id={fieldId}
+                        type={isPassword && !showPassword ? "password" : "text"}
+                        placeholder={field.placeholder}
+                        value={formData[config.name]?.[field.key] || ""}
+                        onChange={(e) => handleInputChange(config.name, field.key, e.target.value)}
+                        className="pr-10"
+                      />
+                      {isPassword && (
+                        <button
+                          type="button"
+                          onClick={() => togglePasswordVisibility(fieldId)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                        >
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      )}
+                    </div>
+                    {field.helpText && (
+                      <p className="text-xs text-gray-500">{field.helpText}</p>
+                    )}
+                  </div>
+                );
+              })}
+
+              <Alert className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+                <AlertCircle className="h-4 w-4 text-blue-500" />
+                <AlertDescription className="text-xs">
+                  <strong>Nota:</strong> Estas credenciais são opcionais. Se deixares em branco, 
+                  o sistema usará as credenciais configuradas no ficheiro <code>.env.local</code>. 
+                  Só preenche se quiseres usar credenciais diferentes das padrão.
+                </AlertDescription>
+              </Alert>
+
+              <div className="flex items-center gap-2 pt-2">
+                <Button
+                  onClick={() => handleSave(config.name)}
+                  disabled={isSaving || !hasChanges}
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                >
+                  {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  Guardar Credenciais
+                </Button>
+                {config.testEndpoint && (
+                  <Button
+                    onClick={() => handleTest(config.name)}
+                    disabled={isTesting}
+                    variant="outline"
+                    size="sm"
+                  >
+                    {isTesting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    Testar
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Connection Status Alert */}
             <Alert>
               <Calendar className="h-4 w-4" />
               <AlertDescription>
@@ -308,7 +415,8 @@ export default function Integrations() {
               </AlertDescription>
             </Alert>
 
-            <div className="flex items-center gap-2 pt-4">
+            {/* OAuth Connection Buttons */}
+            <div className="flex items-center gap-2 pt-2">
               {googleCalendarConnected ? (
                 <Button
                   onClick={handleDisconnectGoogleCalendar}
@@ -480,6 +588,24 @@ export default function Integrations() {
     ["google_calendar", "google_maps", "firebase"].includes(i.integration_name)
   );
 
+  console.log("=== FILTERED INTEGRATIONS ===");
+  console.log("Payment:", paymentIntegrations.map(i => i.integration_name));
+  console.log("Communication:", communicationIntegrations.map(i => i.integration_name));
+  console.log("Tools:", toolsIntegrations.map(i => i.integration_name));
+  console.log("Google Calendar in tools?", toolsIntegrations.some(i => i.integration_name === "google_calendar"));
+
+  // Find Google Calendar integration explicitly
+  const googleCalendarIntegration = integrations.find(i => i.integration_name === "google_calendar");
+  console.log("=== GOOGLE CALENDAR EXPLICIT CHECK ===");
+  console.log("Found Google Calendar integration:", !!googleCalendarIntegration);
+  if (googleCalendarIntegration) {
+    console.log("Google Calendar data:", {
+      id: googleCalendarIntegration.id,
+      is_active: googleCalendarIntegration.is_active,
+      test_status: googleCalendarIntegration.test_status
+    });
+  }
+
   return (
     <Layout>
       <div className="space-y-6">
@@ -528,10 +654,19 @@ export default function Integrations() {
           </TabsContent>
 
           <TabsContent value="tools" className="space-y-6">
-            {toolsIntegrations.map((integration) => {
-              const config = INTEGRATIONS[integration.integration_name];
-              return config ? renderIntegrationCard(config, integration) : null;
-            })}
+            {/* Google Calendar - Always render with special component */}
+            {googleCalendarIntegration && (() => {
+              const config = INTEGRATIONS["google_calendar"];
+              return config ? renderIntegrationCard(config, googleCalendarIntegration) : null;
+            })()}
+            
+            {/* Other tools integrations */}
+            {toolsIntegrations
+              .filter(integration => integration.integration_name !== "google_calendar")
+              .map((integration) => {
+                const config = INTEGRATIONS[integration.integration_name];
+                return config ? renderIntegrationCard(config, integration) : null;
+              })}
           </TabsContent>
         </Tabs>
       </div>

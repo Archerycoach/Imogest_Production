@@ -39,21 +39,36 @@ export const getGoogleCredentials = async () => {
 // Store Google Calendar credentials in user_integrations
 export const storeGoogleCredentials = async (
   accessToken: string,
-  refreshToken: string,
+  refreshToken: string | null,
   expiresAt: string
 ) => {
+  console.log("=== storeGoogleCredentials called ===");
+  
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
+  if (!user) {
+    console.error("No user authenticated");
+    throw new Error("Not authenticated");
+  }
+
+  console.log("Storing credentials for user:", user.id);
+  console.log("Token expiry:", expiresAt);
+  console.log("Has refresh token:", !!refreshToken);
 
   // Check if integration already exists
-  const { data: existing } = await supabase
+  const { data: existing, error: checkError } = await supabase
     .from("user_integrations")
     .select("id")
     .eq("user_id", user.id)
     .eq("integration_type", "google_calendar")
-    .single();
+    .maybeSingle();
+
+  if (checkError) {
+    console.error("Error checking existing integration:", checkError);
+    throw checkError;
+  }
 
   if (existing) {
+    console.log("Updating existing integration:", existing.id);
     // Update existing
     const { error } = await supabase
       .from("user_integrations")
@@ -66,8 +81,13 @@ export const storeGoogleCredentials = async (
       })
       .eq("id", existing.id);
 
-    if (error) throw error;
+    if (error) {
+      console.error("Error updating integration:", error);
+      throw error;
+    }
+    console.log("Integration updated successfully");
   } else {
+    console.log("Creating new integration");
     // Create new
     const { error } = await supabase
       .from("user_integrations")
@@ -80,8 +100,14 @@ export const storeGoogleCredentials = async (
         is_active: true,
       });
 
-    if (error) throw error;
+    if (error) {
+      console.error("Error creating integration:", error);
+      throw error;
+    }
+    console.log("Integration created successfully");
   }
+
+  console.log("=== storeGoogleCredentials completed ===");
 };
 
 // Remove Google Calendar credentials
