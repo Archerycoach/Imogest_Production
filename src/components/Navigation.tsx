@@ -25,6 +25,7 @@ import {
   FileSpreadsheet,
   Zap,
   Plug,
+  Mail,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -127,6 +128,7 @@ export function Navigation() {
     { icon: Calendar, label: "Agenda", path: "/calendar", section: "main" },
     { icon: CheckSquare, label: "Tarefas", path: "/tasks", section: "main" },
     { icon: MessageSquare, label: "Interações", path: "/interactions", section: "main" },
+    { icon: Mail, label: "Mensagens em Massa", path: "/bulk-messages", section: "main" },
     { icon: FileText, label: "Templates", path: "/templates", section: "main" },
     { icon: BarChart3, label: "Relatórios", path: "/reports", section: "main" },
   ];

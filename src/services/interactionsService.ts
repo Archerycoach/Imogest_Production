@@ -1,9 +1,9 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 
-type Interaction = Database["public"]["Tables"]["interactions"]["Row"];
-type InteractionInsert = Database["public"]["Tables"]["interactions"]["Insert"];
-type InteractionUpdate = Database["public"]["Tables"]["interactions"]["Update"];
+export type Interaction = Database["public"]["Tables"]["interactions"]["Row"];
+export type InteractionInsert = Database["public"]["Tables"]["interactions"]["Insert"];
+export type InteractionUpdate = Database["public"]["Tables"]["interactions"]["Update"];
 
 export interface InteractionWithDetails extends Interaction {
   lead?: {

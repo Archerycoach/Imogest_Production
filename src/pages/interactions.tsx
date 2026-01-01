@@ -8,11 +8,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Phone, Mail, MessageSquare, Calendar, FileText, User, Video } from "lucide-react";
-import { getInteractions, createInteraction, type InteractionWithDetails } from "@/services/interactionsService";
+import { Plus, Search, Phone, Mail, MessageSquare, Calendar, FileText, User, Video, Edit, Trash2 } from "lucide-react";
+import { getInteractions, createInteraction, deleteInteraction, type InteractionWithDetails } from "@/services/interactionsService";
 import { getLeads, type LeadWithContacts } from "@/services/leadsService";
 import { getContacts } from "@/services/contactsService";
 import { useToast } from "@/hooks/use-toast";
+import { InteractionEditDialog } from "@/components/InteractionEditDialog";
 
 type InteractionType = "call" | "email" | "whatsapp" | "meeting" | "note" | "sms" | "video_call";
 
@@ -25,6 +26,8 @@ export default function Interactions() {
   const [filterType, setFilterType] = useState<string>("all");
   const [filterEntityType, setFilterEntityType] = useState<string>("all");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingInteraction, setEditingInteraction] = useState<InteractionWithDetails | null>(null);
+  const [showEditDialog, setShowEditDialog] = useState(false);
   const [formData, setFormData] = useState({
     entityType: "lead" as "lead" | "contact",
     leadId: "",
@@ -105,6 +108,35 @@ export default function Interactions() {
       content: "",
       outcome: "",
     });
+  };
+
+  const handleEditInteraction = (interaction: InteractionWithDetails) => {
+    setEditingInteraction(interaction);
+    setShowEditDialog(true);
+  };
+
+  const handleDeleteInteraction = async (interactionId: string) => {
+    if (!confirm("Tem certeza que deseja apagar esta interação?")) {
+      return;
+    }
+
+    try {
+      await deleteInteraction(interactionId);
+      
+      toast({
+        title: "Sucesso!",
+        description: "Interação apagada com sucesso.",
+      });
+
+      await loadData();
+    } catch (error) {
+      console.error("Error deleting interaction:", error);
+      toast({
+        title: "Erro",
+        description: "Erro ao apagar interação. Tente novamente.",
+        variant: "destructive",
+      });
+    }
   };
 
   const filteredInteractions = interactions.filter((interaction) => {
@@ -423,6 +455,25 @@ export default function Interactions() {
                           >
                             {getInteractionLabel(interaction.interaction_type as InteractionType)}
                           </Badge>
+                          
+                          <div className="flex gap-1 ml-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                              onClick={() => handleEditInteraction(interaction)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => handleDeleteInteraction(interaction.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                         {interaction.subject && (
                           <h4 className="font-semibold text-slate-800 mb-2">{interaction.subject}</h4>
@@ -443,6 +494,13 @@ export default function Interactions() {
           )}
         </div>
       </div>
+      
+      <InteractionEditDialog
+        interaction={editingInteraction}
+        open={showEditDialog}
+        onOpenChange={setShowEditDialog}
+        onSuccess={loadData}
+      />
     </Layout>
   );
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -30,34 +30,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Edit, Trash2, Phone, Mail, Euro, Calendar, MessageCircle, UserCheck, FileText, Eye, Clock, Plus, MessageSquare, CheckCircle, Users, User, CalendarDays, DollarSign, MapPin, Home, BedDouble, Bath, Ruler, Banknote } from "lucide-react";
+import { Search, Edit, Trash2, Phone, Mail, Euro, Calendar, MessageCircle, UserCheck, FileText, Eye, Clock, CalendarDays, CheckCircle, Users, User, DollarSign, MapPin, Home, BedDouble, Bath, Ruler, Banknote, MessageSquare, Plus } from "lucide-react";
 import type { LeadWithContacts } from "@/services/leadsService";
 import { assignLead } from "@/services/leadsService";
 import { convertLeadToContact } from "@/services/contactsService";
 import { createInteraction, getInteractionsByLead } from "@/services/interactionsService";
 import type { InteractionWithDetails } from "@/services/interactionsService";
 import { useToast } from "@/hooks/use-toast";
-import { useEffect } from "react";
 import { getUserProfile, getUsersForAssignment } from "@/services/profileService";
 import { QuickTaskDialog } from "@/components/QuickTaskDialog";
 import { QuickEventDialog } from "@/components/QuickEventDialog";
-import { 
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger 
-} from "@/components/ui/dropdown-menu";
 
 interface LeadsListProps {
   leads: LeadWithContacts[];
   onEdit: (lead: LeadWithContacts) => void;
   onDelete: (id: string) => void;
   isLoading?: boolean;
-  onConvertSuccess?: () => void;
-  onRefresh?: () => void;
+  onRefresh?: () => Promise<void>;
 }
 
-export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess, onRefresh }: LeadsListProps) {
+export function LeadsList({ leads, onEdit, onDelete, isLoading, onRefresh }: LeadsListProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<string>("all");
   const [selectedLead, setSelectedLead] = useState<LeadWithContacts | null>(null);
@@ -66,8 +58,6 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [leadInteractions, setLeadInteractions] = useState<any[]>([]);
   const [loadingInteractions, setLoadingInteractions] = useState(false);
-  const [converting, setConverting] = useState(false);
-  const [creatingInteraction, setCreatingInteraction] = useState(false);
   const [interactionForm, setInteractionForm] = useState({
     type: "phone_call",
     subject: "",
@@ -77,15 +67,26 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [availableAgents, setAvailableAgents] = useState<any[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState("");
-  const [assigning, setAssigning] = useState(false);
   const [currentUserRole, setCurrentUserRole] = useState<string>("");
   const { toast } = useToast();
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
   const [selectedLeadForTask, setSelectedLeadForTask] = useState<LeadWithContacts | null>(null);
 
+  // Operation lock to prevent concurrent operations
+  const operationLockRef = useRef(false);
+  const operationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
     loadCurrentUserRole();
+    
+    // Cleanup on unmount
+    return () => {
+      if (operationTimeoutRef.current) {
+        clearTimeout(operationTimeoutRef.current);
+      }
+      operationLockRef.current = false;
+    };
   }, []);
 
   const loadCurrentUserRole = async () => {
@@ -98,6 +99,62 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
       console.error("Error loading user role:", error);
     }
   };
+
+  // Universal operation wrapper with timeout protection
+  const executeOperation = useCallback(async (
+    operationName: string,
+    operation: () => Promise<void>
+  ) => {
+    if (operationLockRef.current) {
+      console.warn(`[LeadsList] ${operationName} blocked - operation in progress`);
+      return;
+    }
+
+    console.log(`[LeadsList] Starting ${operationName}`);
+    operationLockRef.current = true;
+
+    // Safety timeout - force unlock after 3 seconds
+    operationTimeoutRef.current = setTimeout(() => {
+      console.warn(`[LeadsList] ${operationName} timeout - forcing unlock`);
+      operationLockRef.current = false;
+    }, 3000);
+
+    try {
+      await operation();
+      console.log(`[LeadsList] ${operationName} completed successfully`);
+    } catch (error: any) {
+      console.error(`[LeadsList] ${operationName} error:`, error);
+      throw error;
+    } finally {
+      if (operationTimeoutRef.current) {
+        clearTimeout(operationTimeoutRef.current);
+      }
+      operationLockRef.current = false;
+      console.log(`[LeadsList] ${operationName} cleanup complete`);
+    }
+  }, []);
+
+  // Complete state reset function
+  const resetAllStates = useCallback(() => {
+    console.log("[LeadsList] Resetting all states");
+    setConvertDialogOpen(false);
+    setInteractionDialogOpen(false);
+    setDetailsDialogOpen(false);
+    setAssignDialogOpen(false);
+    setTaskDialogOpen(false);
+    setEventDialogOpen(false);
+    setSelectedLead(null);
+    setSelectedLeadForTask(null);
+    setSelectedAgentId("");
+    setLeadInteractions([]);
+    setLoadingInteractions(false);
+    setInteractionForm({
+      type: "phone_call",
+      subject: "",
+      content: "",
+      outcome: "",
+    });
+  }, []);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -167,7 +224,7 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
     }
   };
 
-  const handleWhatsApp = (lead: LeadWithContacts) => {
+  const handleWhatsApp = useCallback((lead: LeadWithContacts) => {
     if (!lead.phone) {
       toast({
         title: "Sem número de telefone",
@@ -181,9 +238,9 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
     const phoneWithCountry = cleanPhone.startsWith("351") ? cleanPhone : `351${cleanPhone}`;
     const whatsappUrl = `https://wa.me/${phoneWithCountry}`;
     window.open(whatsappUrl, "_blank");
-  };
+  }, [toast]);
 
-  const handleEmail = (lead: LeadWithContacts) => {
+  const handleEmail = useCallback((lead: LeadWithContacts) => {
     if (!lead.email) {
       toast({
         title: "Sem email",
@@ -194,9 +251,9 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
     }
 
     window.location.href = `mailto:${lead.email}`;
-  };
+  }, [toast]);
 
-  const handleSMS = (lead: LeadWithContacts) => {
+  const handleSMS = useCallback((lead: LeadWithContacts) => {
     if (!lead.phone) {
       toast({
         title: "Sem número de telefone",
@@ -209,18 +266,17 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
     const cleanPhone = lead.phone.replace(/\D/g, "");
     const phoneWithCountry = cleanPhone.startsWith("351") ? cleanPhone : `351${cleanPhone}`;
     window.location.href = `sms:+${phoneWithCountry}`;
-  };
+  }, [toast]);
 
-  const handleConvertClick = (lead: LeadWithContacts) => {
+  const handleConvertClick = useCallback((lead: LeadWithContacts) => {
     setSelectedLead(lead);
     setConvertDialogOpen(true);
-  };
+  }, []);
 
-  const handleConfirmConvert = async () => {
+  const handleConfirmConvert = useCallback(async () => {
     if (!selectedLead) return;
 
-    try {
-      setConverting(true);
+    await executeOperation("convert lead", async () => {
       await convertLeadToContact(selectedLead.id, selectedLead);
       
       toast({
@@ -228,25 +284,15 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
         description: `${selectedLead.name} foi adicionado aos contactos.`,
       });
 
-      setConvertDialogOpen(false);
-      setSelectedLead(null);
+      resetAllStates();
       
-      if (onConvertSuccess) {
-        onConvertSuccess();
+      if (onRefresh) {
+        await onRefresh();
       }
-    } catch (error: any) {
-      console.error("Error converting lead:", error);
-      toast({
-        title: "Erro ao converter lead",
-        description: error.message || "Ocorreu um erro ao converter a lead.",
-        variant: "destructive",
-      });
-    } finally {
-      setConverting(false);
-    }
-  };
+    });
+  }, [selectedLead, toast, onRefresh, executeOperation, resetAllStates]);
 
-  const handleInteractionClick = (lead: LeadWithContacts) => {
+  const handleInteractionClick = useCallback((lead: LeadWithContacts) => {
     setSelectedLead(lead);
     setInteractionForm({
       type: "call",
@@ -255,13 +301,12 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
       outcome: "",
     });
     setInteractionDialogOpen(true);
-  };
+  }, []);
 
-  const handleCreateInteraction = async () => {
+  const handleCreateInteraction = useCallback(async () => {
     if (!selectedLead) return;
 
-    try {
-      setCreatingInteraction(true);
+    await executeOperation("create interaction", async () => {
       await createInteraction({
         interaction_type: interactionForm.type,
         subject: interactionForm.subject || null,
@@ -277,21 +322,15 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
         description: "A interação foi registrada com sucesso.",
       });
 
-      setInteractionDialogOpen(false);
-      setSelectedLead(null);
-    } catch (error: any) {
-      console.error("Error creating interaction:", error);
-      toast({
-        title: "Erro ao criar interação",
-        description: error.message || "Ocorreu um erro ao criar a interação.",
-        variant: "destructive",
-      });
-    } finally {
-      setCreatingInteraction(false);
-    }
-  };
+      resetAllStates();
 
-  const handleAssignClick = async (lead: any) => {
+      if (onRefresh) {
+        await onRefresh();
+      }
+    });
+  }, [selectedLead, interactionForm, toast, onRefresh, executeOperation, resetAllStates]);
+
+  const handleAssignClick = useCallback(async (lead: any) => {
     try {
       setSelectedLead(lead);
       setSelectedAgentId(lead.assigned_to || "");
@@ -300,20 +339,20 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
       setAvailableAgents(agents);
       setAssignDialogOpen(true);
     } catch (error: any) {
+      console.error("[LeadsList] Error loading agents:", error);
       toast({
         title: "Erro",
         description: error.message || "Erro ao carregar agentes disponíveis",
         variant: "destructive",
       });
+      resetAllStates();
     }
-  };
+  }, [toast, resetAllStates]);
 
-  const handleAssignLead = async () => {
+  const handleAssignLead = useCallback(async () => {
     if (!selectedLead || !selectedAgentId) return;
 
-    try {
-      setAssigning(true);
-      
+    await executeOperation("assign lead", async () => {
       await assignLead(selectedLead.id, selectedAgentId);
       
       toast({
@@ -321,22 +360,17 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
         description: "Lead atribuída com sucesso!",
       });
       
-      setAssignDialogOpen(false);
-      onRefresh?.();
-    } catch (error: any) {
-      toast({
-        title: "Erro",
-        description: error.message || "Erro ao atribuir lead",
-        variant: "destructive",
-      });
-    } finally {
-      setAssigning(false);
-    }
-  };
+      resetAllStates();
+      
+      if (onRefresh) {
+        await onRefresh();
+      }
+    });
+  }, [selectedLead, selectedAgentId, toast, onRefresh, executeOperation, resetAllStates]);
 
   const canAssignLeads = currentUserRole === "admin" || currentUserRole === "team_lead";
 
-  const handleViewDetails = async (lead: LeadWithContacts) => {
+  const handleViewDetails = useCallback(async (lead: LeadWithContacts) => {
     setSelectedLead(lead);
     setDetailsDialogOpen(true);
     setLoadingInteractions(true);
@@ -351,20 +385,21 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
         description: "Não foi possível carregar o histórico de interações.",
         variant: "destructive",
       });
+      setLeadInteractions([]);
     } finally {
       setLoadingInteractions(false);
     }
-  };
+  }, [toast]);
 
-  const handleTaskClick = (lead: LeadWithContacts) => {
+  const handleTaskClick = useCallback((lead: LeadWithContacts) => {
     setSelectedLeadForTask(lead);
     setTaskDialogOpen(true);
-  };
+  }, []);
 
-  const handleEventClick = (lead: LeadWithContacts) => {
+  const handleEventClick = useCallback((lead: LeadWithContacts) => {
     setSelectedLeadForTask(lead);
     setEventDialogOpen(true);
-  };
+  }, []);
 
   const getInteractionIcon = (type: string) => {
     switch (type) {
@@ -452,7 +487,6 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
       lead.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       lead.phone?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    // Lead "both" appears in both "buyer" and "seller" filters
     const matchesType = 
       filterType === "all" || 
       lead.lead_type === filterType ||
@@ -472,7 +506,6 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
   return (
     <>
       <div className="space-y-6">
-        {/* Search Bar */}
         <div className="relative">
           <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
           <Input
@@ -483,7 +516,6 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
           />
         </div>
 
-        {/* Filter Tabs - WITHOUT "Ambos" button */}
         <div className="flex gap-2">
           <Button
             variant={filterType === "all" ? "default" : "outline"}
@@ -508,7 +540,6 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
           </Button>
         </div>
 
-        {/* Leads Grid */}
         {filteredLeads.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
             <p>Nenhuma lead encontrada</p>
@@ -517,30 +548,37 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredLeads.map((lead) => (
               <Card key={lead.id} className="relative p-6 hover:shadow-lg transition-shadow">
-                {/* Edit and Delete Buttons - Top Right */}
                 <div className="absolute top-4 right-4 flex gap-2">
                   <button
                     onClick={() => onEdit(lead)}
                     className="text-blue-500 hover:text-blue-700 transition-colors"
                     title="Editar"
+                    type="button"
                   >
                     <Edit className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => handleConvertClick(lead)}
+                    className="text-green-500 hover:text-green-700 transition-colors"
+                    title="Converter em Contacto"
+                    type="button"
+                  >
+                    <CheckCircle className="h-4 w-4" />
                   </button>
                   <button
                     onClick={() => onDelete(lead.id)}
                     className="text-red-500 hover:text-red-700 transition-colors"
                     title="Apagar"
+                    type="button"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
 
-                {/* Lead Name */}
                 <h3 className="text-lg font-semibold text-gray-900 mb-3 pr-16">
                   {lead.name}
                 </h3>
 
-                {/* Badges */}
                 <div className="flex gap-2 mb-4">
                   <Badge variant="outline" className={getTypeColor(lead.lead_type)}>
                     {getTypeLabel(lead.lead_type)}
@@ -550,7 +588,6 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
                   </Badge>
                 </div>
 
-                {/* Contact Information */}
                 <div className="space-y-3 mb-4 text-sm text-gray-600">
                   <div className="flex items-center gap-2">
                     <Mail className="h-4 w-4 text-gray-400 shrink-0" />
@@ -561,7 +598,6 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
                     <span>{lead.phone || "Sem telefone"}</span>
                   </div>
 
-                  {/* Buyer Specific Fields */}
                   {(lead.lead_type === 'buyer' || lead.lead_type === 'both') && (
                     lead.property_type || lead.location_preference || lead.bedrooms || lead.min_area || lead.budget || lead.needs_financing
                   ) && (
@@ -618,7 +654,6 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
                     </div>
                   )}
 
-                  {/* Seller Specific Fields */}
                   {(lead.lead_type === 'seller' || lead.lead_type === 'both') && (
                     lead.location_preference || lead.bedrooms || lead.bathrooms || lead.property_area || lead.desired_price
                   ) && (
@@ -665,15 +700,14 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
                   </div>
                 </div>
 
-                {/* Action Buttons */}
                 <div className="space-y-2">
-                  {/* Quick Communication */}
                   <div className="flex gap-2">
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => window.open(`mailto:${lead.email}`)}
+                      onClick={() => handleEmail(lead)}
                       className="flex-1"
+                      type="button"
                     >
                       <Mail className="h-4 w-4 mr-1" />
                       <span className="text-xs">Email</span>
@@ -681,8 +715,9 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => window.open(`sms:${lead.phone}`)}
+                      onClick={() => handleSMS(lead)}
                       className="flex-1"
+                      type="button"
                     >
                       <MessageSquare className="h-4 w-4 mr-1" />
                       <span className="text-xs">SMS</span>
@@ -690,59 +725,28 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() =>
-                        window.open(`https://wa.me/${lead.phone?.replace(/[^0-9]/g, "")}`)
-                      }
+                      onClick={() => handleWhatsApp(lead)}
                       className="flex-1"
+                      type="button"
                     >
                       <MessageCircle className="h-4 w-4 mr-1" />
                       <span className="text-xs">WhatsApp</span>
                     </Button>
                   </div>
 
-                  {/* Management Actions */}
                   <div className="flex gap-2">
-                    {/* Ver Detalhes */}
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => handleViewDetails(lead)}
                       className="flex-1"
                       title="Ver Detalhes"
+                      type="button"
                     >
                       <Eye className="h-4 w-4 mr-1" />
                       <span className="text-xs">Ver</span>
                     </Button>
 
-                    {/* Actions Dropdown Menu */}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" className="flex-1">
-                          <Plus className="h-4 w-4 mr-1" />
-                          <span className="text-xs">Ações</span>
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-56">
-                        <DropdownMenuItem onClick={() => handleTaskClick(lead)}>
-                          <CalendarDays className="h-4 w-4 mr-2 text-blue-600" />
-                          Nova Tarefa
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleEventClick(lead)}>
-                          <Calendar className="h-4 w-4 mr-2 text-purple-600" />
-                          Novo Evento
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleInteractionClick(lead)}>
-                          <FileText className="h-4 w-4 mr-2 text-orange-600" />
-                          Nova Interação
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleConvertClick(lead)}>
-                          <CheckCircle className="h-4 w-4 mr-2 text-green-600" />
-                          Converter em Contacto
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-
-                    {/* Atribuir Agente (só admin/team_lead) */}
                     {canAssignLeads && (
                       <Button
                         variant="outline"
@@ -750,11 +754,51 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
                         onClick={() => handleAssignClick(lead)}
                         className="flex-1"
                         title="Atribuir Agente"
+                        type="button"
                       >
                         <Users className="h-4 w-4 mr-1" />
                         <span className="text-xs">Atribuir</span>
                       </Button>
                     )}
+                  </div>
+
+                  {/* New row with 3 action buttons */}
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleTaskClick(lead)}
+                      className="flex-1 border-blue-200 text-blue-700 hover:bg-blue-50"
+                      title="Nova Tarefa"
+                      type="button"
+                    >
+                      <CalendarDays className="h-4 w-4 mr-1" />
+                      <span className="text-xs">Tarefa</span>
+                    </Button>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleEventClick(lead)}
+                      className="flex-1 border-purple-200 text-purple-700 hover:bg-purple-50"
+                      title="Novo Evento"
+                      type="button"
+                    >
+                      <Calendar className="h-4 w-4 mr-1" />
+                      <span className="text-xs">Evento</span>
+                    </Button>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleInteractionClick(lead)}
+                      className="flex-1 border-orange-200 text-orange-700 hover:bg-orange-50"
+                      title="Nova Interação"
+                      type="button"
+                    >
+                      <FileText className="h-4 w-4 mr-1" />
+                      <span className="text-xs">Interação</span>
+                    </Button>
                   </div>
                 </div>
               </Card>
@@ -763,8 +807,7 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
         )}
       </div>
 
-      {/* Convert Confirmation Dialog */}
-      <AlertDialog open={convertDialogOpen} onOpenChange={setConvertDialogOpen}>
+      <AlertDialog open={convertDialogOpen} onOpenChange={(open) => !open && resetAllStates()}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Converter Lead em Contacto</AlertDialogTitle>
@@ -782,20 +825,18 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={converting}>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction 
               onClick={handleConfirmConvert}
-              disabled={converting}
               className="bg-blue-600 hover:bg-blue-700"
             >
-              {converting ? "Convertendo..." : "Confirmar Conversão"}
+              Confirmar Conversão
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Interaction Dialog */}
-      <Dialog open={interactionDialogOpen} onOpenChange={setInteractionDialogOpen}>
+      <Dialog open={interactionDialogOpen} onOpenChange={(open) => !open && resetAllStates()}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Nova Interação com {selectedLead?.name}</DialogTitle>
@@ -864,31 +905,30 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setInteractionDialogOpen(false)}
-              disabled={creatingInteraction}
+              onClick={() => resetAllStates()}
+              type="button"
             >
               Cancelar
             </Button>
             <Button
               onClick={handleCreateInteraction}
-              disabled={!interactionForm.type || creatingInteraction}
+              disabled={!interactionForm.type}
               className="bg-gradient-to-r from-blue-600 to-purple-600"
+              type="button"
             >
-              {creatingInteraction ? "Criando..." : "Criar Interação"}
+              Criar Interação
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Details Dialog with Interactions Timeline */}
-      <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
+      <Dialog open={detailsDialogOpen} onOpenChange={(open) => !open && resetAllStates()}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle>Detalhes da Lead - {selectedLead?.name}</DialogTitle>
           </DialogHeader>
           
           <div className="flex-1 overflow-y-auto space-y-6">
-            {/* Lead Information */}
             <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
               <div>
                 <p className="text-sm text-gray-500">Nome</p>
@@ -926,7 +966,6 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
               )}
             </div>
 
-            {/* Lead Info */}
             <div className="space-y-2 text-sm">
               {selectedLead?.email && (
                 <div className="flex items-center gap-2 text-gray-600">
@@ -964,7 +1003,6 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
               )}
             </div>
 
-            {/* Interactions Timeline */}
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -974,9 +1012,10 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
                 <Button
                   size="sm"
                   onClick={() => {
-                    setDetailsDialogOpen(false);
+                    resetAllStates();
                     setTimeout(() => handleInteractionClick(selectedLead!), 100);
                   }}
+                  type="button"
                 >
                   <Plus className="h-4 w-4 mr-1" />
                   Nova Interação
@@ -1039,15 +1078,14 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
           </div>
 
           <DialogFooter>
-            <Button onClick={() => setDetailsDialogOpen(false)}>
+            <Button onClick={() => resetAllStates()} type="button">
               Fechar
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Assign Agent Dialog */}
-      <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
+      <Dialog open={assignDialogOpen} onOpenChange={(open) => !open && resetAllStates()}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Atribuir Lead a Agente</DialogTitle>
@@ -1095,44 +1133,62 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onConvertSuccess
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setAssignDialogOpen(false)}
+              onClick={() => resetAllStates()}
+              type="button"
             >
               Cancelar
             </Button>
             <Button
               onClick={handleAssignLead}
-              disabled={assigning}
+              disabled={!selectedAgentId}
+              type="button"
             >
-              {assigning ? "Atribuindo..." : "Atribuir"}
+              Atribuir
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Quick Task Dialog */}
       {selectedLeadForTask && (
         <QuickTaskDialog
           open={taskDialogOpen}
-          onOpenChange={setTaskDialogOpen}
+          onOpenChange={(open) => {
+            if (!open) {
+              setTaskDialogOpen(false);
+              setSelectedLeadForTask(null);
+            }
+          }}
           leadId={selectedLeadForTask.id}
           contactId={null}
           entityName={selectedLeadForTask.name}
-          onSuccess={() => {
+          onSuccess={async () => {
+            setTaskDialogOpen(false);
             setSelectedLeadForTask(null);
+            if (onRefresh) {
+              await onRefresh();
+            }
           }}
         />
       )}
 
-      {/* Quick Event Dialog */}
       {selectedLeadForTask && (
         <QuickEventDialog
           open={eventDialogOpen}
-          onOpenChange={setEventDialogOpen}
+          onOpenChange={(open) => {
+            if (!open) {
+              setEventDialogOpen(false);
+              setSelectedLeadForTask(null);
+            }
+          }}
           leadId={selectedLeadForTask.id}
           contactId={null}
           entityName={selectedLeadForTask.name}
-          onSuccess={() => {
+          onSuccess={async () => {
+            setEventDialogOpen(false);
             setSelectedLeadForTask(null);
+            if (onRefresh) {
+              await onRefresh();
+            }
           }}
         />
       )}

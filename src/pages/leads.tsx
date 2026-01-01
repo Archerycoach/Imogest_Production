@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/router";
 import { Button } from "@/components/ui/button";
 import { Plus, Upload, Download, Loader2 } from "lucide-react";
@@ -40,6 +40,10 @@ export default function Leads() {
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Operation lock to prevent concurrent operations
+  const operationLockRef = useRef(false);
+  const loadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
     checkAuth();
   }, []);
@@ -49,6 +53,16 @@ export default function Leads() {
       loadLeads();
     }
   }, [user]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current);
+      }
+      operationLockRef.current = false;
+    };
+  }, []);
 
   const checkAuth = async () => {
     try {
@@ -64,48 +78,85 @@ export default function Leads() {
     }
   };
 
-  const loadLeads = async () => {
+  const loadLeads = useCallback(async () => {
+    // Prevent concurrent loads
+    if (operationLockRef.current) {
+      console.log("[Leads Page] Load already in progress, skipping");
+      return;
+    }
+
+    console.log("[Leads Page] Loading leads...");
+    operationLockRef.current = true;
+    
     try {
       setIsLoading(true);
       const data = await getAllLeads();
+      console.log("[Leads Page] Leads loaded successfully:", data.length);
       setLeads(data);
     } catch (error) {
-      console.error("Error loading leads:", error);
+      console.error("[Leads Page] Error loading leads:", error);
     } finally {
-      setIsLoading(false);
+      // Clear any existing timeout
+      if (loadTimeoutRef.current) {
+        clearTimeout(loadTimeoutRef.current);
+      }
+      
+      // Force unlock after max 2 seconds
+      loadTimeoutRef.current = setTimeout(() => {
+        setIsLoading(false);
+        operationLockRef.current = false;
+        console.log("[Leads Page] Loading complete (timeout)");
+      }, 2000);
     }
-  };
+  }, []);
 
   const handleDeleteLead = async (id: string) => {
     if (!confirm("Tem certeza que deseja eliminar este lead?")) return;
+    if (operationLockRef.current) return;
 
+    console.log("[Leads Page] Deleting lead:", id);
+    operationLockRef.current = true;
+    
     try {
+      // Optimistic update
+      setLeads(prev => prev.filter(lead => lead.id !== id));
+      
       await deleteLead(id);
-      await loadLeads();
+      console.log("[Leads Page] Lead deleted successfully");
     } catch (error) {
-      console.error("Error deleting lead:", error);
+      console.error("[Leads Page] Error deleting lead:", error);
       alert("Erro ao eliminar lead. Tente novamente.");
+      // Reload on error
+      await loadLeads();
+    } finally {
+      operationLockRef.current = false;
     }
   };
 
   const handleEdit = (lead: LeadWithContacts) => {
+    if (operationLockRef.current) return;
+    
+    console.log("[Leads Page] Editing lead:", lead.id);
     setEditingLead(lead);
     setShowForm(true);
   };
 
   const handleDownloadTemplate = () => {
+    console.log("[Leads Page] Downloading template");
     generateLeadsTemplate();
   };
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (!file || operationLockRef.current) return;
 
+    console.log("[Leads Page] Importing file:", file.name);
+    operationLockRef.current = true;
+    
     try {
       setIsImporting(true);
       setImportResult(null);
 
-      // Parse Excel file
       const data = await parseExcelFile(file);
       
       if (data.length === 0) {
@@ -113,28 +164,51 @@ export default function Leads() {
         return;
       }
 
-      // Import leads
       const result = await importLeads(data);
       setImportResult(result);
 
-      // Reload leads if any were imported successfully
       if (result.success > 0) {
+        console.log("[Leads Page] Import successful, refreshing...");
         await loadLeads();
       }
 
-      // Show results
       setShowImportDialog(true);
     } catch (error: any) {
-      console.error("Import error:", error);
+      console.error("[Leads Page] Import error:", error);
       alert(`Erro ao importar ficheiro: ${error.message}`);
     } finally {
       setIsImporting(false);
-      // Reset file input
+      operationLockRef.current = false;
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
+      console.log("[Leads Page] Import process complete");
     }
   };
+
+  const handleFormSuccess = useCallback(async () => {
+    if (operationLockRef.current) return;
+    
+    console.log("[Leads Page] Form success, closing and refreshing...");
+    operationLockRef.current = true;
+    
+    setShowForm(false);
+    setEditingLead(null);
+    
+    await loadLeads();
+    operationLockRef.current = false;
+  }, [loadLeads]);
+
+  const handleFormCancel = () => {
+    console.log("[Leads Page] Form cancelled");
+    setShowForm(false);
+    setEditingLead(null);
+  };
+
+  const handleRefresh = useCallback(async () => {
+    console.log("[Leads Page] Manual refresh requested");
+    await loadLeads();
+  }, [loadLeads]);
 
   if (!user) {
     return (
@@ -149,6 +223,16 @@ export default function Leads() {
   return (
     <Layout title="Leads">
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-8">
+        {/* Loading Overlay - Only show during data fetching */}
+        {isLoading && (
+          <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center pointer-events-none">
+            <div className="bg-white rounded-lg p-6 shadow-xl flex items-center gap-4 pointer-events-auto">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+              <p className="text-gray-700 font-medium">A atualizar dados...</p>
+            </div>
+          </div>
+        )}
+
         <div className="max-w-7xl mx-auto">
           <div className="mb-6 flex justify-between items-center">
             <div>
@@ -160,6 +244,7 @@ export default function Leads() {
                 onClick={handleDownloadTemplate}
                 variant="outline"
                 className="border-purple-200 text-purple-600 hover:bg-purple-50"
+                disabled={isImporting || isLoading}
               >
                 <Download className="h-5 w-5 mr-2" />
                 Template Excel
@@ -169,7 +254,7 @@ export default function Leads() {
                 onClick={() => fileInputRef.current?.click()}
                 variant="outline"
                 className="border-blue-200 text-blue-600 hover:bg-blue-50"
-                disabled={isImporting}
+                disabled={isImporting || isLoading}
               >
                 {isImporting ? (
                   <>
@@ -195,6 +280,7 @@ export default function Leads() {
               <Button 
                 onClick={() => setShowForm(true)} 
                 className="bg-purple-600 hover:bg-purple-700"
+                disabled={isImporting || isLoading}
               >
                 <Plus className="h-5 w-5 mr-2" />
                 Nova Lead
@@ -205,15 +291,8 @@ export default function Leads() {
           {showForm && (
             <LeadForm
               initialData={editingLead || undefined}
-              onSuccess={async () => {
-                setShowForm(false);
-                setEditingLead(null);
-                await loadLeads();
-              }}
-              onCancel={() => {
-                setShowForm(false);
-                setEditingLead(null);
-              }}
+              onSuccess={handleFormSuccess}
+              onCancel={handleFormCancel}
             />
           )}
 
@@ -223,7 +302,7 @@ export default function Leads() {
               onEdit={handleEdit}
               onDelete={handleDeleteLead}
               isLoading={isLoading}
-              onConvertSuccess={loadLeads}
+              onRefresh={handleRefresh}
             />
           )}
         </div>

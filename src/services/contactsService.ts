@@ -1,7 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 
-type Contact = Database["public"]["Tables"]["contacts"]["Row"];
+export type Contact = Database["public"]["Tables"]["contacts"]["Row"];
 type ContactInsert = Database["public"]["Tables"]["contacts"]["Insert"];
 type ContactUpdate = Database["public"]["Tables"]["contacts"]["Update"];
 
@@ -18,6 +18,8 @@ export const getContacts = async (): Promise<Contact[]> => {
   
   return data || [];
 };
+
+export const getAllContacts = getContacts;
 
 export const searchContacts = async (query: string): Promise<Contact[]> => {
   const { data, error } = await supabase
