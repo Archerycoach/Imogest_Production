@@ -71,7 +71,7 @@ export function QuickEventDialog({
       const endDateTime = new Date(formData.end_date);
       endDateTime.setHours(parseInt(endHours), parseInt(endMinutes), 0, 0);
 
-      await createEvent({
+      const newEvent = await createEvent({
         title: formData.title,
         description: formData.description || null,
         location: formData.location || null,
@@ -81,6 +81,20 @@ export function QuickEventDialog({
         contact_id: contactId || null,
         user_id: user.id
       });
+
+      // Auto-sync to Google Calendar if connected
+      if (newEvent) {
+        try {
+          const { autoSyncEventToGoogle } = await import("@/services/googleCalendarService");
+          const synced = await autoSyncEventToGoogle(newEvent.id);
+          if (synced) {
+            console.log("Event automatically synced to Google Calendar");
+          }
+        } catch (syncError) {
+          // Don't fail if sync fails, just log it
+          console.error("Failed to auto-sync to Google Calendar:", syncError);
+        }
+      }
 
       toast({
         title: "Evento criado!",

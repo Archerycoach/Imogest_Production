@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { ArrowLeft, User, Lock, Building2, Bell, Calendar, Upload, Loader2, Save } from "lucide-react";
 import { getUserProfile, updateUserProfile, uploadAvatar } from "@/services/profileService";
 import { updatePassword, getSession, signOut } from "@/services/authService";
+import { supabase } from "@/integrations/supabase/client";
 import { GoogleCalendarConnect } from "@/components/GoogleCalendarConnect";
 import { useToast } from "@/hooks/use-toast";
 
@@ -166,6 +167,33 @@ export default function Settings() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDisconnectGoogle = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from("user_integrations")
+        .update({ is_active: false })
+        .eq("user_id", user.id)
+        .eq("integration_type", "google_calendar");
+
+      if (error) throw error;
+
+      setGoogleCalendarConnected(false);
+      toast({
+        title: "Google Calendar desconectado",
+        description: "A sincronização foi desativada com sucesso.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao desconectar",
+        description: error.message,
+        variant: "destructive",
+      });
     }
   };
 
@@ -385,12 +413,21 @@ export default function Settings() {
                   Conecte serviços externos para melhorar a sua produtividade
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <GoogleCalendarConnect
-                  isConnected={googleCalendarConnected}
-                  onConnect={() => setGoogleCalendarConnected(true)}
-                  onDisconnect={() => setGoogleCalendarConnected(false)}
-                />
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <Label>Google Calendar</Label>
+                    <p className="text-sm text-gray-500">
+                      Sincroniza os teus eventos e tarefas com o Google Calendar
+                    </p>
+                  </div>
+                  <div className="w-[200px]">
+                    <GoogleCalendarConnect 
+                      isConnected={googleCalendarConnected}
+                      onDisconnect={handleDisconnectGoogle}
+                    />
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

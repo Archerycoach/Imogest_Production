@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { GoogleCalendarConnect } from "@/components/GoogleCalendarConnect";
+import { supabase } from "@/integrations/supabase/client";
 import {
   MessageCircle,
   Calendar,
@@ -55,10 +57,92 @@ export default function Integrations() {
   const [testing, setTesting] = useState<string | null>(null);
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
   const [formData, setFormData] = useState<Record<string, Record<string, string>>>({});
+  const [googleCalendarConnected, setGoogleCalendarConnected] = useState(false);
+  const [checkingGoogleCalendar, setCheckingGoogleCalendar] = useState(true);
 
   useEffect(() => {
     loadIntegrations();
+    checkGoogleCalendarConnection();
+    
+    // Check for success/error in URL params
+    const params = new URLSearchParams(window.location.search);
+    const gcStatus = params.get("google_calendar");
+    
+    if (gcStatus === "success") {
+      toast({
+        title: "✅ Google Calendar conectado!",
+        description: "A tua conta do Google Calendar está agora sincronizada.",
+      });
+      // Clean URL
+      window.history.replaceState({}, "", "/admin/integrations");
+      // Reload connection status
+      checkGoogleCalendarConnection();
+    } else if (gcStatus === "error") {
+      const reason = params.get("reason") || "unknown";
+      toast({
+        title: "❌ Erro ao conectar Google Calendar",
+        description: `Motivo: ${reason}. Por favor, tenta novamente.`,
+        variant: "destructive",
+      });
+      window.history.replaceState({}, "", "/admin/integrations");
+    }
   }, []);
+
+  const checkGoogleCalendarConnection = async () => {
+    try {
+      setCheckingGoogleCalendar(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        setGoogleCalendarConnected(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("user_integrations")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("integration_type", "google_calendar")
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (error) throw error;
+      
+      setGoogleCalendarConnected(!!data);
+    } catch (error: any) {
+      console.error("Error checking Google Calendar connection:", error);
+      setGoogleCalendarConnected(false);
+    } finally {
+      setCheckingGoogleCalendar(false);
+    }
+  };
+
+  const handleDisconnectGoogleCalendar = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from("user_integrations")
+        .update({ is_active: false })
+        .eq("user_id", user.id)
+        .eq("integration_type", "google_calendar");
+
+      if (error) throw error;
+
+      setGoogleCalendarConnected(false);
+      toast({
+        title: "Google Calendar desconectado",
+        description: "A sincronização foi desativada com sucesso.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao desconectar",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
 
   const loadIntegrations = async () => {
     try {
@@ -182,6 +266,86 @@ export default function Integrations() {
     const isSaving = saving === config.name;
     const isTesting = testing === config.name;
     const hasChanges = JSON.stringify(formData[config.name]) !== JSON.stringify(data.settings);
+
+    // Special handling for Google Calendar
+    if (config.name === "google_calendar") {
+      return (
+        <Card key={config.name}>
+          <CardHeader>
+            <div className="flex items-start justify-between">
+              <div className="flex items-start gap-4">
+                <div className={`p-3 rounded-lg ${config.color} text-white`}>
+                  <Icon className="h-6 w-6" />
+                </div>
+                <div className="flex-1">
+                  <CardTitle className="flex items-center gap-2">
+                    {config.displayName}
+                    {checkingGoogleCalendar ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : googleCalendarConnected ? (
+                      <Badge variant="default" className="bg-green-500">
+                        <Check className="h-3 w-3 mr-1" />
+                        Conectado
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-gray-600 border-gray-600">
+                        Não conectado
+                      </Badge>
+                    )}
+                  </CardTitle>
+                  <CardDescription className="mt-1">{config.description}</CardDescription>
+                </div>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Alert>
+              <Calendar className="h-4 w-4" />
+              <AlertDescription>
+                {googleCalendarConnected 
+                  ? "A tua conta do Google Calendar está sincronizada. Os eventos criados no Imogest aparecem automaticamente no teu calendário." 
+                  : "Conecta a tua conta do Google para sincronizar eventos automaticamente."}
+              </AlertDescription>
+            </Alert>
+
+            <div className="flex items-center gap-2 pt-4">
+              {googleCalendarConnected ? (
+                <Button
+                  onClick={handleDisconnectGoogleCalendar}
+                  variant="destructive"
+                  className="flex-1"
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Desconectar
+                </Button>
+              ) : (
+                <GoogleCalendarConnect 
+                  onSuccess={() => {
+                    checkGoogleCalendarConnection();
+                    toast({
+                      title: "✅ Conectado com sucesso!",
+                      description: "Google Calendar está agora sincronizado.",
+                    });
+                  }}
+                  onError={(error) => {
+                    toast({
+                      title: "❌ Erro ao conectar",
+                      description: error,
+                      variant: "destructive",
+                    });
+                  }}
+                />
+              )}
+              <Button variant="ghost" size="icon" asChild>
+                <a href={config.docsUrl} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="h-4 w-4" />
+                </a>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
 
     return (
       <Card key={config.name}>

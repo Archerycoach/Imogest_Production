@@ -1233,6 +1233,9 @@ export type Database = {
           token_expiry: string | null
           updated_at: string | null
           user_id: string
+          webhook_channel_id: string | null
+          webhook_expiration: string | null
+          webhook_resource_id: string | null
         }
         Insert: {
           access_token?: string | null
@@ -1246,6 +1249,9 @@ export type Database = {
           token_expiry?: string | null
           updated_at?: string | null
           user_id: string
+          webhook_channel_id?: string | null
+          webhook_expiration?: string | null
+          webhook_resource_id?: string | null
         }
         Update: {
           access_token?: string | null
@@ -1259,6 +1265,9 @@ export type Database = {
           token_expiry?: string | null
           updated_at?: string | null
           user_id?: string
+          webhook_channel_id?: string | null
+          webhook_expiration?: string | null
+          webhook_resource_id?: string | null
         }
         Relationships: [
           {

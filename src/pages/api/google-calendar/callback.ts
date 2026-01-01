@@ -1,6 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { google } from "googleapis";
-import { supabase } from "@/integrations/supabase/client";
+import { createClient } from "@supabase/supabase-js";
+import { storeGoogleCredentials } from "@/services/googleCalendarService";
+import { registerGoogleCalendarWebhook } from "@/services/googleCalendarWebhookService";
 
 export default async function handler(
   req: NextApiRequest,
@@ -41,42 +43,91 @@ export default async function handler(
       return res.redirect("/admin/integrations?google_calendar=error&reason=no_token");
     }
 
-    // Get user from Supabase session
-    // Note: In API routes, we need to use the cookie-based auth
-    const authHeader = req.headers.authorization || "";
-    const token = authHeader.replace("Bearer ", "");
+    // Get user from Supabase using cookies (server-side API route method)
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
     
-    // Get user from Supabase
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+    // Create Supabase client that can read cookies
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: false,
+      },
+    });
 
-    if (authError || !user) {
-      // If no session, redirect to login with return URL
+    // Try to get user from auth cookie
+    const authHeader = req.headers.cookie || "";
+    const accessToken = extractAccessTokenFromCookie(authHeader);
+    
+    if (!accessToken) {
+      console.error("No access token in cookies");
       return res.redirect("/login?redirect=/admin/integrations&google_calendar=error&reason=not_authenticated");
     }
 
-    // Save tokens to database
-    const { error: dbError } = await supabase
-      .from("user_integrations")
-      .upsert({
-        user_id: user.id,
-        integration_type: "google_calendar",
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token || null,
-        token_expiry: tokens.expiry_date ? new Date(tokens.expiry_date).toISOString() : null,
-        is_active: true,
-        updated_at: new Date().toISOString()
-      }, {
-        onConflict: "user_id,integration_type"
-      });
+    const { data: { user }, error: authError } = await supabase.auth.getUser(accessToken);
 
-    if (dbError) {
-      console.error("Error saving tokens:", dbError);
-      return res.redirect("/admin/integrations?google_calendar=error&reason=db_error");
+    if (authError || !user) {
+      console.error("Failed to get user:", authError);
+      return res.redirect("/login?redirect=/admin/integrations&google_calendar=error&reason=not_authenticated");
     }
 
-    return res.redirect("/admin/integrations?google_calendar=success");
+    // Calculate expiration date from expiry_date (timestamp in milliseconds)
+    const expiresAt = tokens.expiry_date 
+      ? new Date(tokens.expiry_date).toISOString()
+      : new Date(Date.now() + 3600 * 1000).toISOString(); // Default to 1 hour if not provided
+
+    // Store credentials
+    await storeGoogleCredentials(
+      tokens.access_token,
+      tokens.refresh_token || null,
+      expiresAt
+    );
+
+    // Register webhook for push notifications
+    try {
+      console.log("Registering Google Calendar webhook...");
+      await registerGoogleCalendarWebhook(tokens.access_token, user.id);
+      console.log("Webhook registered successfully");
+    } catch (webhookError) {
+      console.error("Failed to register webhook:", webhookError);
+      // Continue anyway, we can try again later or use polling
+    }
+
+    // Redirect back to integrations page with success
+    res.redirect("/admin/integrations?google_calendar=success");
   } catch (error) {
     console.error("Error in Google Calendar callback:", error);
     return res.redirect("/admin/integrations?google_calendar=error&reason=unknown");
+  }
+}
+
+/**
+ * Extract Supabase access token from cookies
+ * Supabase stores the session in cookies with a specific format
+ */
+function extractAccessTokenFromCookie(cookieHeader: string): string | null {
+  try {
+    // Parse cookies
+    const cookies = cookieHeader.split(";").reduce((acc, cookie) => {
+      const [key, value] = cookie.trim().split("=");
+      acc[key] = value;
+      return acc;
+    }, {} as Record<string, string>);
+
+    // Look for Supabase auth token
+    // The cookie name format is: sb-{project-ref}-auth-token
+    const authCookieKey = Object.keys(cookies).find(key => 
+      key.startsWith("sb-") && key.endsWith("-auth-token")
+    );
+
+    if (!authCookieKey) {
+      return null;
+    }
+
+    // Decode the cookie value (it's URL encoded JSON)
+    const authData = JSON.parse(decodeURIComponent(cookies[authCookieKey]));
+    return authData.access_token || null;
+  } catch (error) {
+    console.error("Error extracting access token from cookie:", error);
+    return null;
   }
 }
