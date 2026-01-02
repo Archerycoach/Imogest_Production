@@ -25,7 +25,7 @@ import { getUserProfile } from "@/services/profileService";
 import { Layout } from "@/components/Layout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { supabase } from "@/integrations/supabase/client";
-import { getIntegration, updateIntegration } from "@/services/integrationsService";
+import { getIntegration, updateIntegrationSettings } from "@/services/integrationsService";
 
 export default function SystemSettings() {
   const router = useRouter();
@@ -148,10 +148,19 @@ export default function SystemSettings() {
         return;
       }
 
-      await updateIntegration("whatsapp", {
+      await updateIntegrationSettings("whatsapp", {
         phoneNumberId: whatsappPhoneNumberId,
         accessToken: whatsappAccessToken,
-      }, whatsappEnabled);
+      });
+
+      // Toggle active status separately
+      await supabase
+        .from("integration_settings")
+        .update({ 
+          is_active: whatsappEnabled,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("integration_name", "whatsapp");
 
       toast({
         title: "✅ Sucesso",

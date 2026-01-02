@@ -64,37 +64,29 @@ export const INTEGRATIONS: Record<string, IntegrationConfig> = {
   google_calendar: {
     name: "google_calendar",
     displayName: "Google Calendar",
-    description: "Sincronização automática de eventos e compromissos",
+    description: "Sincronize eventos do CRM com Google Calendar automaticamente",
     icon: "Calendar",
     color: "bg-blue-500",
-    docsUrl: "https://developers.google.com/calendar",
-    testEndpoint: "/api/integrations/test-google-calendar",
     fields: [
       {
         key: "clientId",
         label: "Client ID",
         type: "text",
-        placeholder: "123456789-abc123.apps.googleusercontent.com",
-        helpText: "ID do cliente OAuth 2.0",
         required: true,
+        placeholder: "xxx.apps.googleusercontent.com",
+        helpText: "OAuth 2.0 Client ID do Google Cloud Console",
       },
       {
         key: "clientSecret",
         label: "Client Secret",
         type: "password",
-        placeholder: "GOCSPX-xxxxx...",
-        helpText: "Segredo do cliente OAuth 2.0",
         required: true,
-      },
-      {
-        key: "redirectUri",
-        label: "Redirect URI",
-        type: "url",
-        placeholder: "https://seu-dominio.com/api/google-calendar/callback",
-        helpText: "URI de redirecionamento autorizado",
-        required: true,
+        placeholder: "GOCSPX-xxx",
+        helpText: "OAuth 2.0 Client Secret do Google Cloud Console",
       },
     ],
+    testEndpoint: "/api/integrations/test-google-calendar",
+    docsUrl: "https://console.cloud.google.com/apis/credentials",
   },
   stripe: {
     name: "stripe",
@@ -316,28 +308,72 @@ export const getIntegration = async (name: string): Promise<IntegrationSettings 
 };
 
 // Update integration settings
-export const updateIntegration = async (
-  name: string,
-  settings: Record<string, any>,
+export const updateIntegrationSettings = async (
+  integration: string,
+  settings: Record<string, any>
+) => {
+  try {
+    // First, check if integration exists
+    const { data: existingData } = await supabase
+      .from("integration_settings")
+      .select("*")
+      .eq("integration_name", integration)
+      .single();
+
+    let result;
+    
+    if (existingData) {
+      // Update existing integration
+      result = await supabase
+        .from("integration_settings")
+        .update({
+          settings: settings,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("integration_name", integration)
+        .select()
+        .single();
+    } else {
+      // Insert new integration
+      result = await supabase
+        .from("integration_settings")
+        .insert({
+          integration_name: integration,
+          settings: settings,
+          is_active: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+    }
+
+    if (result.error) throw result.error;
+    
+    return result.data;
+  } catch (error) {
+    console.error(`Error updating ${integration} settings:`, error);
+    throw error;
+  }
+};
+
+// Toggle integration active status
+export const toggleIntegrationStatus = async (
+  integration: string,
   isActive: boolean
-): Promise<IntegrationSettings> => {
+) => {
   const { data, error } = await supabase
     .from("integration_settings")
-    .update({
-      settings,
+    .update({ 
       is_active: isActive,
       updated_at: new Date().toISOString(),
     })
-    .eq("integration_name", name)
+    .eq("integration_name", integration)
     .select()
     .single();
 
   if (error) throw error;
-  
-  return {
-    ...data,
-    settings: data.settings as Record<string, any>
-  } as IntegrationSettings;
+  return data;
 };
 
 // Test integration

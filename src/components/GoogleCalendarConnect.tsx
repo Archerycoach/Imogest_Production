@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { AlertCircle, CheckCircle2, Calendar } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { supabase } from "@/integrations/supabase/client";
 import {
   storeGoogleCredentials,
   getGoogleCredentials,
@@ -40,12 +41,27 @@ export function GoogleCalendarConnect({
 
   const checkConnection = async () => {
     try {
-      const credentials = await getGoogleCredentials();
-      setConnected(!!credentials);
-    } catch (err) {
-      console.error("Error checking connection:", err);
-    } finally {
-      setLoading(false);
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("user_integrations")
+        .select("is_active")
+        .eq("user_id", user.id)
+        .eq("integration_type", "google_calendar")
+        .maybeSingle();
+
+      if (error) {
+        console.error("Error checking connection:", error);
+        return;
+      }
+
+      if (data?.is_active) {
+        onConnect();
+      }
+    } catch (error) {
+      console.error("Error in checkConnection:", error);
     }
   };
 

@@ -64,8 +64,8 @@ export const getGoogleMapsCredentials = async () => {
 export const getGoogleCalendarCredentials = async () => {
   const settings = await getIntegrationCredentials("google_calendar") as any;
   return {
-    clientId: settings?.client_id || "",
-    clientSecret: settings?.client_secret || "",
+    clientId: settings?.clientId || "",
+    clientSecret: settings?.clientSecret || "",
   };
 };
 

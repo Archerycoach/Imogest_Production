@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { GoogleCalendarConnect } from "@/components/GoogleCalendarConnect";
 import {
   MessageCircle,
   Calendar,
@@ -28,7 +30,7 @@ import {
 } from "lucide-react";
 import {
   getAllIntegrations,
-  updateIntegration,
+  updateIntegrationSettings,
   testIntegration,
   syncToSupabaseSecrets,
   INTEGRATIONS,
@@ -55,9 +57,11 @@ export default function Integrations() {
   const [testing, setTesting] = useState<string | null>(null);
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
   const [formData, setFormData] = useState<Record<string, Record<string, string>>>({});
+  const [googleCalendarConnected, setGoogleCalendarConnected] = useState(false);
 
   useEffect(() => {
     loadIntegrations();
+    checkGoogleCalendarConnection();
   }, []);
 
   const loadIntegrations = async () => {
@@ -66,7 +70,6 @@ export default function Integrations() {
       const data = await getAllIntegrations();
       setIntegrations(data);
 
-      // Initialize form data
       const initialFormData: Record<string, Record<string, string>> = {};
       data.forEach((integration) => {
         initialFormData[integration.integration_name] = integration.settings;
@@ -83,19 +86,35 @@ export default function Integrations() {
     }
   };
 
+  const checkGoogleCalendarConnection = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data } = await supabase
+        .from("user_integrations")
+        .select("is_active")
+        .eq("user_id", user.id)
+        .eq("integration_type", "google_calendar")
+        .maybeSingle();
+
+      setGoogleCalendarConnected(data?.is_active || false);
+    } catch (error) {
+      console.error("Error checking Google Calendar connection:", error);
+    }
+  };
+
   const handleSave = async (integrationName: string) => {
     try {
       setSaving(integrationName);
       const integration = integrations.find((i) => i.integration_name === integrationName);
       if (!integration) return;
 
-      await updateIntegration(
+      await updateIntegrationSettings(
         integrationName,
-        formData[integrationName] || {},
-        integration.is_active
+        formData[integrationName] || {}
       );
 
-      // Sync to Supabase secrets for Edge Functions
       await syncToSupabaseSecrets(integrationName);
 
       toast({
@@ -143,7 +162,15 @@ export default function Integrations() {
       const integration = integrations.find((i) => i.integration_name === integrationName);
       if (!integration) return;
 
-      await updateIntegration(integrationName, integration.settings, isActive);
+      await updateIntegrationSettings(integrationName, integration.settings);
+      
+      await supabase
+        .from("integration_settings")
+        .update({ 
+          is_active: isActive,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("integration_name", integrationName);
 
       toast({
         title: isActive ? "Integração ativada" : "Integração desativada",
@@ -182,6 +209,151 @@ export default function Integrations() {
     const isSaving = saving === config.name;
     const isTesting = testing === config.name;
     const hasChanges = JSON.stringify(formData[config.name]) !== JSON.stringify(data.settings);
+
+    if (config.name === "google_calendar") {
+      return (
+        <Card key={config.name}>
+          <CardHeader>
+            <div className="flex items-start justify-between">
+              <div className="flex items-start gap-4">
+                <div className={`p-3 rounded-lg ${config.color} text-white`}>
+                  <Icon className="h-6 w-6" />
+                </div>
+                <div className="flex-1">
+                  <CardTitle className="flex items-center gap-2">
+                    {config.displayName}
+                    {data.is_active && (
+                      <Badge variant="default" className="bg-green-500">
+                        <Check className="h-3 w-3 mr-1" />
+                        Ativa
+                      </Badge>
+                    )}
+                    {googleCalendarConnected && (
+                      <Badge variant="outline" className="text-green-600 border-green-600">
+                        Conectado ✓
+                      </Badge>
+                    )}
+                  </CardTitle>
+                  <CardDescription className="mt-1">{config.description}</CardDescription>
+                </div>
+              </div>
+              <Switch
+                checked={data.is_active}
+                onCheckedChange={(checked) => handleToggle(config.name, checked)}
+              />
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <h4 className="font-semibold mb-2 flex items-center gap-2">
+                <Calendar className="h-4 w-4" />
+                Conexão OAuth
+              </h4>
+              <p className="text-sm text-gray-600 mb-3">
+                Conecte sua conta Google para sincronizar eventos automaticamente
+              </p>
+              <GoogleCalendarConnect
+                isConnected={googleCalendarConnected}
+                onConnect={() => {
+                  setGoogleCalendarConnected(true);
+                  checkGoogleCalendarConnection();
+                }}
+                onDisconnect={() => {
+                  setGoogleCalendarConnected(false);
+                  checkGoogleCalendarConnection();
+                }}
+              />
+            </div>
+
+            <div className="space-y-4 pt-4 border-t">
+              <h4 className="font-semibold">Configuração OAuth 2.0</h4>
+              {config.fields.map((field) => {
+                const fieldId = `${config.name}-${field.key}`;
+                const isPassword = field.type === "password";
+                const showPassword = showPasswords[fieldId];
+
+                return (
+                  <div key={field.key} className="space-y-2">
+                    <Label htmlFor={fieldId}>
+                      {field.label}
+                      {field.required && <span className="text-red-500 ml-1">*</span>}
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id={fieldId}
+                        type={isPassword && !showPassword ? "password" : "text"}
+                        placeholder={field.placeholder}
+                        value={formData[config.name]?.[field.key] || ""}
+                        onChange={(e) => handleInputChange(config.name, field.key, e.target.value)}
+                        className="pr-10"
+                      />
+                      {isPassword && (
+                        <button
+                          type="button"
+                          onClick={() => togglePasswordVisibility(fieldId)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                        >
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      )}
+                    </div>
+                    {field.helpText && (
+                      <p className="text-sm text-gray-500">{field.helpText}</p>
+                    )}
+                  </div>
+                );
+              })}
+
+              <div className="space-y-2">
+                <Label htmlFor={`${config.name}-redirectUri`}>
+                  Redirect URI (Callback URL)
+                </Label>
+                <Input
+                  id={`${config.name}-redirectUri`}
+                  type="url"
+                  placeholder="https://www.imogest.pt/api/google-calendar/callback"
+                  value={formData[config.name]?.redirectUri || ""}
+                  onChange={(e) => handleInputChange(config.name, "redirectUri", e.target.value)}
+                />
+                <p className="text-sm text-gray-500">
+                  URL para onde o Google redireciona após autorização. Use este valor no Google Cloud Console.
+                </p>
+              </div>
+            </div>
+
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription className="text-sm">
+                <strong>Como obter credenciais:</strong>
+                <ol className="list-decimal list-inside mt-2 space-y-1">
+                  <li>Acesse o Google Cloud Console</li>
+                  <li>Crie um projeto ou selecione existente</li>
+                  <li>Ative a Google Calendar API</li>
+                  <li>Crie credenciais OAuth 2.0</li>
+                  <li>Configure Redirect URIs corretamente</li>
+                </ol>
+              </AlertDescription>
+            </Alert>
+
+            <div className="flex items-center gap-2 pt-4">
+              <Button
+                onClick={() => handleSave(config.name)}
+                disabled={isSaving || !hasChanges}
+                className="flex-1"
+              >
+                {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Guardar Configuração
+              </Button>
+              <Button variant="ghost" size="icon" asChild>
+                <a href={config.docsUrl} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="h-4 w-4" />
+                </a>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
 
     return (
       <Card key={config.name}>
@@ -305,7 +477,6 @@ export default function Integrations() {
     );
   }
 
-  // Group integrations by category
   const paymentIntegrations = integrations.filter((i) =>
     ["stripe", "eupago"].includes(i.integration_name)
   );
@@ -333,8 +504,12 @@ export default function Integrations() {
           </AlertDescription>
         </Alert>
 
-        <Tabs defaultValue="communication" className="space-y-6">
+        <Tabs defaultValue="tools" className="space-y-6">
           <TabsList>
+            <TabsTrigger value="tools">
+              <MapPin className="h-4 w-4 mr-2" />
+              Ferramentas
+            </TabsTrigger>
             <TabsTrigger value="communication">
               <MessageCircle className="h-4 w-4 mr-2" />
               Comunicação
@@ -343,11 +518,14 @@ export default function Integrations() {
               <CreditCard className="h-4 w-4 mr-2" />
               Pagamentos
             </TabsTrigger>
-            <TabsTrigger value="tools">
-              <MapPin className="h-4 w-4 mr-2" />
-              Ferramentas
-            </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="tools" className="space-y-6">
+            {toolsIntegrations.map((integration) => {
+              const config = INTEGRATIONS[integration.integration_name];
+              return config ? renderIntegrationCard(config, integration) : null;
+            })}
+          </TabsContent>
 
           <TabsContent value="communication" className="space-y-6">
             {communicationIntegrations.map((integration) => {
@@ -358,13 +536,6 @@ export default function Integrations() {
 
           <TabsContent value="payment" className="space-y-6">
             {paymentIntegrations.map((integration) => {
-              const config = INTEGRATIONS[integration.integration_name];
-              return config ? renderIntegrationCard(config, integration) : null;
-            })}
-          </TabsContent>
-
-          <TabsContent value="tools" className="space-y-6">
-            {toolsIntegrations.map((integration) => {
               const config = INTEGRATIONS[integration.integration_name];
               return config ? renderIntegrationCard(config, integration) : null;
             })}

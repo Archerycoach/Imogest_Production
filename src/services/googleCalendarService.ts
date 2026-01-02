@@ -180,3 +180,57 @@ export const syncGoogleCalendarEvents = async () => {
    console.log("Syncing calendar events...");
    return true;
 };
+
+// Check if Google Calendar is connected for current user
+export const isGoogleCalendarConnected = async (): Promise<boolean> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) return false;
+
+    const { data, error } = await supabase
+      .from("user_integrations")
+      .select("is_active")
+      .eq("user_id", user.id)
+      .eq("integration_type", "google_calendar")
+      .maybeSingle();
+
+    if (error) {
+      console.error("Error checking Google Calendar connection:", error);
+      return false;
+    }
+
+    return data?.is_active || false;
+  } catch (error) {
+    console.error("Error in isGoogleCalendarConnected:", error);
+    return false;
+  }
+};
+
+// Get Google Calendar access token
+export const getGoogleCalendarToken = async (): Promise<string | null> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) return null;
+
+    const { data, error } = await supabase
+      .from("user_integrations")
+      .select("access_token, refresh_token, token_expiry")
+      .eq("user_id", user.id)
+      .eq("integration_type", "google_calendar")
+      .maybeSingle();
+
+    if (error) {
+      console.error("Error getting Google Calendar token:", error);
+      return null;
+    }
+
+    if (!data) return null;
+
+    return data.access_token;
+  } catch (error) {
+    console.error("Error in getGoogleCalendarToken:", error);
+    return null;
+  }
+};

@@ -17,8 +17,8 @@ const getGoogleCredentials = async () => {
   const settings = data.settings as any;
 
   return {
-    clientId: settings?.client_id || "",
-    clientSecret: settings?.client_secret || "",
+    clientId: settings?.clientId || "",
+    clientSecret: settings?.clientSecret || "",
   };
 };
 
