@@ -1,170 +1,102 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { google } from "googleapis";
-import { createClient } from "@supabase/supabase-js";
+
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || "";
+const REDIRECT_URI = process.env.NEXT_PUBLIC_GOOGLE_REDIRECT_URI || "http://localhost:3000/api/google-calendar/callback";
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  try {
-    console.log("=== Google Calendar OAuth Callback Started ===");
-    const { code, state, error, error_description } = req.query;
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
 
+  try {
+    const { code, error, error_description } = req.query;
+
+    // Handle OAuth errors from Google
     if (error) {
-      console.error("OAuth error:", error, error_description);
-      return res.redirect(`/admin/integrations?google_calendar=error&reason=${error}`);
+      console.error("Google OAuth error:", error, error_description);
+      const errorUrl = new URL("/settings", req.headers.origin || "http://localhost:3000");
+      
+      let errorMessage = "Erro ao conectar Google Calendar";
+      
+      if (error === "access_denied") {
+        errorMessage = "Acesso negado. Por favor autorize o acesso ao calendário.";
+      } else if (error_description) {
+        errorMessage = String(error_description);
+      }
+      
+      errorUrl.searchParams.append("google_error", errorMessage);
+      return res.redirect(errorUrl.toString());
     }
 
     if (!code || typeof code !== "string") {
       console.error("No authorization code provided");
-      return res.redirect("/admin/integrations?google_calendar=error&reason=no_code");
+      return res.status(400).json({ error: "No authorization code provided" });
     }
 
-    // Recover user_id from state
-    let userId: string | null = null;
-    if (state && typeof state === "string") {
-      try {
-        const stateData = JSON.parse(Buffer.from(state, "base64").toString());
-        userId = stateData.user_id;
-        console.log("Recovered user_id from state:", userId);
-      } catch (e) {
-        console.error("Failed to parse state:", e);
-      }
+    // Validate environment variables
+    if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+      console.error("Missing Google OAuth credentials in environment variables");
+      const errorUrl = new URL("/settings", req.headers.origin || "http://localhost:3000");
+      errorUrl.searchParams.append("google_error", "Configuração OAuth incompleta. Verifique as variáveis de ambiente.");
+      return res.redirect(errorUrl.toString());
     }
-
-    if (!userId) {
-      console.error("❌ No user_id in OAuth state");
-      return res.redirect("/admin/integrations?google_calendar=error&reason=no_user");
-    }
-
-    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-
-    if (!clientId || !clientSecret) {
-      console.error("Missing Google OAuth credentials");
-      return res.redirect("/admin/integrations?google_calendar=error&reason=missing_credentials");
-    }
-
-    const host = req.headers.host || "localhost:3000";
-    const isLocalhost = host.includes("localhost") || host.includes("127.0.0.1");
-    const protocol = isLocalhost ? "http" : "https";
-    const redirectUri = `${protocol}://${host}/api/google-calendar/callback`;
-
-    const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
 
     console.log("Exchanging code for tokens...");
-    const { tokens } = await oauth2Client.getToken(code);
     
-    if (!tokens.access_token) {
-      console.error("No access token received");
-      return res.redirect("/admin/integrations?google_calendar=error&reason=no_token");
-    }
-
-    console.log("✅ Tokens received:", {
-      has_access: !!tokens.access_token,
-      has_refresh: !!tokens.refresh_token,
-      expiry: tokens.expiry_date,
+    // Exchange code for tokens
+    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        code,
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        redirect_uri: REDIRECT_URI,
+        grant_type: "authorization_code",
+      }),
     });
 
-    const expiresAt = tokens.expiry_date 
-      ? new Date(tokens.expiry_date).toISOString()
-      : new Date(Date.now() + 3600 * 1000).toISOString();
-
-    // Use service role key to ensure INSERT succeeds
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!serviceRoleKey) {
-      console.error("❌ SUPABASE_SERVICE_ROLE_KEY not configured");
-      return res.redirect("/admin/integrations?google_calendar=error&reason=config_error");
-    }
-
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false, autoRefreshToken: false }
-    });
-
-    console.log("Saving credentials for user:", userId);
-
-    // Check if integration exists
-    const { data: existing } = await supabaseAdmin
-      .from("user_integrations")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("integration_type", "google_calendar")
-      .maybeSingle();
-
-    if (existing) {
-      console.log("Updating existing integration:", existing.id);
-      const { error: updateError } = await supabaseAdmin
-        .from("user_integrations")
-        .update({
-          access_token: tokens.access_token,
-          refresh_token: tokens.refresh_token || null,
-          token_expiry: expiresAt,
-          is_active: true,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", existing.id);
-
-      if (updateError) {
-        console.error("❌ Update failed:", updateError);
-        return res.redirect("/admin/integrations?google_calendar=error&reason=db_error");
+    if (!tokenResponse.ok) {
+      const errorData = await tokenResponse.json();
+      console.error("Token exchange failed:", errorData);
+      
+      let errorMessage = "Falha ao obter tokens do Google";
+      
+      if (errorData.error === "invalid_grant") {
+        errorMessage = "Código de autorização inválido ou expirado. Tente novamente.";
+      } else if (errorData.error === "invalid_client") {
+        errorMessage = "Credenciais OAuth inválidas. Verifique Client ID e Secret.";
+      } else if (errorData.error === "redirect_uri_mismatch") {
+        errorMessage = "Redirect URI não corresponde. Verifique configuração no Google Cloud.";
       }
-      console.log("✅ Integration updated");
-    } else {
-      console.log("Creating new integration");
-      const { error: insertError } = await supabaseAdmin
-        .from("user_integrations")
-        .insert({
-          user_id: userId,
-          integration_type: "google_calendar",
-          access_token: tokens.access_token,
-          refresh_token: tokens.refresh_token || null,
-          token_expiry: expiresAt,
-          is_active: true,
-        });
-
-      if (insertError) {
-        console.error("❌ Insert failed:", insertError);
-        return res.redirect("/admin/integrations?google_calendar=error&reason=db_error");
-      }
-      console.log("✅ Integration created");
+      
+      const errorUrl = new URL("/settings", req.headers.origin || "http://localhost:3000");
+      errorUrl.searchParams.append("google_error", errorMessage);
+      return res.redirect(errorUrl.toString());
     }
 
-    // Verify save
-    const { data: verification } = await supabaseAdmin
-      .from("user_integrations")
-      .select("id, is_active")
-      .eq("user_id", userId)
-      .eq("integration_type", "google_calendar")
-      .maybeSingle();
-
-    if (!verification) {
-      console.error("❌ CRITICAL: Data not found after save!");
-      return res.redirect("/admin/integrations?google_calendar=error&reason=verification_failed");
-    }
-
-    console.log("✅ Verification passed:", verification);
-
-    // Register webhook
-    try {
-      const { registerGoogleCalendarWebhook } = await import("@/services/googleCalendarWebhookService");
-      await registerGoogleCalendarWebhook(tokens.access_token, userId);
-      console.log("✅ Webhook registered");
-    } catch (webhookError: any) {
-      console.error("⚠️ Webhook registration failed:", webhookError.message);
-    }
-
-    console.log("=== OAuth Callback Completed Successfully ===");
+    const tokens = await tokenResponse.json();
     
-    // CRITICAL: Preserve user session by setting SameSite=Lax for cross-origin redirect
-    res.setHeader("Set-Cookie", [
-      `oauth_success=true; Path=/; HttpOnly; SameSite=Lax; Max-Age=60`,
-    ]);
-    
-    res.redirect("/admin/integrations?google_calendar=success&t=" + Date.now());
-  } catch (error: any) {
-    console.error("=== OAuth Callback Error ===", error);
-    return res.redirect("/admin/integrations?google_calendar=error&reason=unknown");
+    console.log("Tokens received successfully");
+
+    // Redirect back to settings with tokens in URL
+    const redirectUrl = new URL("/settings", req.headers.origin || "http://localhost:3000");
+    redirectUrl.searchParams.append("google_access_token", tokens.access_token);
+    redirectUrl.searchParams.append("google_refresh_token", tokens.refresh_token || "");
+    redirectUrl.searchParams.append("google_expires_at", String(Date.now() + tokens.expires_in * 1000));
+    redirectUrl.searchParams.append("google_connected", "true");
+
+    res.redirect(redirectUrl.toString());
+  } catch (error) {
+    console.error("Error in Google OAuth callback:", error);
+    const errorUrl = new URL("/settings", req.headers.origin || "http://localhost:3000");
+    errorUrl.searchParams.append("google_error", "Erro inesperado ao conectar. Tente novamente.");
+    res.redirect(errorUrl.toString());
   }
 }

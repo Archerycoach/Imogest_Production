@@ -79,29 +79,9 @@ export default function Calendar() {
 
   const checkGoogleConnection = async () => {
     try {
-      console.log("🔍 Checking Google Calendar connection...");
       const credentials = await getGoogleCredentials();
-      const isConnected = !!credentials;
-      
-      console.log("Google Calendar connection status:", {
-        connected: isConnected,
-        hasCredentials: !!credentials,
-        details: credentials ? {
-          hasAccessToken: !!credentials.accessToken,
-          hasRefreshToken: !!credentials.refreshToken,
-          expiresAt: credentials.expiresAt
-        } : null
-      });
-      
-      setGoogleConnected(isConnected);
-      
-      if (isConnected) {
-        console.log("✅ Google Calendar is connected and ready");
-      } else {
-        console.log("❌ Google Calendar is not connected");
-      }
+      setGoogleConnected(!!credentials);
     } catch (error) {
-      console.error("Error checking Google Calendar connection:", error);
       setGoogleConnected(false);
     }
   };
@@ -124,17 +104,44 @@ export default function Calendar() {
     try {
       setSyncing(true);
       
-      const { performFullSync } = await import("@/services/googleCalendarService");
-      const result = await performFullSync();
+      // Import events from Google Calendar
+      const response = await fetch("/api/google-calendar/list-events");
+      const googleEvents = await response.json();
 
-      if (result.errors.length > 0) {
-        console.error("Sync errors:", result.errors);
-        alert(`Sincronização parcial:\n✅ ${result.imported} eventos importados\n✅ ${result.exported} eventos exportados\n⚠️ ${result.errors.length} erros`);
-      } else {
-        alert(`Sincronização concluída!\n✅ ${result.imported} eventos importados do Google Calendar\n✅ ${result.exported} eventos exportados para o Google Calendar`);
+      if (googleEvents.error) {
+        throw new Error(googleEvents.error);
+      }
+
+      // Sync events to our database
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      for (const event of googleEvents.events || []) {
+        // Check if event already exists
+        const { data: existing } = await supabase
+          .from("calendar_events")
+          .select("id")
+          .eq("google_event_id", event.id)
+          .single();
+
+        if (!existing) {
+          // Create new event
+          await createCalendarEvent({
+            title: event.summary || "Evento sem título",
+            description: event.description || null,
+            event_type: "other",
+            start_time: event.start.dateTime || event.start.date,
+            end_time: event.end.dateTime || event.end.date,
+            lead_id: null,
+            property_id: null,
+            user_id: session.user.id,
+            google_event_id: event.id,
+          });
+        }
       }
 
       await loadData();
+      alert("Sincronização concluída com sucesso!");
     } catch (error) {
       console.error("Error syncing with Google Calendar:", error);
       alert("Erro ao sincronizar com Google Calendar. Tente novamente.");
@@ -151,8 +158,30 @@ export default function Calendar() {
     }
 
     try {
-      const { exportEventToGoogle } = await import("@/services/googleCalendarService");
-      await exportEventToGoogle(eventId);
+      const event = events.find(e => e.id === eventId);
+      if (!event) return;
+
+      const response = await fetch("/api/google-calendar/create-event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          summary: event.title,
+          description: event.description,
+          start: { dateTime: event.start_time },
+          end: { dateTime: event.end_time },
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      // Update event with Google event ID
+      await updateCalendarEvent(eventId, {
+        google_event_id: result.event.id,
+      });
 
       alert("Evento exportado para Google Calendar com sucesso!");
       await loadData();
@@ -233,24 +262,9 @@ export default function Calendar() {
       if (editingEventId) {
         // Update existing event
         await updateCalendarEvent(editingEventId, eventData);
-        
-        // Auto-sync update to Google Calendar if connected
-        if (googleConnected) {
-          const { autoSyncUpdateToGoogle } = await import("@/services/googleCalendarService");
-          await autoSyncUpdateToGoogle(editingEventId, eventData);
-        }
       } else {
         // Create new event
-        const newEventResult = await createCalendarEvent(eventData);
-        
-        // Auto-sync to Google Calendar if connected
-        if (googleConnected && newEventResult) {
-          const { autoSyncEventToGoogle } = await import("@/services/googleCalendarService");
-          const synced = await autoSyncEventToGoogle(newEventResult.id);
-          if (synced) {
-            console.log("Event automatically synced to Google Calendar");
-          }
-        }
+        await createCalendarEvent(eventData);
       }
       
       handleCancelEdit();
@@ -357,21 +371,7 @@ export default function Calendar() {
     if (!confirm("Tem a certeza que deseja eliminar este evento?")) return;
 
     try {
-      // Get event data before deleting to check if it has google_event_id
-      const { data: eventToDelete } = await supabase
-        .from("calendar_events")
-        .select("google_event_id")
-        .eq("id", editingEventId)
-        .single();
-
       await deleteCalendarEvent(editingEventId);
-      
-      // Auto-sync delete to Google Calendar if connected and event was synced
-      if (googleConnected && eventToDelete?.google_event_id) {
-        const { autoSyncDeleteToGoogle } = await import("@/services/googleCalendarService");
-        await autoSyncDeleteToGoogle(eventToDelete.google_event_id);
-      }
-      
       handleCancelEdit();
       await loadData();
     } catch (error) {
@@ -567,6 +567,10 @@ export default function Calendar() {
           <div className="w-full max-w-md m-4" onClick={(e) => e.stopPropagation()}>
             <GoogleCalendarConnect 
               isConnected={googleConnected}
+              onConnect={() => {
+                setGoogleConnected(true);
+                setShowGoogleConnect(false);
+              }}
               onDisconnect={() => {
                 setGoogleConnected(false);
                 setShowGoogleConnect(false);
@@ -692,18 +696,15 @@ export default function Calendar() {
               )}
             </Button>
             {googleConnected && (
-              <>
-                <Button 
-                  variant="outline"
-                  onClick={syncWithGoogleCalendar}
-                  disabled={syncing}
-                  className="flex items-center gap-2"
-                  title="Sincronização bidirecional: importa do Google e exporta eventos locais"
-                >
-                  <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
-                  {syncing ? "A sincronizar..." : "Sincronizar Tudo"}
-                </Button>
-              </>
+              <Button 
+                variant="outline"
+                onClick={syncWithGoogleCalendar}
+                disabled={syncing}
+                className="flex items-center gap-2"
+              >
+                <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
+                {syncing ? "A sincronizar..." : "Sincronizar"}
+              </Button>
             )}
             <Button onClick={() => setShowForm(true)} className="bg-purple-600 hover:bg-purple-700">
               <Plus className="h-5 w-5 mr-2" />

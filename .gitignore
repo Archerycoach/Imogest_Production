@@ -13,14 +13,11 @@ out/
 build/
 dist/
 
-# Environment files - CRITICAL: NEVER commit these!
-.env.local
-.env*.local
+# Environment files - KEEP .env.local for testing
+.env*.local.production
 .env.production
-.env.production.local
 .env.development.local
 .env.test.local
-.env
 
 # Vercel
 .vercel
@@ -61,18 +58,3 @@ uploads/*
 *.tmp
 *.temp
 .cache/
-
-# Security - Never commit these files
-**/.env
-**/.env.local
-**/.env.*.local
-**/config.json
-**/credentials.json
-**/secrets.json
-**/*secret*
-**/*password*
-**/*token*
-**/*key*.json
-
-# Supabase local
-.supabase/

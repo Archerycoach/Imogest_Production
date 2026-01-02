@@ -11,9 +11,12 @@ export {
   storeGoogleCredentials,
   getGoogleCredentials,
   removeGoogleCredentials,
+  syncEventToGoogle,
   updateGoogleEvent,
   deleteGoogleEvent,
   importGoogleCalendarEvents,
+  createBirthdayAlert,
+  syncBirthdayAlerts,
 } from "./googleCalendarService";
 
 // Helper to map database event to frontend CalendarEvent

@@ -1,127 +1,30 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { google } from "googleapis";
-import { supabase } from "@/integrations/supabase/client";
+
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || "";
+const REDIRECT_URI = process.env.NEXT_PUBLIC_GOOGLE_REDIRECT_URI || "http://localhost:3000/api/google-calendar/callback";
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  try {
-    console.log("=== Google Calendar Auth Endpoint Started ===");
-    console.log("Request headers:", {
-      cookie: req.headers.cookie ? "Present" : "Missing",
-      userAgent: req.headers["user-agent"],
-      referer: req.headers.referer,
-    });
-
-    // Get authenticated user from cookies
-    const authHeader = req.headers.cookie || "";
-    console.log("Extracting access token from cookies...");
-    const accessToken = extractAccessTokenFromCookie(authHeader);
-    
-    if (!accessToken) {
-      console.error("❌ No access token found in cookies");
-      return res.redirect("/login?redirect=/admin/integrations&error=not_authenticated");
-    }
-
-    console.log("✅ Access token found, validating user...");
-    const { data: { user }, error: userError } = await supabase.auth.getUser(accessToken);
-    
-    if (userError || !user) {
-      console.error("❌ Failed to get user:", userError?.message);
-      return res.redirect("/login?redirect=/admin/integrations&error=not_authenticated");
-    }
-
-    console.log("✅ User authenticated for OAuth:", user.id);
-
-    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-
-    if (!clientId || !clientSecret) {
-      console.error("❌ Missing Google OAuth credentials");
-      return res.redirect("/admin/integrations?google_calendar=error&reason=missing_credentials");
-    }
-
-    // Dynamic redirect URI
-    const host = req.headers.host || "localhost:3000";
-    const isLocalhost = host.includes("localhost") || host.includes("127.0.0.1");
-    const protocol = isLocalhost ? "http" : "https";
-    const redirectUri = `${protocol}://${host}/api/google-calendar/callback`;
-
-    console.log("OAuth configuration:", {
-      host,
-      protocol,
-      redirectUri,
-      clientIdLength: clientId.length,
-    });
-
-    const oauth2Client = new google.auth.OAuth2(
-      clientId,
-      clientSecret,
-      redirectUri
-    );
-
-    const scopes = [
-      "https://www.googleapis.com/auth/calendar",
-      "https://www.googleapis.com/auth/calendar.events",
-    ];
-
-    // Include user_id in state for callback recovery
-    const state = Buffer.from(JSON.stringify({ user_id: user.id })).toString("base64");
-
-    const authUrl = oauth2Client.generateAuthUrl({
-      access_type: "offline",
-      scope: scopes,
-      prompt: "consent",
-      state, // Pass user_id in state
-    });
-
-    console.log("✅ Redirecting to Google OAuth with user_id in state");
-    console.log("=== Auth Endpoint Completed Successfully ===");
-    
-    // Set SameSite=None for cross-site OAuth flow
-    res.setHeader("Set-Cookie", [
-      `oauth_initiated=true; Path=/; HttpOnly; SameSite=None; Secure; Max-Age=300`,
-    ]);
-    
-    res.redirect(authUrl);
-  } catch (error: any) {
-    console.error("=== Auth Endpoint Error ===", error);
-    res.redirect("/admin/integrations?google_calendar=error&reason=unknown");
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "Method not allowed" });
   }
-}
 
-function extractAccessTokenFromCookie(cookieHeader: string): string | null {
   try {
-    if (!cookieHeader) {
-      console.log("No cookie header present");
-      return null;
-    }
+    // Build Google OAuth URL
+    const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+    authUrl.searchParams.append("client_id", GOOGLE_CLIENT_ID);
+    authUrl.searchParams.append("redirect_uri", REDIRECT_URI);
+    authUrl.searchParams.append("response_type", "code");
+    authUrl.searchParams.append("scope", "https://www.googleapis.com/auth/calendar");
+    authUrl.searchParams.append("access_type", "offline");
+    authUrl.searchParams.append("prompt", "consent");
 
-    const cookies = cookieHeader.split(";").reduce((acc, cookie) => {
-      const [key, value] = cookie.trim().split("=");
-      if (key && value) {
-        acc[key] = value;
-      }
-      return acc;
-    }, {} as Record<string, string>);
-
-    console.log("Cookies found:", Object.keys(cookies));
-
-    const authCookieKey = Object.keys(cookies).find(key => 
-      key.startsWith("sb-") && key.endsWith("-auth-token")
-    );
-
-    if (!authCookieKey) {
-      console.log("No Supabase auth cookie found");
-      return null;
-    }
-
-    console.log("Found auth cookie:", authCookieKey);
-    const authData = JSON.parse(decodeURIComponent(cookies[authCookieKey]));
-    return authData.access_token || null;
+    res.redirect(authUrl.toString());
   } catch (error) {
-    console.error("Error extracting access token from cookie:", error);
-    return null;
+    console.error("Error initiating Google OAuth:", error);
+    res.status(500).json({ error: "Failed to initiate Google OAuth" });
   }
 }
