@@ -11,9 +11,9 @@ interface EmailTemplate {
 
 export const getEmailTemplates = async () => {
   const { data, error } = await supabase
-    .from("templates") // Correct table
+    .from("templates")
     .select("*")
-    .eq("template_type", "email"); // Filter by type
+    .eq("template_type", "email");
 
   if (error) {
     console.error("Error fetching email templates:", error);
@@ -26,32 +26,33 @@ export const getEmailTemplates = async () => {
 export const sendEmail = async (
   to: string,
   subject: string,
-  content: string, // Mapped to body internally if needed, or just used for sending
+  content: string,
   relatedTo?: {
     leadId?: string;
     propertyId?: string;
   }
 ) => {
-  // In a real app, this would call an Edge Function or external API (SendGrid, Resend, etc.)
-  // For now, we'll log it as an interaction
-  
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error("Not authenticated");
-
-    // Log the interaction
-    await supabase.from("interactions").insert({
-      user_id: user.id,
-      lead_id: relatedTo?.leadId,
-      property_id: relatedTo?.propertyId,
-      interaction_type: "email",
-      subject: subject,
-      content: content,
-      interaction_date: new Date().toISOString(),
-      outcome: "sent"
+    // Call API endpoint to send email (uses SendGrid credentials from database)
+    const response = await fetch("/api/integrations/send-email", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        to,
+        subject,
+        content,
+        leadId: relatedTo?.leadId,
+        propertyId: relatedTo?.propertyId,
+      }),
     });
 
-    console.log(`[MOCK EMAIL] To: ${to}, Subject: ${subject}`);
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Erro ao enviar email");
+    }
+
     return true;
   } catch (error) {
     console.error("Error sending email:", error);

@@ -46,30 +46,36 @@ export const sendWhatsAppMessage = async (
     messageBody = messageBody.replace(new RegExp(`{{${key}}}`, 'g'), value);
   });
 
-  // 3. Log interaction (Mock sending for now)
-  console.log(`Sending WhatsApp to ${to}: ${messageBody}`);
-  
-  if (leadId) {
-    const { error: logError } = await supabase
-      .from("interactions")
-      .insert({
-        lead_id: leadId,
-        interaction_type: "whatsapp",
-        content: messageBody,
-        outcome: "sent",
-        user_id: (await supabase.auth.getUser()).data.user?.id || ""
-      });
+  // 3. Send via API endpoint (uses WhatsApp credentials from database)
+  try {
+    const response = await fetch("/api/integrations/send-whatsapp", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        to,
+        message: messageBody,
+        leadId,
+      }),
+    });
 
-    if (logError) console.error("Error logging whatsapp interaction:", logError);
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Erro ao enviar WhatsApp");
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Error sending WhatsApp:", error);
+    throw error;
   }
-
-  return true;
 };
 
 export const createInteraction = async (interaction: any) => {
   const { data, error } = await supabase
     .from("interactions")
-    .insert(interaction as any) // Force cast
+    .insert(interaction as any)
     .select()
     .single();
     
@@ -82,12 +88,8 @@ export const getWhatsAppAutomations = async () => {
   const { data, error } = await supabase
     .from("lead_workflow_rules")
     .select("*")
-    .eq("action_type", "send_email") // Using send_email as proxy/placeholder or need to add whatsapp action type to enum if not present
+    .eq("action_type", "send_email")
     .order("created_at", { ascending: false });
-
-  // Note: Schema 'action_type' check constraint allows: 'send_email', 'create_task', 'create_calendar_event', 'update_score'
-  // Currently NO 'send_whatsapp' action type in DB schema constraint.
-  // We will handle this in the future updates or use 'send_email' as placeholder for now to avoid errors.
 
   if (error) return [];
   return data;

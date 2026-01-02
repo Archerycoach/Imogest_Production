@@ -21,53 +21,44 @@ export default async function handler(
 
   try {
     const buf = await buffer(req);
-    const signature = req.headers["stripe-signature"] as string;
+    const sig = req.headers["stripe-signature"];
 
-    if (!signature) {
-      return res.status(400).json({ error: "Assinatura ausente" });
+    if (!sig || typeof sig !== "string") {
+      return res.status(400).send("No signature");
     }
 
-    // Verify webhook signature
-    const event = verifyStripeWebhook(buf, signature);
+    // Verify webhook and get event
+    const event = await verifyStripeWebhook(buf, sig);
 
-    // Handle different webhook events
+    console.log("✅ Webhook verified, processing event:", event.type);
+
+    // Handle the event
     switch (event.type) {
       case "checkout.session.completed": {
-        const session = event.data.object as Stripe.Checkout.Session;
+        const session = event.data.object as any;
         await handleCheckoutCompleted(session);
         break;
       }
-
-      case "customer.subscription.created": {
-        const subscription = event.data.object as Stripe.Subscription;
-        await handleSubscriptionCreated(subscription);
-        break;
-      }
-
       case "customer.subscription.updated": {
-        const subscription = event.data.object as Stripe.Subscription;
+        const subscription = event.data.object as any;
         await handleSubscriptionUpdated(subscription);
         break;
       }
-
       case "customer.subscription.deleted": {
-        const subscription = event.data.object as Stripe.Subscription;
+        const subscription = event.data.object as any;
         await handleSubscriptionDeleted(subscription);
         break;
       }
-
-      case "invoice.payment_succeeded": {
-        const invoice = event.data.object as Stripe.Invoice;
-        await handleInvoicePaymentSucceeded(invoice);
+      case "invoice.paid": {
+        const invoice = event.data.object as any;
+        await handleInvoicePaid(invoice);
         break;
       }
-
       case "invoice.payment_failed": {
-        const invoice = event.data.object as Stripe.Invoice;
+        const invoice = event.data.object as any;
         await handleInvoicePaymentFailed(invoice);
         break;
       }
-
       default:
         console.log(`Unhandled event type: ${event.type}`);
     }
@@ -80,7 +71,7 @@ export default async function handler(
 }
 
 // Handle checkout session completed
-async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
+async function handleCheckoutCompleted(session: any) {
   const userId = session.metadata?.userId;
   const planId = session.metadata?.planId;
 
@@ -95,7 +86,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 }
 
 // Handle subscription created
-async function handleSubscriptionCreated(subscription: Stripe.Subscription) {
+async function handleSubscriptionCreated(subscription: any) {
   const userId = subscription.metadata?.userId;
   const planId = subscription.metadata?.planId;
 
@@ -129,7 +120,7 @@ async function handleSubscriptionCreated(subscription: Stripe.Subscription) {
 }
 
 // Handle subscription updated
-async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
+async function handleSubscriptionUpdated(subscription: any) {
   const endDate = new Date(subscription.current_period_end * 1000);
   
   // Map Stripe status to our DB status
@@ -160,7 +151,7 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
 }
 
 // Handle subscription deleted
-async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
+async function handleSubscriptionDeleted(subscription: any) {
   // Update subscription status to cancelled
   const { error } = await supabase
     .from("subscriptions")
@@ -178,7 +169,7 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
 }
 
 // Handle invoice payment succeeded
-async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
+async function handleInvoicePaid(invoice: any) {
   console.log(`Payment succeeded for invoice: ${invoice.id}`);
   
   // Record payment in payment history
@@ -210,7 +201,7 @@ async function handleInvoicePaymentSucceeded(invoice: Stripe.Invoice) {
 }
 
 // Handle invoice payment failed
-async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
+async function handleInvoicePaymentFailed(invoice: any) {
   console.log(`Payment failed for invoice: ${invoice.id}`);
   
   // Update subscription status if needed

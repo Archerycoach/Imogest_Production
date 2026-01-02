@@ -1,11 +1,30 @@
 import axios from "axios";
+import { supabase } from "@/integrations/supabase/client";
 
 const EUPAGO_API_URL = "https://clientes.eupago.pt/api/v1.02";
 
+// Get Eupago credentials from database
+const getEupagoCredentials = async () => {
+  const { data, error } = await supabase
+    .from("integration_settings")
+    .select("settings")
+    .eq("integration_name", "eupago")
+    .single();
+
+  if (error || !data) {
+    console.error("Failed to fetch Eupago credentials:", error);
+    return null;
+  }
+
+  const settings = data.settings as any;
+
+  return {
+    apiKey: settings?.api_key || "",
+  };
+};
+
 // Eupago API client
 export const eupago = {
-  apiKey: process.env.EUPAGO_API_KEY || "",
-
   // Create MBWay payment
   createMBWayPayment: async ({
     amount,
@@ -19,8 +38,14 @@ export const eupago = {
     description: string;
   }) => {
     try {
+      const credentials = await getEupagoCredentials();
+      
+      if (!credentials || !credentials.apiKey) {
+        throw new Error("Eupago não está configurado. Por favor configure as credenciais em /admin/integrations");
+      }
+
       const response = await axios.post(`${EUPAGO_API_URL}/mbway/create`, {
-        chave: eupago.apiKey,
+        chave: credentials.apiKey,
         valor: amount.toFixed(2),
         alias: phone,
         id: reference,
@@ -54,8 +79,14 @@ export const eupago = {
     description: string;
   }) => {
     try {
+      const credentials = await getEupagoCredentials();
+      
+      if (!credentials || !credentials.apiKey) {
+        throw new Error("Eupago não está configurado");
+      }
+
       const response = await axios.post(`${EUPAGO_API_URL}/multibanco/create`, {
-        chave: eupago.apiKey,
+        chave: credentials.apiKey,
         valor: amount.toFixed(2),
         id: reference,
         descricao: description,
@@ -81,8 +112,14 @@ export const eupago = {
   // Check payment status
   checkPaymentStatus: async (reference: string) => {
     try {
+      const credentials = await getEupagoCredentials();
+      
+      if (!credentials || !credentials.apiKey) {
+        throw new Error("Eupago não está configurado");
+      }
+
       const response = await axios.post(`${EUPAGO_API_URL}/pedido/info`, {
-        chave: eupago.apiKey,
+        chave: credentials.apiKey,
         referencia: reference,
       });
 
@@ -100,13 +137,13 @@ export const eupago = {
 };
 
 // Verify Eupago webhook signature
-export const verifyEupagoWebhook = (payload: any, signature: string): boolean => {
-  const apiKey = process.env.EUPAGO_API_KEY || "";
+export const verifyEupagoWebhook = async (payload: any, signature: string): Promise<boolean> => {
+  const credentials = await getEupagoCredentials();
   
-  if (!apiKey) {
+  if (!credentials || !credentials.apiKey) {
     throw new Error("EUPAGO_API_KEY não configurado");
   }
 
   // Eupago uses API key verification in the payload
-  return payload.chave === apiKey;
+  return payload.chave === credentials.apiKey;
 };
