@@ -57,11 +57,11 @@ export default function Login() {
     setError("");
 
     try {
-      console.log("Login: Attempting login for:", email);
+      console.log("Login: Attempting login for:", loginEmail);
       
       const { data: { session }, error: signInError } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
+        email: loginEmail.trim(),
+        password: loginPassword,
       });
 
       if (signInError) {

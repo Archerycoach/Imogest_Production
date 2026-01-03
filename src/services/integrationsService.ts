@@ -1,4 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
+
+type IntegrationSettingRow = Database["public"]["Tables"]["integration_settings"]["Row"];
 
 export interface IntegrationSettings {
   id: string;
@@ -10,6 +13,7 @@ export interface IntegrationSettings {
   test_message: string | null;
   created_at: string;
   updated_at: string;
+  user_id?: string | null;
 }
 
 export interface IntegrationConfig {
@@ -285,10 +289,18 @@ export const getAllIntegrations = async (): Promise<IntegrationSettings[]> => {
 
     if (error) throw error;
     
-    return (data as any[]).map(item => ({
-      ...item,
-      settings: item.settings as Record<string, any>
-    })) || [];
+    return (data as IntegrationSettingRow[]).map(item => ({
+      id: item.id,
+      integration_name: item.integration_name,
+      settings: (item.settings as Record<string, any>) || {},
+      is_active: item.is_active || false,
+      last_tested_at: item.last_tested_at,
+      test_status: (item.test_status as any) || "not_tested",
+      test_message: item.test_message,
+      created_at: item.created_at,
+      updated_at: item.updated_at,
+      user_id: item.user_id
+    }));
   } catch (error: any) {
     // Handle auth session errors gracefully
     if (error.message?.includes("Auth session missing")) {

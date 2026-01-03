@@ -4,20 +4,52 @@ import type { Database } from "@/integrations/supabase/types";
 type CalendarEvent = Database["public"]["Tables"]["calendar_events"]["Row"];
 type CalendarEventInsert = Database["public"]["Tables"]["calendar_events"]["Insert"];
 
-// Google Calendar integration is temporarily disabled due to schema changes
-// The google_access_token column has been removed from profiles
+// Google Calendar integration uses user_integrations table
 
 export const storeGoogleCredentials = async (
   accessToken: string,
   refreshToken: string,
   expiresAt: string
 ) => {
-  console.warn("Google Calendar token storage is currently disabled in V2 schema");
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  // Format date for PostgreSQL
+  const expiryDate = new Date(expiresAt).toISOString();
+
+  const { error } = await supabase
+    .from("user_integrations")
+    .upsert({
+      user_id: user.id,
+      integration_type: "google_calendar",
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      token_expiry: expiryDate,
+      updated_at: new Date().toISOString()
+    }, {
+      onConflict: "user_id,integration_type"
+    });
+
+  if (error) throw error;
 };
 
 export const getGoogleCredentials = async () => {
-  console.warn("Google Calendar token storage is currently disabled in V2 schema");
-  return null;
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data, error } = await supabase
+    .from("user_integrations")
+    .select("access_token, refresh_token, token_expiry")
+    .eq("user_id", user.id)
+    .eq("integration_type", "google_calendar")
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error fetching Google credentials:", error);
+    return null;
+  }
+
+  return data;
 };
 
 export const saveGoogleCredentials = async (
@@ -25,45 +57,38 @@ export const saveGoogleCredentials = async (
   refreshToken: string,
   expiryDate: Date
 ) => {
-  /*
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
-
-  const { error } = await supabase
-    .from("profiles")
-    .update({
-      google_access_token: accessToken,
-      google_refresh_token: refreshToken,
-      google_token_expiry: expiryDate.toISOString(),
-    })
-    .eq("id", user.id);
-
-  if (error) throw error;
-  */
-  console.log("Saving google creds disabled");
+  return storeGoogleCredentials(
+    accessToken,
+    refreshToken,
+    expiryDate.toISOString()
+  );
 };
 
 export const removeGoogleCredentials = async () => {
-  /*
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
   const { error } = await supabase
-    .from("profiles")
-    .update({
-      google_access_token: null,
-      google_refresh_token: null,
-      google_token_expiry: null,
-    })
-    .eq("id", user.id);
+    .from("user_integrations")
+    .delete()
+    .eq("user_id", user.id)
+    .eq("integration_type", "google_calendar");
 
   if (error) throw error;
-  */
-  console.log("Removing google creds disabled");
 };
 
 export const checkGoogleCalendarConnection = async () => {
-  return false;
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return false;
+
+  const { data } = await supabase
+    .from("user_integrations")
+    .select("is_active")
+    .eq("user_id", user.id)
+    .eq("integration_type", "google_calendar")
+    .maybeSingle();
+
+  return !!data?.is_active;
 };
 
 export const syncCalendarEvent = async (event: any) => {
@@ -72,6 +97,7 @@ export const syncCalendarEvent = async (event: any) => {
 };
 
 export const listGoogleEvents = async (start: Date, end: Date) => {
+   // Placeholder for actual implementation if needed later
    return [];
 };
 
@@ -188,6 +214,7 @@ export const isGoogleCalendarConnected = async (): Promise<boolean> => {
     
     if (!user) return false;
 
+    // Use maybeSingle instead of single to avoid errors when no rows found
     const { data, error } = await supabase
       .from("user_integrations")
       .select("is_active")
@@ -200,7 +227,7 @@ export const isGoogleCalendarConnected = async (): Promise<boolean> => {
       return false;
     }
 
-    return data?.is_active || false;
+    return !!data?.is_active;
   } catch (error) {
     console.error("Error in isGoogleCalendarConnected:", error);
     return false;
@@ -216,7 +243,7 @@ export const getGoogleCalendarToken = async (): Promise<string | null> => {
 
     const { data, error } = await supabase
       .from("user_integrations")
-      .select("access_token, refresh_token, token_expiry")
+      .select("access_token")
       .eq("user_id", user.id)
       .eq("integration_type", "google_calendar")
       .maybeSingle();
@@ -226,9 +253,7 @@ export const getGoogleCalendarToken = async (): Promise<string | null> => {
       return null;
     }
 
-    if (!data) return null;
-
-    return data.access_token;
+    return data?.access_token || null;
   } catch (error) {
     console.error("Error in getGoogleCalendarToken:", error);
     return null;

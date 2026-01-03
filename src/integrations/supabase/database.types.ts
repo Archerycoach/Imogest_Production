@@ -53,6 +53,86 @@ export type Database = {
           },
         ]
       }
+      bulk_messages: {
+        Row: {
+          campaign_name: string
+          completed_at: string | null
+          created_at: string | null
+          error_log: Json | null
+          failed_count: number | null
+          id: string
+          message_body: string
+          message_type: string
+          metadata: Json | null
+          recipient_filters: Json | null
+          recipient_ids: string[] | null
+          recipient_type: string
+          scheduled_at: string | null
+          send_immediately: boolean | null
+          sent_at: string | null
+          sent_count: number | null
+          status: string | null
+          subject: string | null
+          total_recipients: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          campaign_name: string
+          completed_at?: string | null
+          created_at?: string | null
+          error_log?: Json | null
+          failed_count?: number | null
+          id?: string
+          message_body: string
+          message_type: string
+          metadata?: Json | null
+          recipient_filters?: Json | null
+          recipient_ids?: string[] | null
+          recipient_type: string
+          scheduled_at?: string | null
+          send_immediately?: boolean | null
+          sent_at?: string | null
+          sent_count?: number | null
+          status?: string | null
+          subject?: string | null
+          total_recipients?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          campaign_name?: string
+          completed_at?: string | null
+          created_at?: string | null
+          error_log?: Json | null
+          failed_count?: number | null
+          id?: string
+          message_body?: string
+          message_type?: string
+          metadata?: Json | null
+          recipient_filters?: Json | null
+          recipient_ids?: string[] | null
+          recipient_type?: string
+          scheduled_at?: string | null
+          send_immediately?: boolean | null
+          sent_at?: string | null
+          sent_count?: number | null
+          status?: string | null
+          subject?: string | null
+          total_recipients?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bulk_messages_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       calendar_events: {
         Row: {
           all_day: boolean | null
@@ -199,13 +279,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "contacts_lead_source_id_fkey"
-            columns: ["lead_source_id"]
-            isOneToOne: false
-            referencedRelation: "leads"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "contacts_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
@@ -278,41 +351,242 @@ export type Database = {
           },
         ]
       }
+      email_messages: {
+        Row: {
+          attachments: string[] | null
+          body: string
+          contact_id: string | null
+          created_at: string | null
+          delivered_at: string | null
+          error_message: string | null
+          from_email: string | null
+          html_body: string | null
+          id: string
+          lead_id: string | null
+          message_id: string | null
+          metadata: Json | null
+          opened_at: string | null
+          sent_at: string | null
+          status: string | null
+          subject: string
+          to_email: string
+          user_id: string
+        }
+        Insert: {
+          attachments?: string[] | null
+          body: string
+          contact_id?: string | null
+          created_at?: string | null
+          delivered_at?: string | null
+          error_message?: string | null
+          from_email?: string | null
+          html_body?: string | null
+          id?: string
+          lead_id?: string | null
+          message_id?: string | null
+          metadata?: Json | null
+          opened_at?: string | null
+          sent_at?: string | null
+          status?: string | null
+          subject: string
+          to_email: string
+          user_id: string
+        }
+        Update: {
+          attachments?: string[] | null
+          body?: string
+          contact_id?: string | null
+          created_at?: string | null
+          delivered_at?: string | null
+          error_message?: string | null
+          from_email?: string | null
+          html_body?: string | null
+          id?: string
+          lead_id?: string | null
+          message_id?: string | null
+          metadata?: Json | null
+          opened_at?: string | null
+          sent_at?: string | null
+          status?: string | null
+          subject?: string
+          to_email?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_messages_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_messages_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_messages_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      financing_requests: {
+        Row: {
+          approval_date: string | null
+          bank_contact: string | null
+          bank_name: string | null
+          client_email: string | null
+          client_name: string
+          client_nif: string | null
+          client_phone: string | null
+          contact_id: string | null
+          created_at: string | null
+          custom_fields: Json | null
+          documents: string[] | null
+          down_payment: number | null
+          id: string
+          interest_rate: number | null
+          lead_id: string | null
+          loan_amount: number
+          loan_term: number | null
+          monthly_payment: number | null
+          notes: string | null
+          property_address: string | null
+          property_id: string | null
+          property_value: number | null
+          status: string | null
+          submission_date: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          approval_date?: string | null
+          bank_contact?: string | null
+          bank_name?: string | null
+          client_email?: string | null
+          client_name: string
+          client_nif?: string | null
+          client_phone?: string | null
+          contact_id?: string | null
+          created_at?: string | null
+          custom_fields?: Json | null
+          documents?: string[] | null
+          down_payment?: number | null
+          id?: string
+          interest_rate?: number | null
+          lead_id?: string | null
+          loan_amount: number
+          loan_term?: number | null
+          monthly_payment?: number | null
+          notes?: string | null
+          property_address?: string | null
+          property_id?: string | null
+          property_value?: number | null
+          status?: string | null
+          submission_date?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          approval_date?: string | null
+          bank_contact?: string | null
+          bank_name?: string | null
+          client_email?: string | null
+          client_name?: string
+          client_nif?: string | null
+          client_phone?: string | null
+          contact_id?: string | null
+          created_at?: string | null
+          custom_fields?: Json | null
+          documents?: string[] | null
+          down_payment?: number | null
+          id?: string
+          interest_rate?: number | null
+          lead_id?: string | null
+          loan_amount?: number
+          loan_term?: number | null
+          monthly_payment?: number | null
+          notes?: string | null
+          property_address?: string | null
+          property_id?: string | null
+          property_value?: number | null
+          status?: string | null
+          submission_date?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financing_requests_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financing_requests_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financing_requests_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financing_requests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       image_uploads: {
         Row: {
           created_at: string | null
           entity_id: string | null
-          entity_type: string
+          entity_type: string | null
           file_name: string
           file_path: string
-          file_size: number
+          file_size: number | null
           id: string
-          mime_type: string
-          updated_at: string | null
+          mime_type: string | null
+          public_url: string | null
           user_id: string
         }
         Insert: {
           created_at?: string | null
           entity_id?: string | null
-          entity_type: string
+          entity_type?: string | null
           file_name: string
           file_path: string
-          file_size: number
+          file_size?: number | null
           id?: string
-          mime_type: string
-          updated_at?: string | null
+          mime_type?: string | null
+          public_url?: string | null
           user_id: string
         }
         Update: {
           created_at?: string | null
           entity_id?: string | null
-          entity_type?: string
+          entity_type?: string | null
           file_name?: string
           file_path?: string
-          file_size?: number
+          file_size?: number | null
           id?: string
-          mime_type?: string
-          updated_at?: string | null
+          mime_type?: string | null
+          public_url?: string | null
           user_id?: string
         }
         Relationships: [
@@ -332,10 +606,11 @@ export type Database = {
           integration_name: string
           is_active: boolean | null
           last_tested_at: string | null
-          settings: Json
+          settings: Json | null
           test_message: string | null
           test_status: string | null
           updated_at: string | null
+          user_id: string | null
         }
         Insert: {
           created_at?: string | null
@@ -343,10 +618,11 @@ export type Database = {
           integration_name: string
           is_active?: boolean | null
           last_tested_at?: string | null
-          settings?: Json
+          settings?: Json | null
           test_message?: string | null
           test_status?: string | null
           updated_at?: string | null
+          user_id?: string | null
         }
         Update: {
           created_at?: string | null
@@ -354,12 +630,21 @@ export type Database = {
           integration_name?: string
           is_active?: boolean | null
           last_tested_at?: string | null
-          settings?: Json
+          settings?: Json | null
           test_message?: string | null
           test_status?: string | null
           updated_at?: string | null
+          user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "integration_settings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       interactions: {
         Row: {
@@ -666,7 +951,6 @@ export type Database = {
           currency: string | null
           eupago_transaction_id: string | null
           id: string
-          metadata: Json | null
           payment_date: string | null
           payment_method: string | null
           payment_reference: string | null
@@ -681,7 +965,6 @@ export type Database = {
           currency?: string | null
           eupago_transaction_id?: string | null
           id?: string
-          metadata?: Json | null
           payment_date?: string | null
           payment_method?: string | null
           payment_reference?: string | null
@@ -696,7 +979,6 @@ export type Database = {
           currency?: string | null
           eupago_transaction_id?: string | null
           id?: string
-          metadata?: Json | null
           payment_date?: string | null
           payment_method?: string | null
           payment_reference?: string | null
@@ -715,6 +997,104 @@ export type Database = {
           },
           {
             foreignKeyName: "payment_history_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      performance_metrics: {
+        Row: {
+          avg_followup_time_hours: number | null
+          avg_response_time_hours: number | null
+          calls_made: number | null
+          commissions_earned: number | null
+          conversion_rate: number | null
+          created_at: string | null
+          custom_metrics: Json | null
+          emails_sent: number | null
+          id: string
+          interactions_count: number | null
+          leads_converted: number | null
+          leads_created: number | null
+          leads_lost: number | null
+          meetings_held: number | null
+          performance_score: number | null
+          period_end: string
+          period_start: string
+          period_type: string
+          properties_added: number | null
+          properties_rented: number | null
+          properties_sold: number | null
+          revenue_generated: number | null
+          tasks_completed: number | null
+          tasks_created: number | null
+          tasks_overdue: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          avg_followup_time_hours?: number | null
+          avg_response_time_hours?: number | null
+          calls_made?: number | null
+          commissions_earned?: number | null
+          conversion_rate?: number | null
+          created_at?: string | null
+          custom_metrics?: Json | null
+          emails_sent?: number | null
+          id?: string
+          interactions_count?: number | null
+          leads_converted?: number | null
+          leads_created?: number | null
+          leads_lost?: number | null
+          meetings_held?: number | null
+          performance_score?: number | null
+          period_end: string
+          period_start: string
+          period_type: string
+          properties_added?: number | null
+          properties_rented?: number | null
+          properties_sold?: number | null
+          revenue_generated?: number | null
+          tasks_completed?: number | null
+          tasks_created?: number | null
+          tasks_overdue?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          avg_followup_time_hours?: number | null
+          avg_response_time_hours?: number | null
+          calls_made?: number | null
+          commissions_earned?: number | null
+          conversion_rate?: number | null
+          created_at?: string | null
+          custom_metrics?: Json | null
+          emails_sent?: number | null
+          id?: string
+          interactions_count?: number | null
+          leads_converted?: number | null
+          leads_created?: number | null
+          leads_lost?: number | null
+          meetings_held?: number | null
+          performance_score?: number | null
+          period_end?: string
+          period_start?: string
+          period_type?: string
+          properties_added?: number | null
+          properties_rented?: number | null
+          properties_sold?: number | null
+          revenue_generated?: number | null
+          tasks_completed?: number | null
+          tasks_created?: number | null
+          tasks_overdue?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "performance_metrics_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
@@ -948,6 +1328,79 @@ export type Database = {
           },
         ]
       }
+      sms_messages: {
+        Row: {
+          contact_id: string | null
+          created_at: string | null
+          delivered_at: string | null
+          error_message: string | null
+          from_number: string | null
+          id: string
+          lead_id: string | null
+          message_body: string
+          message_sid: string | null
+          metadata: Json | null
+          sent_at: string | null
+          status: string | null
+          to_number: string
+          user_id: string
+        }
+        Insert: {
+          contact_id?: string | null
+          created_at?: string | null
+          delivered_at?: string | null
+          error_message?: string | null
+          from_number?: string | null
+          id?: string
+          lead_id?: string | null
+          message_body: string
+          message_sid?: string | null
+          metadata?: Json | null
+          sent_at?: string | null
+          status?: string | null
+          to_number: string
+          user_id: string
+        }
+        Update: {
+          contact_id?: string | null
+          created_at?: string | null
+          delivered_at?: string | null
+          error_message?: string | null
+          from_number?: string | null
+          id?: string
+          lead_id?: string | null
+          message_body?: string
+          message_sid?: string | null
+          metadata?: Json | null
+          sent_at?: string | null
+          status?: string | null
+          to_number?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sms_messages_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sms_messages_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sms_messages_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subscription_plans: {
         Row: {
           billing_interval: string | null
@@ -1043,13 +1496,6 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "subscriptions_plan_id_fkey"
-            columns: ["plan_id"]
-            isOneToOne: false
-            referencedRelation: "subscription_plans"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "subscriptions_user_id_fkey"
             columns: ["user_id"]
@@ -1223,7 +1669,6 @@ export type Database = {
       user_integrations: {
         Row: {
           access_token: string | null
-          calendar_id: string | null
           created_at: string | null
           id: string
           integration_type: string
@@ -1233,13 +1678,9 @@ export type Database = {
           token_expiry: string | null
           updated_at: string | null
           user_id: string
-          webhook_channel_id: string | null
-          webhook_expiration: string | null
-          webhook_resource_id: string | null
         }
         Insert: {
           access_token?: string | null
-          calendar_id?: string | null
           created_at?: string | null
           id?: string
           integration_type: string
@@ -1249,13 +1690,9 @@ export type Database = {
           token_expiry?: string | null
           updated_at?: string | null
           user_id: string
-          webhook_channel_id?: string | null
-          webhook_expiration?: string | null
-          webhook_resource_id?: string | null
         }
         Update: {
           access_token?: string | null
-          calendar_id?: string | null
           created_at?: string | null
           id?: string
           integration_type?: string
@@ -1265,9 +1702,6 @@ export type Database = {
           token_expiry?: string | null
           updated_at?: string | null
           user_id?: string
-          webhook_channel_id?: string | null
-          webhook_expiration?: string | null
-          webhook_resource_id?: string | null
         }
         Relationships: [
           {
@@ -1279,39 +1713,112 @@ export type Database = {
           },
         ]
       }
+      whatsapp_messages: {
+        Row: {
+          contact_id: string | null
+          created_at: string | null
+          delivered_at: string | null
+          error_message: string | null
+          from_number: string | null
+          id: string
+          lead_id: string | null
+          media_url: string | null
+          message_body: string
+          message_sid: string | null
+          metadata: Json | null
+          read_at: string | null
+          sent_at: string | null
+          status: string | null
+          to_number: string
+          user_id: string
+        }
+        Insert: {
+          contact_id?: string | null
+          created_at?: string | null
+          delivered_at?: string | null
+          error_message?: string | null
+          from_number?: string | null
+          id?: string
+          lead_id?: string | null
+          media_url?: string | null
+          message_body: string
+          message_sid?: string | null
+          metadata?: Json | null
+          read_at?: string | null
+          sent_at?: string | null
+          status?: string | null
+          to_number: string
+          user_id: string
+        }
+        Update: {
+          contact_id?: string | null
+          created_at?: string | null
+          delivered_at?: string | null
+          error_message?: string | null
+          from_number?: string | null
+          id?: string
+          lead_id?: string | null
+          media_url?: string | null
+          message_body?: string
+          message_sid?: string | null
+          metadata?: Json | null
+          read_at?: string | null
+          sent_at?: string | null
+          status?: string | null
+          to_number?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_messages_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_messages_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_messages_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workflow_executions: {
         Row: {
-          completed_at: string | null
           created_at: string | null
           error_message: string | null
           executed_at: string | null
           id: string
-          lead_id: string
-          status: string
-          user_id: string
-          workflow_id: string
+          lead_id: string | null
+          status: string | null
+          workflow_id: string | null
         }
         Insert: {
-          completed_at?: string | null
           created_at?: string | null
           error_message?: string | null
           executed_at?: string | null
           id?: string
-          lead_id: string
-          status?: string
-          user_id: string
-          workflow_id: string
+          lead_id?: string | null
+          status?: string | null
+          workflow_id?: string | null
         }
         Update: {
-          completed_at?: string | null
           created_at?: string | null
           error_message?: string | null
           executed_at?: string | null
           id?: string
-          lead_id?: string
-          status?: string
-          user_id?: string
-          workflow_id?: string
+          lead_id?: string | null
+          status?: string | null
+          workflow_id?: string | null
         }
         Relationships: [
           {
@@ -1319,13 +1826,6 @@ export type Database = {
             columns: ["lead_id"]
             isOneToOne: false
             referencedRelation: "leads"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "workflow_executions_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -1342,7 +1842,6 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      calculate_lead_score: { Args: { lead_id: string }; Returns: number }
       get_all_profiles_for_admin: {
         Args: never
         Returns: {
@@ -1350,12 +1849,13 @@ export type Database = {
           email: string
           full_name: string
           id: string
-          phone: string
+          is_active: boolean
+          last_sign_in_at: string
+          plan_name: string
           role: string
-          updated_at: string
+          subscription_status: string
         }[]
       }
-      get_current_user_role: { Args: never; Returns: string }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
     }
