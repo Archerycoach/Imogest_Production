@@ -1,9 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { supabase } from "@/integrations/supabase/client";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 // Get credentials from database ONLY (no env fallback)
 const getGoogleCredentials = async () => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("integration_settings")
     .select("settings")
     .eq("integration_name", "google_calendar")

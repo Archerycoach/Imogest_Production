@@ -1,9 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { supabase } from "@/integrations/supabase/client";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 // Get credentials from database ONLY (no env fallback)
 const getGoogleCredentials = async () => {
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from("integration_settings")
     .select("settings")
     .eq("integration_name", "google_calendar")
@@ -106,21 +106,37 @@ export default async function handler(
     console.log("  - Refresh token:", tokens.refresh_token ? "✅ Present" : "❌ Missing");
     console.log("  - Expires in:", tokens.expires_in, "seconds");
 
-    // Get user session
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    // Get user session - we need to use a regular Supabase client for auth
+    const { createClient } = await import("@supabase/supabase-js");
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        auth: {
+          persistSession: false
+        }
+      }
+    );
 
-    if (!session?.user) {
-      console.error("❌ No authenticated user found in callback");
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      console.error("❌ No authorization header found in callback");
       return res.redirect("/login?error=not_authenticated_callback");
     }
 
-    console.log("👤 User authenticated:", session.user.id);
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+
+    if (userError || !user) {
+      console.error("❌ Failed to get user from token:", userError);
+      return res.redirect("/login?error=not_authenticated_callback");
+    }
+
+    console.log("👤 User authenticated:", user.id);
 
     // Store tokens in database using user_integrations table
     const tokenData = {
-      user_id: session.user.id,
+      user_id: user.id,
       integration_type: "google_calendar",
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
@@ -131,7 +147,7 @@ export default async function handler(
 
     console.log("\n💾 Storing tokens in database...");
 
-    const { error: upsertError } = await supabase
+    const { error: upsertError } = await supabaseAdmin
       .from("user_integrations")
       .upsert(tokenData, {
         onConflict: "user_id,integration_type",
@@ -143,7 +159,7 @@ export default async function handler(
     }
 
     console.log("✅ Tokens stored successfully");
-    console.log("🎉 Google Calendar connected successfully for user:", session.user.id);
+    console.log("🎉 Google Calendar connected successfully for user:", user.id);
 
     // Redirect to integrations page with success
     res.redirect("/integrations?success=google_calendar_connected");
