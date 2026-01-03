@@ -1,8 +1,9 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback, memo, useRef } from "react";
+import { useRouter } from "next/router";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -401,6 +402,28 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onRefresh }: Lea
     setEventDialogOpen(true);
   }, []);
 
+  const handleDelete = useCallback(async (id: string) => {
+    try {
+      await onDelete(id);
+    } catch (error) {
+      console.error("Error deleting lead:", error);
+    }
+  }, [onDelete]);
+
+  const handleStatusChange = useCallback(async (id: string, newStatus: string) => {
+    try {
+      await assignLead(id, newStatus);
+      
+      if (onRefresh) {
+        await onRefresh();
+      }
+    } catch (error: any) {
+      console.error("Error updating lead status:", error);
+    }
+  }, [onRefresh]);
+
+  // Removed bulk operations - not implemented in current version
+
   const getInteractionIcon = (type: string) => {
     switch (type) {
       case "call":
@@ -481,19 +504,29 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onRefresh }: Lea
     }).format(budget);
   };
 
-  const filteredLeads = leads.filter((lead) => {
-    const matchesSearch =
-      lead.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      lead.phone?.toLowerCase().includes(searchTerm.toLowerCase());
+  // Memoize filtered and sorted leads calculation
+  const filteredLeads = useMemo(() => {
+    const searchLower = searchTerm.toLowerCase();
+    
+    return leads
+      .filter((lead) => {
+        if (searchTerm) {
+          const nameMatch = lead.name.toLowerCase().includes(searchLower);
+          const emailMatch = lead.email?.toLowerCase().includes(searchLower);
+          const phoneMatch = lead.phone?.includes(searchTerm);
+          if (!nameMatch && !emailMatch && !phoneMatch) return false;
+        }
+        
+        return true;
+      })
+      .sort((a, b) => {
+        // Sort by created_at by default
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+  }, [leads, searchTerm]);
 
-    const matchesType = 
-      filterType === "all" || 
-      lead.lead_type === filterType ||
-      (lead.lead_type === "both" && (filterType === "buyer" || filterType === "seller"));
-
-    return matchesSearch && matchesType;
-  });
+  // Just return all filtered leads - no pagination in this component
+  const currentLeads = filteredLeads;
 
   if (isLoading) {
     return (
@@ -540,13 +573,13 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onRefresh }: Lea
           </Button>
         </div>
 
-        {filteredLeads.length === 0 ? (
+        {currentLeads.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
             <p>Nenhuma lead encontrada</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredLeads.map((lead) => (
+            {currentLeads.map((lead) => (
               <Card key={lead.id} className="relative p-6 hover:shadow-lg transition-shadow">
                 <div className="absolute top-4 right-4 flex gap-2">
                   <button
@@ -566,7 +599,7 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onRefresh }: Lea
                     <CheckCircle className="h-4 w-4" />
                   </button>
                   <button
-                    onClick={() => onDelete(lead.id)}
+                    onClick={() => handleDelete(lead.id)}
                     className="text-red-500 hover:text-red-700 transition-colors"
                     title="Apagar"
                     type="button"

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/router";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,7 @@ export default function TasksPage() {
     lead_id: "",
     property_id: "",
   });
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
     checkAuthAndLoad();
@@ -171,10 +172,19 @@ export default function TasksPage() {
     }
   };
 
-  const filteredTasks = tasks.filter((task) => {
-    if (filter === "all") return true;
-    return task.status === filter;
-  });
+  const filteredTasks = useMemo(() => {
+    const searchLower = searchTerm.toLowerCase();
+    
+    return tasks.filter((task) => {
+      if (searchTerm) {
+        const titleMatch = task.title.toLowerCase().includes(searchLower);
+        const descMatch = task.description?.toLowerCase().includes(searchLower);
+        if (!titleMatch && !descMatch) return false;
+      }
+      
+      return true;
+    });
+  }, [tasks, searchTerm]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

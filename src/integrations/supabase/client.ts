@@ -9,4 +9,53 @@ if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
   console.error("❌ Supabase credentials missing! Check .env.local file.");
 }
 
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+const supabaseClient = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+  global: {
+    headers: {
+      'x-application-name': 'imogest',
+    },
+  },
+});
+
+// Wrapper para auth.getUser() que trata AuthSessionMissingError globalmente
+const originalGetUser = supabaseClient.auth.getUser.bind(supabaseClient.auth);
+
+supabaseClient.auth.getUser = async function() {
+  try {
+    // Primeiro verifica se há sessão válida
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    
+    // Se não houver sessão, retorna null sem erro
+    if (!session) {
+      return { 
+        data: { user: null }, 
+        error: null 
+      };
+    }
+    
+    // Se houver sessão, chama o método original
+    return await originalGetUser();
+  } catch (error: any) {
+    // Se for AuthSessionMissingError, retorna null silenciosamente
+    if (error?.message?.includes('Auth session missing')) {
+      return { 
+        data: { user: null }, 
+        error: null
+      };
+    }
+    
+    // Outros erros são propagados
+    console.error("Error in auth.getUser wrapper:", error);
+    return { 
+      data: { user: null }, 
+      error: error
+    };
+  }
+};
+
+export const supabase = supabaseClient;

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/router";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,11 +17,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { Plus, Clock, ChevronLeft, ChevronRight, RefreshCw, Calendar as CalendarIcon, Link } from "lucide-react";
 import { GoogleCalendarConnect } from "@/components/GoogleCalendarConnect";
 import type { Lead, Property } from "@/types";
+import { useToast } from "@/hooks/use-toast";
 
 type ViewMode = "day" | "week" | "month";
 
 export default function Calendar() {
   const router = useRouter();
+  const { toast } = useToast();
   const [events, setEvents] = useState<any[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
@@ -334,7 +336,7 @@ export default function Calendar() {
     }
   };
 
-  const handleEventClick = (event: any) => {
+  const handleEventClick = useCallback((event: any) => {
     // Don't edit tasks, only calendar events
     if (event.event_type === "task") return;
 
@@ -349,7 +351,7 @@ export default function Calendar() {
       property_id: event.property_id || "none",
     });
     setShowForm(true);
-  };
+  }, []);
 
   const handleCancelEdit = () => {
     setShowForm(false);
@@ -365,7 +367,7 @@ export default function Calendar() {
     });
   };
 
-  const handleDeleteEvent = async () => {
+  const handleDeleteEvent = useCallback(async (eventId: string) => {
     if (!editingEventId) return;
     
     if (!confirm("Tem a certeza que deseja eliminar este evento?")) return;
@@ -376,9 +378,13 @@ export default function Calendar() {
       await loadData();
     } catch (error) {
       console.error("Error deleting event:", error);
-      alert("Erro ao eliminar evento. Tente novamente.");
+      toast({
+        title: "Erro",
+        description: "Erro ao eliminar evento",
+        variant: "destructive",
+      });
     }
-  };
+  }, []);
 
   const handleDragStart = (e: React.DragEvent, item: { id: string; type: "event" | "task"; startTime: string }) => {
     setDraggedItem(item);
@@ -558,7 +564,8 @@ export default function Calendar() {
     }
   };
 
-  const filteredEvents = getEventsForView();
+  // No filtering applied - show all events
+  const filteredEvents = events;
 
   return (
     <Layout title="Agenda">
@@ -826,7 +833,7 @@ export default function Calendar() {
                     Cancelar
                   </Button>
                   {editingEventId && (
-                    <Button type="button" variant="destructive" onClick={handleDeleteEvent}>
+                    <Button type="button" variant="destructive" onClick={() => handleDeleteEvent(editingEventId)}>
                       Eliminar
                     </Button>
                   )}

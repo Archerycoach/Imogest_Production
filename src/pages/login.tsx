@@ -10,6 +10,7 @@ import { signInWithEmail, signUpWithEmail, signInWithGoogle, getCurrentUser } fr
 import { supabase } from "@/integrations/supabase/client";
 import Link from "next/link";
 import { ThemeSwitch } from "@/components/ThemeSwitch";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Login() {
   const [isLogin, setIsLogin] = useState(true);
@@ -20,6 +21,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
+  const { toast } = useToast();
   
   // Login form
   const [loginEmail, setLoginEmail] = useState("");
@@ -51,19 +53,76 @@ export default function Login() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
     setLoading(true);
+    setError("");
 
     try {
-      const { error } = await signInWithEmail(loginEmail, loginPassword);
+      console.log("Login: Attempting login for:", email);
       
-      if (error) {
-        setError(error.message);
-      } else {
-        router.push("/dashboard");
+      const { data: { session }, error: signInError } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+
+      if (signInError) {
+        console.error("Login: Sign in error:", signInError);
+        throw signInError;
       }
+
+      if (!session) {
+        console.error("Login: No session returned after sign in");
+        throw new Error("Erro ao criar sessão");
+      }
+
+      console.log("Login: Session created successfully", {
+        user: session.user.email,
+        expires_at: session.expires_at
+      });
+
+      // Verificar se perfil existe, caso contrário criar
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("id", session.user.id)
+        .single();
+
+      if (!profile) {
+        console.log("Login: Creating profile for new user");
+        const { error: profileError } = await supabase
+          .from("profiles")
+          .insert([
+            {
+              id: session.user.id,
+              email: session.user.email,
+              full_name: session.user.email?.split("@")[0] || "",
+              role: "agent",
+            },
+          ]);
+
+        if (profileError) {
+          console.error("Login: Error creating profile:", profileError);
+        }
+      }
+
+      toast({
+        title: "Sucesso!",
+        description: "Login realizado com sucesso",
+      });
+
+      console.log("Login: Redirecting to dashboard...");
+      
+      // Hard redirect para garantir que a sessão seja carregada corretamente
+      window.location.href = "/dashboard";
+      
+      console.log("Login: Redirect initiated");
     } catch (err: any) {
+      console.error("Login: Unexpected error:", err);
       setError(err.message || "Erro ao fazer login");
+      toast({
+        title: "Erro",
+        description: err.message || "Erro ao fazer login",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }

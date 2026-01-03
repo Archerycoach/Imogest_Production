@@ -34,19 +34,56 @@ const getURL = () => {
 }
 
 // Individual exported functions
-export async function getCurrentUser(): Promise<AuthUser | null> {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user ? {
-    id: user.id,
-    email: user.email || "",
-    user_metadata: user.user_metadata,
-    created_at: user.created_at
-  } : null;
-}
+// Get current user with retry logic
+export const getCurrentUser = async (retries = 3) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser();
+
+      if (error) {
+        // If it's a network error and we have retries left, try again
+        if (error.message.includes("NetworkError") && i < retries - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+          continue;
+        }
+        throw error;
+      }
+      return user;
+    } catch (error) {
+      if (i === retries - 1) throw error;
+      await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1)));
+    }
+  }
+  return null;
+};
 
 export async function getCurrentSession(): Promise<Session | null> {
-  const { data: { session } } = await supabase.auth.getSession();
-  return session;
+  try {
+    const { data: { session }, error } = await supabase.auth.getSession();
+    
+    if (error) {
+      console.error("Error getting session:", error);
+      return null;
+    }
+    
+    if (!session) {
+      console.log("No active session found");
+      return null;
+    }
+    
+    console.log("Session found:", { 
+      user: session.user.email,
+      expires_at: session.expires_at 
+    });
+    
+    return session;
+  } catch (error) {
+    console.error("Unexpected error getting session:", error);
+    return null;
+  }
 }
 
 // Alias for compatibility

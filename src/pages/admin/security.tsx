@@ -125,13 +125,18 @@ export default function SecuritySettings() {
 
   const loadData = async () => {
     try {
-      const [settings, usersData] = await Promise.all([
+      const [settings, usersResult] = await Promise.all([
         getSecuritySettings(),
         getAllUsers(),
       ]);
 
       setSecuritySettings(settings as any);
-      setUsers(usersData);
+      
+      if (usersResult.error) {
+        console.error("Error loading users:", usersResult.error);
+      } else {
+        setUsers(usersResult.data || []);
+      }
     } catch (error) {
       console.error("Error loading data:", error);
       toast({

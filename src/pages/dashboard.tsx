@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -12,7 +12,8 @@ import {
   TrendingDown,
   Target,
   DollarSign,
-  Calendar
+  Calendar,
+  User
 } from "lucide-react";
 import { getLeads } from "@/services/leadsService";
 import { getProperties } from "@/services/propertiesService";

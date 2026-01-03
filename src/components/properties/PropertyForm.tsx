@@ -105,7 +105,7 @@ export function PropertyForm({ property, open, onOpenChange, onSuccess }: Proper
       const propertyData = {
         title: formData.title,
         description: formData.description,
-        property_type: formData.property_type,
+        property_type: formData.property_type as "apartment" | "house" | "land" | "commercial" | "office" | "warehouse" | "other",
         price: formData.price ? Number(formData.price) : null,
         rental_price: formData.rental_price ? Number(formData.rental_price) : null,
         city: formData.city,
@@ -115,7 +115,7 @@ export function PropertyForm({ property, open, onOpenChange, onSuccess }: Proper
         bedrooms: formData.bedrooms ? Number(formData.bedrooms) : null,
         bathrooms: formData.bathrooms ? Number(formData.bathrooms) : null,
         area: formData.area ? Number(formData.area) : null,
-        status: formData.status,
+        status: formData.status as "available" | "reserved" | "sold" | "rented" | "off_market",
         user_id: user.id
       };
 

@@ -4,6 +4,49 @@
  */
 
 /**
+ * Get cached data from localStorage
+ */
+export const getCachedData = <T>(key: string, maxAge: number): T | null => {
+  if (typeof window === "undefined") return null;
+  
+  try {
+    const cached = localStorage.getItem(key);
+    if (!cached) return null;
+    
+    const { data, timestamp } = JSON.parse(cached);
+    const age = Date.now() - timestamp;
+    
+    if (age > maxAge) {
+      localStorage.removeItem(key);
+      return null;
+    }
+    
+    return data as T;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Set cached data in localStorage
+ */
+export const setCachedData = <T>(key: string, data: T): void => {
+  if (typeof window === "undefined") return;
+  
+  try {
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        data,
+        timestamp: Date.now(),
+      })
+    );
+  } catch (error) {
+    console.error("Error caching data:", error);
+  }
+};
+
+/**
  * Force revalidate a specific path in Next.js
  * @param path - The path to revalidate (e.g., '/dashboard', '/leads')
  */

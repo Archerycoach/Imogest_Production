@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -408,6 +408,21 @@ export default function ContactsPage() {
       month: "2-digit",
     }).format(date);
   };
+
+  const filteredContacts = useMemo(() => {
+    const searchLower = searchTerm.toLowerCase();
+    
+    return contacts.filter((contact) => {
+      if (searchTerm) {
+        const nameMatch = contact.name.toLowerCase().includes(searchLower);
+        const emailMatch = contact.email?.toLowerCase().includes(searchLower);
+        const phoneMatch = contact.phone?.includes(searchTerm);
+        if (!nameMatch && !emailMatch && !phoneMatch) return false;
+      }
+      
+      return true;
+    });
+  }, [contacts, searchTerm]);
 
   return (
     <Layout>

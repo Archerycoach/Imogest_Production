@@ -277,17 +277,26 @@ export const INTEGRATIONS: Record<string, IntegrationConfig> = {
 
 // Get all integrations
 export const getAllIntegrations = async (): Promise<IntegrationSettings[]> => {
-  const { data, error } = await supabase
-    .from("integration_settings")
-    .select("*")
-    .order("integration_name");
+  try {
+    const { data, error } = await supabase
+      .from("integration_settings")
+      .select("*")
+      .order("integration_name");
 
-  if (error) throw error;
-  
-  return (data as any[]).map(item => ({
-    ...item,
-    settings: item.settings as Record<string, any>
-  })) || [];
+    if (error) throw error;
+    
+    return (data as any[]).map(item => ({
+      ...item,
+      settings: item.settings as Record<string, any>
+    })) || [];
+  } catch (error: any) {
+    // Handle auth session errors gracefully
+    if (error.message?.includes("Auth session missing")) {
+      console.warn("No auth session available for integrations");
+      return [];
+    }
+    throw error;
+  }
 };
 
 // Get specific integration

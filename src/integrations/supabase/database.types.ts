@@ -1343,6 +1343,18 @@ export type Database = {
     }
     Functions: {
       calculate_lead_score: { Args: { lead_id: string }; Returns: number }
+      get_all_profiles_for_admin: {
+        Args: never
+        Returns: {
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          phone: string
+          role: string
+          updated_at: string
+        }[]
+      }
       get_current_user_role: { Args: never; Returns: string }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }

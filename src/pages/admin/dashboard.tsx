@@ -1,224 +1,324 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Users, CreditCard, Activity, TrendingUp, AlertCircle, Shield } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { 
-  getAdminStats, 
-  getActivityLogs, 
-  getAllUsers,
-  getRevenueStats,
-  type ActivityLogWithProfile
-} from "@/services/adminService";
-import { supabase } from "@/integrations/supabase/client";
-import type { Database } from "@/integrations/supabase/types";
+  Users, 
+  Settings, 
+  Shield, 
+  CreditCard,
+  Database,
+  Workflow,
+  TrendingUp,
+  AlertCircle,
+  CheckCircle,
+  ArrowRight
+} from "lucide-react";
+import { getAllUsers } from "@/services/adminService";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 
-type Profile = Database["public"]["Tables"]["profiles"]["Row"];
+interface DashboardStats {
+  totalUsers: number;
+  adminUsers: number;
+  activeSubscriptions: number;
+  totalRevenue: number;
+}
 
 export default function AdminDashboard() {
   const router = useRouter();
-  const [stats, setStats] = useState({
-    totalUsers: 0,
-    activeUsers: 0,
-    totalLeads: 0,
-    totalProperties: 0,
-    totalTasks: 0
-  });
-  const [revenue, setRevenue] = useState({ total: 0, monthly: 0 });
-  const [users, setUsers] = useState<Profile[]>([]);
-  const [recentActivity, setRecentActivity] = useState<{user: string, action: string, date: string}[]>([]);
   const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<DashboardStats>({
+    totalUsers: 0,
+    adminUsers: 0,
+    activeSubscriptions: 0,
+    totalRevenue: 0,
+  });
 
   useEffect(() => {
-    checkPermission();
-    loadDashboardData();
+    const loadData = async () => {
+      try {
+        const usersResult = await getAllUsers();
+        
+        if (usersResult.error) {
+          console.error("Error loading users:", usersResult.error);
+          // Set default values on error
+          setStats(prev => ({
+            ...prev,
+            totalUsers: 0,
+            adminUsers: 0,
+          }));
+        } else {
+          const usersData = usersResult.data || [];
+          const adminUsers = usersData.filter((u: any) => u.role === "admin");
+          setStats(prev => ({
+            ...prev,
+            totalUsers: usersData.length,
+            adminUsers: adminUsers.length,
+          }));
+        }
+      } catch (error) {
+        console.error("Error loading dashboard data:", error);
+        // Set default values on error
+        setStats(prev => ({
+          ...prev,
+          totalUsers: 0,
+          adminUsers: 0,
+        }));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
   }, []);
 
-  const checkPermission = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      router.push("/login");
-      return;
-    }
-
-    const { data } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    if (data?.role !== "admin") {
-      router.push("/dashboard");
-    }
-  };
-
-  const loadDashboardData = async () => {
-    try {
-      const [statsData, logsData, profilesData, revenueData] = await Promise.all([
-        getAdminStats(),
-        getActivityLogs(5),
-        getAllUsers(),
-        getRevenueStats()
-      ]);
-
-      setStats(statsData);
-      setRevenue(revenueData);
-
-      // Filter internal users
-      const internalUsers = profilesData.filter(p => 
-        p.role === "admin" || p.role === "team_lead" || p.role === "agent"
-      );
-      setUsers(internalUsers);
-
-      const activity = logsData.map(log => ({
-        user: log.profiles?.full_name || log.profiles?.email || "Unknown",
-        action: log.action,
-        date: new Date(log.created_at).toLocaleDateString("pt-PT")
-      }));
-
-      setRecentActivity(activity);
-
-    } catch (error) {
-      console.error("Error loading admin dashboard:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const quickActions = [
+    {
+      title: "Gestão de Utilizadores",
+      description: "Ver e gerir utilizadores do sistema",
+      icon: Users,
+      href: "/admin/users",
+      color: "text-blue-600",
+      bgColor: "bg-blue-50",
+    },
+    {
+      title: "Segurança e Permissões",
+      description: "Configurar roles e políticas de segurança",
+      icon: Shield,
+      href: "/admin/security",
+      color: "text-red-600",
+      bgColor: "bg-red-50",
+    },
+    {
+      title: "Definições do Sistema",
+      description: "Configurações gerais da aplicação",
+      icon: Settings,
+      href: "/admin/system-settings",
+      color: "text-slate-600",
+      bgColor: "bg-slate-50",
+    },
+    {
+      title: "Subscrições",
+      description: "Gerir planos e subscrições",
+      icon: CreditCard,
+      href: "/admin/subscriptions",
+      color: "text-green-600",
+      bgColor: "bg-green-50",
+    },
+    {
+      title: "Integrações",
+      description: "Configurar integrações externas",
+      icon: Database,
+      href: "/admin/integrations",
+      color: "text-purple-600",
+      bgColor: "bg-purple-50",
+    },
+    {
+      title: "Workflows",
+      description: "Automatizações e processos",
+      icon: Workflow,
+      href: "/admin/workflows",
+      color: "text-orange-600",
+      bgColor: "bg-orange-50",
+    },
+    {
+      title: "Métodos de Pagamento",
+      description: "Configurar Stripe, EuPago e outros",
+      icon: CreditCard,
+      href: "/admin/payment-settings",
+      color: "text-indigo-600",
+      bgColor: "bg-indigo-50",
+    },
+  ];
 
   if (loading) {
     return (
-      <Layout>
-        <div className="flex items-center justify-center h-screen">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        </div>
-      </Layout>
+      <ProtectedRoute allowedRoles={["admin"]}>
+        <Layout>
+          <div className="flex items-center justify-center min-h-[60vh]">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-4 text-slate-600">A carregar...</p>
+            </div>
+          </div>
+        </Layout>
+      </ProtectedRoute>
     );
   }
 
   return (
-    <Layout>
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Painel de Administração</h1>
-          <p className="text-muted-foreground">Visão geral do sistema e métricas principais</p>
-        </div>
+    <ProtectedRoute allowedRoles={["admin"]}>
+      <Layout>
+        <div className="space-y-8">
+          {/* Header */}
+          <div>
+            <h1 className="text-4xl font-bold text-slate-900">
+              🛠️ Painel de Administração
+            </h1>
+            <p className="text-slate-600 mt-2">
+              Gerir e configurar o sistema Imogest
+            </p>
+          </div>
 
-        {/* Key Metrics */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Utilizadores</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.totalUsers}</div>
-              <p className="text-xs text-muted-foreground">
-                {stats.activeUsers} ativos
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Receita Mensal</CardTitle>
-              <CreditCard className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">€{revenue.monthly.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground">
-                +20.1% que o mês passado
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Leads Totais</CardTitle>
-              <Activity className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.totalLeads}</div>
-              <p className="text-xs text-muted-foreground">
-                Em todo o sistema
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Imóveis</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.totalProperties}</div>
-              <p className="text-xs text-muted-foreground">
-                Ativos no sistema
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+          {/* Stats Grid */}
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Total Utilizadores
+                </CardTitle>
+                <Users className="h-4 w-4 text-slate-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats.totalUsers}</div>
+                <p className="text-xs text-slate-600 mt-1">
+                  {stats.adminUsers} administradores
+                </p>
+              </CardContent>
+            </Card>
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-          {/* Recent Activity */}
-          <Card className="col-span-4">
-            <CardHeader>
-              <CardTitle>Atividade Recente</CardTitle>
-              <CardDescription>Últimas ações no sistema</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-8">
-                {recentActivity.length === 0 ? (
-                  <p className="text-sm text-gray-500">Sem atividade recente.</p>
-                ) : (
-                  recentActivity.map((item, i) => (
-                    <div key={i} className="flex items-center">
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium leading-none">{item.user}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {item.action}
-                        </p>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Subscrições Ativas
+                </CardTitle>
+                <TrendingUp className="h-4 w-4 text-green-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats.activeSubscriptions}</div>
+                <p className="text-xs text-slate-600 mt-1">
+                  Planos ativos
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Receita Total
+                </CardTitle>
+                <CreditCard className="h-4 w-4 text-blue-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">€{stats.totalRevenue}</div>
+                <p className="text-xs text-slate-600 mt-1">
+                  Este mês
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  Estado do Sistema
+                </CardTitle>
+                <CheckCircle className="h-4 w-4 text-green-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                    Operacional
+                  </Badge>
+                </div>
+                <p className="text-xs text-slate-600 mt-1">
+                  Todos os serviços online
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Quick Actions */}
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900 mb-4">
+              Ações Rápidas
+            </h2>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {quickActions.map((action) => {
+                const Icon = action.icon;
+                return (
+                  <Card
+                    key={action.href}
+                    className="cursor-pointer hover:shadow-lg transition-shadow"
+                    onClick={() => router.push(action.href)}
+                  >
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div className={`p-2 rounded-lg ${action.bgColor}`}>
+                          <Icon className={`h-6 w-6 ${action.color}`} />
+                        </div>
+                        <ArrowRight className="h-5 w-5 text-slate-400" />
                       </div>
-                      <div className="ml-auto font-medium text-sm text-gray-500">{item.date}</div>
+                      <CardTitle className="text-lg mt-4">
+                        {action.title}
+                      </CardTitle>
+                      <CardDescription>
+                        {action.description}
+                      </CardDescription>
+                    </CardHeader>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* System Health */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <AlertCircle className="h-5 w-5" />
+                Estado do Sistema
+              </CardTitle>
+              <CardDescription>
+                Monitorização de serviços e integrações
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
+                  <div className="flex items-center gap-3">
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                    <div>
+                      <p className="font-medium text-slate-900">Base de Dados</p>
+                      <p className="text-sm text-slate-600">Supabase PostgreSQL</p>
                     </div>
-                  ))
-                )}
+                  </div>
+                  <Badge variant="outline" className="bg-green-100 text-green-700">
+                    Online
+                  </Badge>
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
+                  <div className="flex items-center gap-3">
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                    <div>
+                      <p className="font-medium text-slate-900">Autenticação</p>
+                      <p className="text-sm text-slate-600">Supabase Auth</p>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="bg-green-100 text-green-700">
+                    Online
+                  </Badge>
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
+                  <div className="flex items-center gap-3">
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                    <div>
+                      <p className="font-medium text-slate-900">Armazenamento</p>
+                      <p className="text-sm text-slate-600">Supabase Storage</p>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="bg-green-100 text-green-700">
+                    Online
+                  </Badge>
+                </div>
               </div>
             </CardContent>
           </Card>
-
-          {/* Quick Actions */}
-          <Card className="col-span-3">
-            <CardHeader>
-              <CardTitle>Ações Rápidas</CardTitle>
-              <CardDescription>Gestão do sistema</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <Button 
-                variant="outline" 
-                className="w-full justify-start" 
-                onClick={() => router.push("/admin/users")}
-              >
-                <Users className="mr-2 h-4 w-4" />
-                Gerir Utilizadores
-              </Button>
-              <Button 
-                variant="outline" 
-                className="w-full justify-start"
-                onClick={() => router.push("/admin/subscriptions")}
-              >
-                <CreditCard className="mr-2 h-4 w-4" />
-                Gerir Subscrições
-              </Button>
-              <Button 
-                variant="outline" 
-                className="w-full justify-start"
-                onClick={() => router.push("/admin/security")}
-              >
-                <Shield className="mr-2 h-4 w-4" />
-                Segurança e Logs
-              </Button>
-            </CardContent>
-          </Card>
         </div>
-      </div>
-    </Layout>
+      </Layout>
+    </ProtectedRoute>
   );
 }

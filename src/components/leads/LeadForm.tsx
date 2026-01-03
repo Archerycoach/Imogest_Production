@@ -91,22 +91,36 @@ export function LeadForm({ initialData, onSuccess, onCancel }: LeadFormProps) {
 
       const leadData = {
         name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
-        status: formData.status as any,
-        lead_type: formData.lead_type as any,
-        notes: formData.notes,
-        budget: formData.budget ? Number(formData.budget) : null,
-        location_preference: formData.location_preference,
-        source: formData.source as any,
-        property_type: formData.property_type || null,
-        bedrooms: formData.bedrooms ? Number(formData.bedrooms) : null,
-        min_area: formData.min_area ? Number(formData.min_area) : null,
+        email: formData.email || "",
+        phone: formData.phone || "",
+        status: formData.status,
+        lead_type: formData.lead_type,
+        notes: formData.notes || "",
+        budget: parseFloat(formData.budget) || 0,
+        location_preference: formData.location_preference || "",
+        source: formData.source,
+        property_type: formData.property_type || "",
+        bedrooms: parseInt(formData.bedrooms) || 0,
+        bathrooms: parseInt(formData.bathrooms) || 0,
+        min_area: parseFloat(formData.min_area) || 0,
+        max_area: parseFloat(formData.property_area) || 0,
+        property_area: parseFloat(formData.property_area) || 0,
         needs_financing: formData.needs_financing,
-        bathrooms: formData.bathrooms ? Number(formData.bathrooms) : null,
-        property_area: formData.property_area ? Number(formData.property_area) : null,
-        desired_price: formData.desired_price ? Number(formData.desired_price) : null,
-        user_id: user.id
+        desired_price: parseFloat(formData.desired_price) || 0,
+        contact_id: null,
+        custom_fields: {},
+        tags: [],
+        assigned_to: "",
+        budget_max: parseFloat(formData.budget) || 0,
+        budget_min: 0,
+        last_contact_date: null,
+        lead_score: 0,
+        max_price: parseFloat(formData.budget) || 0,
+        min_price: 0,
+        next_follow_up: null,
+        score: 0,
+        temperature: "cold",
+        user_id: user.id,
       };
 
       if (initialData) {
@@ -273,9 +287,9 @@ export function LeadForm({ initialData, onSuccess, onCancel }: LeadFormProps) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="num_bedrooms">Número de Quartos</Label>
+                  <Label htmlFor="bedrooms">Número de Quartos</Label>
                   <Input
-                    id="num_bedrooms"
+                    id="bedrooms"
                     type="number"
                     min="0"
                     value={formData.bedrooms}
@@ -372,9 +386,9 @@ export function LeadForm({ initialData, onSuccess, onCancel }: LeadFormProps) {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="num_bathrooms">Número de Casas de Banho</Label>
+                  <Label htmlFor="bathrooms">Número de Casas de Banho</Label>
                   <Input
-                    id="num_bathrooms"
+                    id="bathrooms"
                     type="number"
                     min="0"
                     value={formData.bathrooms}

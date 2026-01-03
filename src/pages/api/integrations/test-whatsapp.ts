@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { supabase } from "@/integrations/supabase/client";
 
 export default async function handler(
   req: NextApiRequest,
@@ -10,41 +10,38 @@ export default async function handler(
   }
 
   try {
-    // Get WhatsApp settings from database using admin client
-    const { data: integration, error } = await supabaseAdmin
+    // Get WhatsApp integration settings
+    const { data: integration, error: integrationError } = await supabase
       .from("integration_settings")
-      .select("settings")
+      .select("settings, is_active")
       .eq("integration_name", "whatsapp")
       .single();
 
-    if (error) {
-      console.error("❌ Database error:", error);
-      return res.status(500).json({
-        success: false,
-        message: `Erro ao ler configuração: ${error.message}`,
-      });
-    }
-
-    if (!integration || !integration.settings) {
+    if (integrationError || !integration) {
       return res.status(400).json({
         success: false,
-        message: "WhatsApp não configurado",
+        message: "WhatsApp não está configurado. Configure a integração primeiro.",
       });
     }
 
-    const { phoneNumberId, accessToken } = integration.settings as {
-      phoneNumberId?: string;
-      accessToken?: string;
-    };
+    if (!integration.is_active) {
+      return res.status(400).json({
+        success: false,
+        message: "WhatsApp não está ativo. Ative a integração primeiro.",
+      });
+    }
+
+    const settings = integration.settings as Record<string, any>;
+    const { phoneNumberId, accessToken } = settings;
 
     if (!phoneNumberId || !accessToken) {
       return res.status(400).json({
         success: false,
-        message: "Credenciais WhatsApp incompletas",
+        message: "Configuração incompleta. Verifique Phone Number ID e Access Token.",
       });
     }
 
-    // Test WhatsApp API connection
+    // Test WhatsApp API connection by fetching phone number details
     const response = await fetch(
       `https://graph.facebook.com/v18.0/${phoneNumberId}`,
       {
@@ -55,23 +52,32 @@ export default async function handler(
       }
     );
 
+    const data = await response.json();
+
     if (!response.ok) {
-      const errorData = await response.json();
       return res.status(400).json({
         success: false,
-        message: `Erro WhatsApp: ${errorData.error?.message || "Credenciais inválidas"}`,
+        message: `Erro WhatsApp API: ${data.error?.message || "Credenciais inválidas"}`,
+      });
+    }
+
+    // Verify phone number is verified
+    if (data.verified_name) {
+      return res.status(200).json({
+        success: true,
+        message: `✅ WhatsApp conectado com sucesso! Número: ${data.display_phone_number} (${data.verified_name})`,
       });
     }
 
     return res.status(200).json({
       success: true,
-      message: "Conexão WhatsApp validada com sucesso!",
+      message: `✅ WhatsApp conectado! Número: ${data.display_phone_number}`,
     });
   } catch (error: any) {
-    console.error("❌ Test error:", error);
+    console.error("WhatsApp test error:", error);
     return res.status(500).json({
       success: false,
-      message: error.message || "Erro ao testar WhatsApp",
+      message: `Erro ao testar WhatsApp: ${error.message}`,
     });
   }
 }

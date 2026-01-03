@@ -33,6 +33,7 @@ export default function Leads() {
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingLead, setEditingLead] = useState<LeadWithContacts | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
   
   // Import state
   const [showImportDialog, setShowImportDialog] = useState(false);

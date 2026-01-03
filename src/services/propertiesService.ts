@@ -1,9 +1,9 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { Database } from "@/integrations/supabase/types";
+import type { Property } from "@/types";
+import { getCachedData, setCachedData } from "@/lib/cacheUtils";
 
-type Property = Database["public"]["Tables"]["properties"]["Row"];
-type PropertyInsert = Database["public"]["Tables"]["properties"]["Insert"];
-type PropertyUpdate = Database["public"]["Tables"]["properties"]["Update"];
+const PROPERTIES_CACHE_KEY = "properties_list";
+const CACHE_DURATION = 3 * 60 * 1000; // 3 minutes
 
 // Add missing interfaces
 export interface PropertyFilters {
@@ -47,7 +47,7 @@ export const getProperties = async (): Promise<Property[]> => {
     .order("created_at", { ascending: false });
 
   if (error) throw error;
-  return data || [];
+  return (data || []) as Property[];
 };
 
 // Get single property by ID
@@ -59,50 +59,73 @@ export const getProperty = async (id: string): Promise<Property | null> => {
     .single();
 
   if (error) throw error;
-  return data;
+  return data as Property | null;
 };
 
 // Create new property
-export const createProperty = async (property: PropertyInsert) => {
-  const { data, error } = await (supabase as any)
-    .from("properties")
-    .insert({
-      ...property,
-      property_type: property.property_type as any,
-      status: property.status as any
-    })
-    .select()
-    .single();
+export const createProperty = async (propertyData: Omit<Property, "id" | "created_at" | "updated_at">): Promise<Property> => {
+  try {
+    // Invalidate cache
+    localStorage.removeItem(PROPERTIES_CACHE_KEY);
+    
+    const { data, error } = await supabase
+      .from("properties")
+      .insert({
+        ...propertyData,
+        property_type: propertyData.property_type as any,
+        status: propertyData.status as any
+      })
+      .select()
+      .single();
 
-  if (error) throw error;
-  return data;
+    if (error) throw error;
+    if (!data) throw new Error("Failed to create property");
+    return data as Property;
+  } catch (e) {
+    throw e;
+  }
 };
 
 // Update property
-export const updateProperty = async (id: string, updates: PropertyUpdate) => {
-  const { data, error } = await (supabase as any)
-    .from("properties")
-    .update({
-      ...updates,
-      property_type: updates.property_type as any,
-      status: updates.status as any
-    })
-    .eq("id", id)
-    .select()
-    .single();
+export const updateProperty = async (id: string, updates: Partial<Property>): Promise<Property> => {
+  try {
+    // Invalidate cache
+    localStorage.removeItem(PROPERTIES_CACHE_KEY);
+    
+    const { data, error } = await supabase
+      .from("properties")
+      .update({
+        ...updates,
+        property_type: updates.property_type as any,
+        status: updates.status as any
+      })
+      .eq("id", id)
+      .select()
+      .single();
 
-  if (error) throw error;
-  return data;
+    if (error) throw error;
+    if (!data) throw new Error("Failed to update property");
+    return data as Property;
+  } catch (e) {
+    throw e;
+  }
 };
 
 // Delete property
 export const deleteProperty = async (id: string): Promise<void> => {
-  const { error } = await supabase
-    .from("properties")
-    .delete()
-    .eq("id", id);
+  try {
+    // Invalidate cache
+    localStorage.removeItem(PROPERTIES_CACHE_KEY);
+    
+    const { error } = await supabase
+      .from("properties")
+      .delete()
+      .eq("id", id);
 
-  if (error) throw error;
+    if (error) throw error;
+  } catch (e) {
+    throw e;
+  }
 };
 
 // Search properties
@@ -114,7 +137,7 @@ export const searchProperties = async (query: string): Promise<Property[]> => {
     .order("created_at", { ascending: false });
 
   if (error) throw error;
-  return data || [];
+  return (data || []) as Property[];
 };
 
 // Get properties by status
@@ -181,4 +204,31 @@ export const getPropertyMatches = async (propertyId: string): Promise<PropertyMa
 
   if (error) throw error;
   return data || [];
+};
+
+export const getAllProperties = async (useCache = true): Promise<Property[]> => {
+  try {
+    // Check cache first
+    if (useCache) {
+      const cached = getCachedData<Property[]>(PROPERTIES_CACHE_KEY, CACHE_DURATION);
+      if (cached) return cached;
+    }
+    
+    const { data, error } = await supabase
+      .from("properties")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    const properties = (data || []) as Property[];
+    
+    // Cache the result
+    if (useCache) {
+      setCachedData(PROPERTIES_CACHE_KEY, properties);
+    }
+    
+    return properties;
+  } catch (e) {
+    throw e;
+  }
 };

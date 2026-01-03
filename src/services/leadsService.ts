@@ -1,8 +1,13 @@
 import { supabase } from "@/integrations/supabase/client";
+import { getCachedData, setCachedData } from "@/lib/cacheUtils";
+import { CacheManager, CacheKey } from "@/lib/cacheInvalidation";
 import type { Database } from "@/integrations/supabase/types";
 import { processLeadWorkflows } from "./workflowService";
 
-// Use standard types
+const LEADS_CACHE_KEY = CacheKey.LEADS;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+
+// Use standard types from Database
 type Lead = Database["public"]["Tables"]["leads"]["Row"];
 type LeadInsert = Database["public"]["Tables"]["leads"]["Insert"];
 type LeadUpdate = Database["public"]["Tables"]["leads"]["Update"];
@@ -15,8 +20,6 @@ export interface LeadWithDetails extends Lead {
     full_name: string;
     email: string;
   } | null;
-  // property relationship in DB might return array or single object depending on query
-  // For now, let's keep it optional/flexible or handle it in the transformer
   interactions?: Interaction[];
 }
 
@@ -37,7 +40,35 @@ export const getLeads = async () => {
 };
 
 // Alias for compatibility with existing code
-export const getAllLeads = getLeads;
+export const getAllLeads = async (useCache = true): Promise<Lead[]> => {
+  try {
+    // Check cache first
+    if (useCache) {
+      const cached = getCachedData<Lead[]>(LEADS_CACHE_KEY, CACHE_TTL);
+      if (cached) return cached;
+    }
+    
+    const { data, error } = await supabase
+      .from("leads")
+      .select(`
+        *,
+        contact:contacts!leads_contact_id_fkey (*)
+      `)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    const leads = data || [];
+    
+    // Cache the result
+    if (useCache) {
+      setCachedData(LEADS_CACHE_KEY, leads);
+    }
+    
+    return leads;
+  } catch (e) {
+    throw e;
+  }
+};
 
 // Get single lead with full details
 export const getLead = async (id: string): Promise<LeadWithDetails | null> => {
@@ -60,39 +91,40 @@ export const getLead = async (id: string): Promise<LeadWithDetails | null> => {
 };
 
 // Create new lead
-export const createLead = async (lead: LeadInsert) => {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
-
+export const createLead = async (lead: Omit<Lead, "id" | "created_at" | "updated_at">): Promise<Lead> => {
   const { data, error } = await supabase
     .from("leads")
-    .insert({
-      ...lead,
-      user_id: user.id,
-      status: (lead.status || "new") as any,
-      lead_type: (lead.lead_type || "buyer") as any
-    })
+    .insert(lead)
     .select()
     .single();
 
   if (error) throw error;
-  return data;
+  if (!data) throw new Error("Failed to create lead");
+
+  // Invalidar caches relacionados
+  CacheManager.invalidateLeadsRelated();
+
+  return data as Lead;
 };
 
-// Update lead
-export const updateLead = async (id: string, updates: LeadUpdate) => {
-  const { data, error } = await supabase
-    .from("leads")
-    .update({
-      ...updates,
-      updated_at: new Date().toISOString(),
-    } as any) // Cast to any
+// Update lead - Public API with type safety
+export const updateLead = async (id: string, updates: Partial<Lead>): Promise<Lead> => {
+  // Cast query builder to any to bypass strict Supabase type checking
+  const query: any = supabase.from("leads");
+  
+  const { data, error } = await query
+    .update(updates as any)
     .eq("id", id)
     .select()
     .single();
 
   if (error) throw error;
-  return data;
+  if (!data) throw new Error("Failed to update lead");
+
+  // Invalidar caches relacionados
+  CacheManager.invalidateLeadsRelated();
+
+  return data as Lead;
 };
 
 // Delete lead
@@ -103,6 +135,9 @@ export const deleteLead = async (id: string): Promise<void> => {
     .eq("id", id);
 
   if (error) throw error;
+
+  // Invalidar caches relacionados
+  CacheManager.invalidateLeadsRelated();
 };
 
 // Add interaction to lead
@@ -117,8 +152,9 @@ export const addLeadInteraction = async (
 
   if (error) throw error;
 
-  await supabase
-    .from("leads")
+  // Use the any-typed update approach here as well to avoid issues
+  const queryBuilder: any = supabase.from("leads");
+  await queryBuilder
     .update({ last_contact_date: new Date().toISOString() })
     .eq("id", interaction.lead_id);
 
@@ -155,9 +191,11 @@ export const getPipelineStages = async () => {
 };
 
 export const updateLeadStatus = async (id: string, status: string) => {
-  const { data, error } = await supabase
-    .from("leads")
-    .update({ status: status as any })
+  // Use any-typed query builder
+  const queryBuilder: any = supabase.from("leads");
+  
+  const { data, error } = await queryBuilder
+    .update({ status })
     .eq("id", id)
     .select()
     .single();
@@ -209,10 +247,15 @@ export const getLeadStats = async () => {
 
 // Assign lead to user
 export const assignLead = async (leadId: string, userId: string): Promise<void> => {
-  const { error } = await supabase
-    .from("leads")
-    .update({ assigned_to: userId } as any)
+  // Cast query builder to bypass type checking
+  const query: any = supabase.from("leads");
+  
+  const { error } = await query
+    .update({ assigned_to: userId })
     .eq("id", leadId);
 
   if (error) throw error;
+
+  // Invalidar caches relacionados
+  CacheManager.invalidateLeadsRelated();
 };

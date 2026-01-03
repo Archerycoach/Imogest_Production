@@ -152,7 +152,7 @@ export default function AdminSubscriptionsPage() {
 
   const loadData = async () => {
     try {
-      const [subsData, usersData, plansData, statsData] = await Promise.all([
+      const [subsData, usersResult, plansData, statsData] = await Promise.all([
         getAllSubscriptions(),
         getAllUsers(),
         getAllSubscriptionPlans(),
@@ -160,7 +160,13 @@ export default function AdminSubscriptionsPage() {
       ]);
 
       setSubscriptions(subsData);
-      setUsers(usersData);
+      
+      if (usersResult.error) {
+        console.error("Error loading users:", usersResult.error);
+      } else {
+        setUsers(usersResult.data || []);
+      }
+      
       setPlans(plansData);
       setStats(statsData);
     } catch (error) {
@@ -169,6 +175,20 @@ export default function AdminSubscriptionsPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      const result = await getAllUsers();
+      
+      if (result.error) {
+        console.error("Error fetching users:", result.error);
+      } else {
+        setUsers(result.data || []);
+      }
+    };
+
+    fetchUsers();
+  }, []);
 
   const handleCreateSubscription = async () => {
     if (!selectedUserId || !selectedPlanId) {

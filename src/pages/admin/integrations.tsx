@@ -27,6 +27,8 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
+  Save,
+  TestTube,
 } from "lucide-react";
 import {
   getAllIntegrations,
@@ -60,8 +62,28 @@ export default function Integrations() {
   const [googleCalendarConnected, setGoogleCalendarConnected] = useState(false);
 
   useEffect(() => {
-    loadIntegrations();
-    checkGoogleCalendarConnection();
+    // Wait for session to be available before loading integrations
+    const initializeIntegrations = async () => {
+      try {
+        // Check if user is authenticated first
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (!session) {
+          console.warn("No session available, skipping integrations load");
+          setLoading(false);
+          return;
+        }
+
+        // Only load integrations if session exists
+        await loadIntegrations();
+        await checkGoogleCalendarConnection();
+      } catch (error) {
+        console.error("Error initializing integrations:", error);
+        setLoading(false);
+      }
+    };
+
+    initializeIntegrations();
   }, []);
 
   const loadIntegrations = async () => {
@@ -88,8 +110,13 @@ export default function Integrations() {
 
   const checkGoogleCalendarConnection = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      const { data: { user }, error } = await supabase.auth.getUser();
+      
+      if (error || !user) {
+        console.warn("No authenticated user, skipping Google Calendar check");
+        setGoogleCalendarConnected(false);
+        return;
+      }
 
       const { data } = await supabase
         .from("user_integrations")
@@ -101,6 +128,8 @@ export default function Integrations() {
       setGoogleCalendarConnected(data?.is_active || false);
     } catch (error) {
       console.error("Error checking Google Calendar connection:", error);
+      // Gracefully handle auth errors - assume not connected
+      setGoogleCalendarConnected(false);
     }
   };
 
@@ -343,6 +372,14 @@ export default function Integrations() {
               >
                 {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 Guardar Configuração
+              </Button>
+              <Button
+                onClick={() => handleTest(config.name)}
+                disabled={isTesting}
+                variant="outline"
+              >
+                {isTesting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Testar
               </Button>
               <Button variant="ghost" size="icon" asChild>
                 <a href={config.docsUrl} target="_blank" rel="noopener noreferrer">

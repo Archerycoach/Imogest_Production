@@ -12,6 +12,7 @@ export interface CreateUserData {
   email: string;
   password: string;
   fullName: string;
+  phone?: string;
   role: "admin" | "team_lead" | "agent";
   isActive: boolean;
   teamLeadId?: string;
@@ -99,44 +100,23 @@ export const getAdminStats = async () => {
 };
 
 // Get all users (admin only)
-export const getAllUsers = async (): Promise<Profile[]> => {
-  const role = await getCurrentUserRole();
-  console.log("[AdminService] getAllUsers - Current user role:", role);
-  
-  let query = supabase
-    .from("profiles")
-    .select("*")
-    .order("created_at", { ascending: false });
+export async function getAllUsers() {
+  try {
+    // Use RPC function that bypasses RLS for admins
+    const { data, error } = await supabase
+      .rpc('get_all_profiles_for_admin');
 
-  // Team leads only see their assigned agents
-  if (role === "team_lead") {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      console.log("[AdminService] getAllUsers - No user found for team_lead");
-      return [];
-    }
-    
-    console.log("[AdminService] getAllUsers - Filtering for team_lead:", user.id);
-    query = query.or(`team_lead_id.eq.${user.id},id.eq.${user.id}`);
+    if (error) throw error;
+
+    return { data, error: null };
+  } catch (error) {
+    console.error("Error fetching all users:", error);
+    return { 
+      data: null, 
+      error: error instanceof Error ? error : new Error(String(error))
+    };
   }
-
-  const { data, error } = await query;
-
-  if (error) {
-    console.error("[AdminService] getAllUsers - Error:", error);
-    throw error;
-  }
-  
-  console.log("[AdminService] getAllUsers - Returning", data?.length || 0, "users");
-  console.log("[AdminService] getAllUsers - User details:", data?.map(u => ({ 
-    id: u.id, 
-    name: u.full_name, 
-    email: u.email,
-    role: u.role 
-  })));
-  
-  return data || [];
-};
+}
 
 // Update user role (admin only)
 export const updateUserRole = async (userId: string, role: string) => {
