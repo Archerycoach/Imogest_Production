@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/select";
 import { Search, Edit, Trash2, Phone, Mail, Euro, Calendar, MessageCircle, UserCheck, FileText, Eye, Clock, CalendarDays, CheckCircle, Users, User, DollarSign, MapPin, Home, BedDouble, Bath, Ruler, Banknote, MessageSquare, Plus } from "lucide-react";
 import type { LeadWithContacts } from "@/services/leadsService";
-import { assignLead } from "@/services/leadsService";
+import { assignLead, getArchivedLeads } from "@/services/leadsService";
 import { convertLeadToContact } from "@/services/contactsService";
 import { createInteraction, getInteractionsByLead } from "@/services/interactionsService";
 import type { InteractionWithDetails } from "@/services/interactionsService";
@@ -53,6 +53,7 @@ interface LeadsListProps {
 export function LeadsList({ leads, onEdit, onDelete, isLoading, onRefresh }: LeadsListProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<string>("all");
+  const [showArchived, setShowArchived] = useState(false);
   const [selectedLead, setSelectedLead] = useState<LeadWithContacts | null>(null);
   const [convertDialogOpen, setConvertDialogOpen] = useState(false);
   const [interactionDialogOpen, setInteractionDialogOpen] = useState(false);
@@ -73,6 +74,10 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onRefresh }: Lea
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
   const [selectedLeadForTask, setSelectedLeadForTask] = useState<LeadWithContacts | null>(null);
+  
+  // State for archived leads
+  const [archivedLeads, setArchivedLeads] = useState<LeadWithContacts[]>([]);
+  const [isLoadingArchived, setIsLoadingArchived] = useState(false);
 
   // Operation lock to prevent concurrent operations
   const operationLockRef = useRef(false);
@@ -100,6 +105,30 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onRefresh }: Lea
       console.error("Error loading user role:", error);
     }
   };
+  
+  // Fetch archived leads when toggle is active
+  useEffect(() => {
+    if (showArchived) {
+      const fetchArchived = async () => {
+        setIsLoadingArchived(true);
+        try {
+          const data = await getArchivedLeads();
+          setArchivedLeads(data as unknown as LeadWithContacts[]);
+        } catch (error) {
+          console.error("Error fetching archived leads:", error);
+          toast({
+            title: "Erro",
+            description: "Não foi possível carregar as leads arquivadas.",
+            variant: "destructive",
+          });
+        } finally {
+          setIsLoadingArchived(false);
+        }
+      };
+      
+      fetchArchived();
+    }
+  }, [showArchived, toast, onRefresh]); // Re-fetch when onRefresh triggers (e.g. after restore)
 
   // Universal operation wrapper with timeout protection
   const executeOperation = useCallback(async (
@@ -288,7 +317,7 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onRefresh }: Lea
       resetAllStates();
       
       if (onRefresh) {
-        await onRefresh();
+        await onRefresh(); // This will force fresh data in parent
       }
     });
   }, [selectedLead, toast, onRefresh, executeOperation, resetAllStates]);
@@ -326,7 +355,7 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onRefresh }: Lea
       resetAllStates();
 
       if (onRefresh) {
-        await onRefresh();
+        await onRefresh(); // Force fresh data
       }
     });
   }, [selectedLead, interactionForm, toast, onRefresh, executeOperation, resetAllStates]);
@@ -364,7 +393,7 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onRefresh }: Lea
       resetAllStates();
       
       if (onRefresh) {
-        await onRefresh();
+        await onRefresh(); // Force fresh data
       }
     });
   }, [selectedLead, selectedAgentId, toast, onRefresh, executeOperation, resetAllStates]);
@@ -409,6 +438,22 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onRefresh }: Lea
       console.error("Error deleting lead:", error);
     }
   }, [onDelete]);
+
+  const handleRestore = useCallback(async (id: string) => {
+    await executeOperation("restore lead", async () => {
+      const { restoreLead } = await import("@/services/leadsService");
+      await restoreLead(id);
+      
+      toast({
+        title: "Lead restaurada!",
+        description: "A lead foi restaurada com sucesso.",
+      });
+
+      if (onRefresh) {
+        await onRefresh(); // Force fresh data
+      }
+    });
+  }, [toast, onRefresh, executeOperation]);
 
   const handleStatusChange = useCallback(async (id: string, newStatus: string) => {
     try {
@@ -507,14 +552,26 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onRefresh }: Lea
   // Memoize filtered and sorted leads calculation
   const filteredLeads = useMemo(() => {
     const searchLower = searchTerm.toLowerCase();
+    // Use archivedLeads if showArchived is true, otherwise use props.leads
+    const sourceLeads = showArchived ? archivedLeads : leads;
     
-    return leads
+    return sourceLeads
       .filter((lead) => {
+        // Search filter
         if (searchTerm) {
           const nameMatch = lead.name.toLowerCase().includes(searchLower);
           const emailMatch = lead.email?.toLowerCase().includes(searchLower);
           const phoneMatch = lead.phone?.includes(searchTerm);
           if (!nameMatch && !emailMatch && !phoneMatch) return false;
+        }
+        
+        // Type filter
+        if (filterType !== "all") {
+          if (filterType === "buyer") {
+            if (lead.lead_type !== "buyer" && lead.lead_type !== "both") return false;
+          } else if (filterType === "seller") {
+            if (lead.lead_type !== "seller" && lead.lead_type !== "both") return false;
+          }
         }
         
         return true;
@@ -523,12 +580,12 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onRefresh }: Lea
         // Sort by created_at by default
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
-  }, [leads, searchTerm]);
+  }, [leads, searchTerm, filterType, showArchived, archivedLeads]);
 
   // Just return all filtered leads - no pagination in this component
   const currentLeads = filteredLeads;
 
-  if (isLoading) {
+  if (isLoading || (showArchived && isLoadingArchived)) {
     return (
       <div className="flex justify-center p-8">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
@@ -571,6 +628,15 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onRefresh }: Lea
           >
             Vendedores
           </Button>
+          <div className="ml-auto">
+            <Button
+              variant={showArchived ? "default" : "outline"}
+              onClick={() => setShowArchived(!showArchived)}
+              className={showArchived ? "bg-gray-600 hover:bg-gray-700" : ""}
+            >
+              {showArchived ? "Ver Ativas" : "Ver Arquivadas"}
+            </Button>
+          </div>
         </div>
 
         {currentLeads.length === 0 ? (
@@ -582,30 +648,43 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onRefresh }: Lea
             {currentLeads.map((lead) => (
               <Card key={lead.id} className="relative p-6 hover:shadow-lg transition-shadow">
                 <div className="absolute top-4 right-4 flex gap-2">
-                  <button
-                    onClick={() => onEdit(lead)}
-                    className="text-blue-500 hover:text-blue-700 transition-colors"
-                    title="Editar"
-                    type="button"
-                  >
-                    <Edit className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => handleConvertClick(lead)}
-                    className="text-green-500 hover:text-green-700 transition-colors"
-                    title="Converter em Contacto"
-                    type="button"
-                  >
-                    <CheckCircle className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(lead.id)}
-                    className="text-red-500 hover:text-red-700 transition-colors"
-                    title="Apagar"
-                    type="button"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  {!showArchived ? (
+                    <>
+                      <button
+                        onClick={() => onEdit(lead)}
+                        className="text-blue-500 hover:text-blue-700 transition-colors"
+                        title="Editar"
+                        type="button"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleConvertClick(lead)}
+                        className="text-green-500 hover:text-green-700 transition-colors"
+                        title="Converter em Contacto"
+                        type="button"
+                      >
+                        <CheckCircle className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(lead.id)}
+                        className="text-red-500 hover:text-red-700 transition-colors"
+                        title="Arquivar"
+                        type="button"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => handleRestore(lead.id)}
+                      className="text-green-500 hover:text-green-700 transition-colors"
+                      title="Restaurar Lead"
+                      type="button"
+                    >
+                      <CheckCircle className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
 
                 <h3 className="text-lg font-semibold text-gray-900 mb-3 pr-16">

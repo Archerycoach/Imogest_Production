@@ -5,75 +5,58 @@ import { getCurrentUserRole } from "@/lib/auth";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  allowedRoles?: string[]; // Add this prop
+  allowedRoles?: string[];
 }
 
 export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(false);
-  const [retryCount, setRetryCount] = useState(0);
-  const MAX_RETRIES = 3;
 
   useEffect(() => {
-    console.log("ProtectedRoute: Starting auth check...");
+    let mounted = true;
+
+    const checkAuth = async () => {
+      try {
+        const session = await getCurrentSession();
+        
+        if (!mounted) return;
+
+        if (!session) {
+          router.push("/login");
+          return;
+        }
+
+        // Check role if specified
+        if (allowedRoles && allowedRoles.length > 0) {
+          const userRole = await getCurrentUserRole();
+          
+          if (!mounted) return;
+          
+          if (!userRole || !allowedRoles.includes(userRole)) {
+            router.push("/dashboard");
+            return;
+          }
+        }
+
+        if (mounted) {
+          setAuthorized(true);
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error("ProtectedRoute: Auth error:", error);
+        if (mounted) {
+          router.push("/login");
+        }
+      }
+    };
+
     checkAuth();
-  }, [router.pathname]);
 
-  const checkAuth = async () => {
-    console.log(`ProtectedRoute: Checking auth (attempt ${retryCount + 1}/${MAX_RETRIES})...`);
-    
-    try {
-      const session = await getCurrentSession();
-      
-      if (!session) {
-        console.log("ProtectedRoute: No session found");
-        
-        // Retry logic para falhas de rede
-        if (retryCount < MAX_RETRIES) {
-          console.log(`ProtectedRoute: Retrying in 1 second... (${retryCount + 1}/${MAX_RETRIES})`);
-          setRetryCount(prev => prev + 1);
-          setTimeout(() => checkAuth(), 1000);
-          return;
-        }
-        
-        console.log("ProtectedRoute: Max retries reached, redirecting to login");
-        router.push("/login");
-        return;
-      }
-
-      console.log("ProtectedRoute: Session valid, checking role...");
-
-      // Check role if specified
-      if (allowedRoles && allowedRoles.length > 0) {
-        const userRole = await getCurrentUserRole();
-        console.log("ProtectedRoute: User role:", userRole);
-        
-        if (!userRole || !allowedRoles.includes(userRole)) {
-          console.log("ProtectedRoute: Unauthorized role, redirecting to dashboard");
-          router.push("/dashboard");
-          return;
-        }
-      }
-
-      console.log("ProtectedRoute: Auth check passed ✓");
-      setAuthorized(true);
-      setLoading(false);
-    } catch (error) {
-      console.error("ProtectedRoute: Error checking auth:", error);
-      
-      // Retry em caso de erro
-      if (retryCount < MAX_RETRIES) {
-        console.log(`ProtectedRoute: Error occurred, retrying... (${retryCount + 1}/${MAX_RETRIES})`);
-        setRetryCount(prev => prev + 1);
-        setTimeout(() => checkAuth(), 1000);
-        return;
-      }
-      
-      console.log("ProtectedRoute: Max retries reached after error, redirecting to login");
-      router.push("/login");
-    }
-  };
+    return () => {
+      mounted = false;
+    };
+  }, [router.pathname, allowedRoles]);
 
   if (loading) {
     return (
@@ -81,11 +64,6 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">A verificar autenticação...</p>
-          {retryCount > 0 && (
-            <p className="text-sm text-gray-500 mt-2">
-              Tentativa {retryCount}/{MAX_RETRIES}
-            </p>
-          )}
         </div>
       </div>
     );

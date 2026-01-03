@@ -110,17 +110,15 @@ export function LeadForm({ initialData, onSuccess, onCancel }: LeadFormProps) {
         contact_id: null,
         custom_fields: {},
         tags: [],
-        assigned_to: "",
+        assigned_to: null,
         budget_max: parseFloat(formData.budget) || 0,
         budget_min: 0,
         last_contact_date: null,
-        lead_score: 0,
-        max_price: parseFloat(formData.budget) || 0,
-        min_price: 0,
         next_follow_up: null,
         score: 0,
         temperature: "cold",
         user_id: user.id,
+        archived_at: null,
       };
 
       if (initialData) {

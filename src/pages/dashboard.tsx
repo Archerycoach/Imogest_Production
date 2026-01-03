@@ -94,12 +94,15 @@ export default function Dashboard() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      console.log("🔐 Dashboard - Current User ID:", user.id);
+
       const { data: profile } = await supabase
         .from("profiles")
         .select("role")
         .eq("id", user.id)
         .single();
 
+      console.log("🔐 Dashboard - User Role:", profile?.role);
       setUserRole(profile?.role || null);
       setCurrentUserId(user.id);
     } catch (error) {
@@ -138,12 +141,25 @@ export default function Dashboard() {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
+      
+      console.log("📊 Dashboard - Loading data...");
+      console.log("📊 Dashboard - Current User ID:", currentUserId);
+      console.log("📊 Dashboard - User Role:", userRole);
+      console.log("📊 Dashboard - Selected Agent:", selectedAgent);
+      
+      // FORCE FRESH DATA - Bypass all caches
       const [rawLeads, properties, rawTasks, events] = await Promise.all([
-        getLeads(),
+        getLeads(false), // useCache = false
         getProperties(),
         getTasks(),
         getCalendarEvents(),
       ]);
+
+      console.log("📊 Dashboard - Raw Leads Count:", rawLeads.length);
+      console.log("📊 Dashboard - Raw Leads:", rawLeads);
+      console.log("📊 Dashboard - Properties Count:", properties.length);
+      console.log("📊 Dashboard - Tasks Count:", rawTasks.length);
+      console.log("📊 Dashboard - Events Count:", events.length);
 
       // Filtrar leads baseado no role e seleção
       let allLeads: Lead[] = [];
@@ -154,19 +170,33 @@ export default function Dashboard() {
           ? rawLeads.filter(l => l.assigned_to === selectedAgent)
           : rawLeads;
       } else if (userRole === "team_lead") {
-        // Team Lead vê apenas agentes da sua equipa
+        // Team Lead vê:
+        // 1. Leads criadas por ele (user_id = currentUserId)
+        // 2. Leads assignadas aos agentes da equipa
+        // 3. Leads assignadas a ele mesmo (assigned_to = currentUserId)
         if (selectedAgent !== "all") {
           // Agente específico da equipa
           allLeads = rawLeads.filter(l => l.assigned_to === selectedAgent);
         } else {
-          // Todos os agentes da equipa
+          // Todas as leads relevantes para o team lead
           const teamAgentIds = agents.map(a => a.id);
-          allLeads = rawLeads.filter(l => l.assigned_to && teamAgentIds.includes(l.assigned_to));
+          allLeads = rawLeads.filter(l => {
+            // Lead criada pelo team lead
+            if (l.user_id === currentUserId) return true;
+            // Lead assignada ao team lead
+            if (l.assigned_to === currentUserId) return true;
+            // Lead assignada a um agente da equipa
+            if (l.assigned_to && teamAgentIds.includes(l.assigned_to)) return true;
+            return false;
+          });
         }
       } else {
         // Agente vê apenas suas próprias leads
         allLeads = rawLeads.filter(l => l.assigned_to === currentUserId);
       }
+
+      console.log("📊 Dashboard - Filtered Leads Count:", allLeads.length);
+      console.log("📊 Dashboard - Filtered Leads:", allLeads);
 
       // Filtrar tasks baseado no role
       let tasks = rawTasks;
@@ -223,10 +253,6 @@ export default function Dashboard() {
       const availableProperties = properties.filter(p => p.status === "available").length;
 
       // Generate chart data based on selected period
-      console.log("=== INICIANDO CÁLCULO DE GRÁFICO ===");
-      console.log("Total de leads na base:", allLeads.length);
-      console.log("Data atual:", now.toISOString());
-      
       const months: ChartData[] = [];
       
       for (let i = period - 1; i >= 0; i--) {
@@ -235,10 +261,6 @@ export default function Dashboard() {
         const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
         monthEnd.setHours(23, 59, 59, 999);
 
-        console.log(`\n--- MÊS ${i} (${date.toLocaleDateString("pt-PT", { month: "long", year: "numeric" })}) ---`);
-        console.log("Início:", monthStart.toISOString());
-        console.log("Fim:", monthEnd.toISOString());
-
         const monthLeads = allLeads.filter(l => {
           if (!l.created_at) return false;
           const leadDate = new Date(l.created_at);
@@ -246,13 +268,7 @@ export default function Dashboard() {
           return leadDate >= monthStart && leadDate <= monthEnd;
         });
 
-        monthLeads.forEach(lead => {
-          console.log(`  ✅ Lead encontrada: ${lead.name} criada em ${lead.created_at}`);
-        });
-
         const monthWon = monthLeads.filter(l => l.status === "won");
-
-        console.log(`Total leads: ${monthLeads.length}, Ganhas: ${monthWon.length}`);
 
         months.push({
           month: date.toLocaleDateString("pt-PT", { month: "short" }),
@@ -260,9 +276,6 @@ export default function Dashboard() {
           won: monthWon.length,
         });
       }
-
-      console.log("\n=== DADOS FINAIS DO GRÁFICO ===");
-      console.log(months);
 
       setStats({
         totalLeads: allLeads.length,

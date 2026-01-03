@@ -19,6 +19,7 @@ export enum CacheKey {
   DOCUMENTS = "documents_cache",
   TEMPLATES = "templates_cache",
   SUBSCRIPTIONS = "subscriptions_cache",
+  PROFILE = "profile_cache",
 }
 
 /**
@@ -130,6 +131,14 @@ export class CacheManager {
       CacheKey.NOTIFICATIONS,
     ]);
     console.log("🔄 Tasks-related caches invalidated");
+  }
+
+  /**
+   * Invalida cache de perfil do utilizador
+   */
+  static invalidateProfile(userId: string): void {
+    this.invalidate(CacheKey.PROFILE);
+    console.log(`👤 Profile cache invalidated for ${userId}`);
   }
 
   /**

@@ -16,15 +16,21 @@ import { getGoogleCredentials } from "@/services/googleCalendarService";
 import { supabase } from "@/integrations/supabase/client";
 import { Plus, Clock, ChevronLeft, ChevronRight, RefreshCw, Calendar as CalendarIcon, Link } from "lucide-react";
 import { GoogleCalendarConnect } from "@/components/GoogleCalendarConnect";
-import type { Lead, Property } from "@/types";
+import type { Lead, Property, CalendarEvent } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 
 type ViewMode = "day" | "week" | "month";
 
+// Extend CalendarEvent to include Task specific fields for the union type
+interface CalendarEventOrTask extends CalendarEvent {
+  taskStatus?: string;
+  taskPriority?: string;
+}
+
 export default function Calendar() {
   const router = useRouter();
   const { toast } = useToast();
-  const [events, setEvents] = useState<any[]>([]);
+  const [events, setEvents] = useState<CalendarEventOrTask[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
@@ -39,6 +45,7 @@ export default function Calendar() {
   const [googleConnected, setGoogleConnected] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [googleConfigured, setGoogleConfigured] = useState(false);
+  
   const [editingTask, setEditingTask] = useState({
     id: "",
     title: "",
@@ -47,14 +54,15 @@ export default function Calendar() {
     priority: "medium",
     due_date: "",
   });
+
   const [newEvent, setNewEvent] = useState({
     title: "",
     description: "",
-    event_type: "meeting" as const,
-    start_time: "",
-    end_time: "",
-    lead_id: "none",
-    property_id: "none",
+    eventType: "meeting",
+    startTime: "",
+    endTime: "",
+    leadId: "none",
+    propertyId: "none",
   });
 
   useEffect(() => {
@@ -73,7 +81,6 @@ export default function Calendar() {
   };
 
   const checkGoogleConfiguration = () => {
-    // Check if Google OAuth is configured
     const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
     const configured = !!(clientId && clientId !== "your_client_id_here.apps.googleusercontent.com");
     setGoogleConfigured(configured);
@@ -106,7 +113,6 @@ export default function Calendar() {
     try {
       setSyncing(true);
       
-      // Import events from Google Calendar
       const response = await fetch("/api/google-calendar/list-events");
       const googleEvents = await response.json();
 
@@ -114,12 +120,10 @@ export default function Calendar() {
         throw new Error(googleEvents.error);
       }
 
-      // Sync events to our database
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
       for (const event of googleEvents.events || []) {
-        // Check if event already exists
         const { data: existing } = await supabase
           .from("calendar_events")
           .select("id")
@@ -127,7 +131,6 @@ export default function Calendar() {
           .single();
 
         if (!existing) {
-          // Create new event
           await createCalendarEvent({
             title: event.summary || "Evento sem título",
             description: event.description || null,
@@ -169,8 +172,8 @@ export default function Calendar() {
         body: JSON.stringify({
           summary: event.title,
           description: event.description,
-          start: { dateTime: event.start_time },
-          end: { dateTime: event.end_time },
+          start: { dateTime: event.startTime },
+          end: { dateTime: event.endTime },
         }),
       });
 
@@ -180,7 +183,6 @@ export default function Calendar() {
         throw new Error(result.error);
       }
 
-      // Update event with Google event ID
       await updateCalendarEvent(eventId, {
         google_event_id: result.event.id,
       });
@@ -203,24 +205,39 @@ export default function Calendar() {
         getAllTasks(),
       ]);
       
-      // Merge tasks into events for calendar display
-      const taskEvents = tasksData.map((task: any) => ({
+      console.log("📊 Calendar data loaded:", {
+        eventsFromCalendar: eventsData.length,
+        tasksFromTasks: tasksData.length,
+      });
+      
+      // Merge tasks into events for calendar display (converting to CamelCase)
+      const taskEvents: CalendarEventOrTask[] = tasksData.map((task: any) => ({
         id: task.id,
         title: task.title,
         description: task.description,
-        event_type: "task",
-        start_time: task.due_date || task.created_at,
-        end_time: task.due_date || task.created_at,
-        lead_id: task.lead_id,
-        property_id: task.property_id,
-        task_status: task.status,
-        task_priority: task.priority,
+        eventType: "task",
+        startTime: task.due_date || task.created_at,
+        endTime: task.due_date || task.created_at,
+        leadId: task.lead_id,
+        propertyId: task.property_id,
+        taskStatus: task.status,
+        taskPriority: task.priority,
+        attendees: [], // Required by type
+        createdAt: task.created_at,
+        userId: task.user_id
       }));
       
+      // Combine and set events (all in CamelCase now)
       setEvents([...eventsData, ...taskEvents]);
       setLeads(leadsData as unknown as Lead[]);
       setProperties(propertiesData as unknown as Property[]);
       setTasks(tasksData);
+      
+      console.log("✅ Events merged and processed:", {
+        total: eventsData.length + taskEvents.length,
+        sample: eventsData[0]
+      });
+      
     } catch (error) {
       console.error("Error loading data:", error);
     } finally {
@@ -230,15 +247,14 @@ export default function Calendar() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newEvent.title || !newEvent.start_time) {
+    if (!newEvent.title || !newEvent.startTime) {
       alert("Por favor preencha os campos obrigatórios (Título e Data/Hora Início)");
       return;
     }
 
-    // Validate dates only if end_time is provided
-    if (newEvent.end_time) {
-      const startDate = new Date(newEvent.start_time);
-      const endDate = new Date(newEvent.end_time);
+    if (newEvent.endTime) {
+      const startDate = new Date(newEvent.startTime);
+      const endDate = new Date(newEvent.endTime);
       
       if (endDate <= startDate) {
         alert("A data de fim deve ser posterior à data de início. Por favor ajuste as datas.");
@@ -250,22 +266,21 @@ export default function Calendar() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
+      // Convert CamelCase state to snake_case payload for DB
       const eventData = {
         title: newEvent.title,
         description: newEvent.description || null,
-        event_type: newEvent.event_type,
-        start_time: newEvent.start_time,
-        end_time: newEvent.end_time || null,
-        lead_id: newEvent.lead_id === "none" ? null : newEvent.lead_id,
-        property_id: newEvent.property_id === "none" ? null : newEvent.property_id,
+        event_type: newEvent.eventType,
+        start_time: newEvent.startTime,
+        end_time: newEvent.endTime || null,
+        lead_id: newEvent.leadId === "none" ? null : newEvent.leadId,
+        property_id: newEvent.propertyId === "none" ? null : newEvent.propertyId,
         user_id: session.user.id
       };
 
       if (editingEventId) {
-        // Update existing event
         await updateCalendarEvent(editingEventId, eventData);
       } else {
-        // Create new event
         await createCalendarEvent(eventData);
       }
       
@@ -279,13 +294,14 @@ export default function Calendar() {
 
   const getEventsForView = () => {
     const now = new Date(currentDate);
+    let filtered: CalendarEventOrTask[] = [];
     
     if (viewMode === "day") {
       const startOfDay = new Date(now.setHours(0, 0, 0, 0));
       const endOfDay = new Date(now.setHours(23, 59, 59, 999));
       
-      return events.filter(event => {
-        const eventDate = new Date(event.start_time);
+      filtered = events.filter(event => {
+        const eventDate = new Date(event.startTime);
         return eventDate >= startOfDay && eventDate <= endOfDay;
       });
     } else if (viewMode === "week") {
@@ -297,19 +313,22 @@ export default function Calendar() {
       endOfWeek.setDate(startOfWeek.getDate() + 6);
       endOfWeek.setHours(23, 59, 59, 999);
       
-      return events.filter(event => {
-        const eventDate = new Date(event.start_time);
+      filtered = events.filter(event => {
+        const eventDate = new Date(event.startTime);
         return eventDate >= startOfWeek && eventDate <= endOfWeek;
       });
     } else {
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
       const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
       
-      return events.filter(event => {
-        const eventDate = new Date(event.start_time);
+      filtered = events.filter(event => {
+        const eventDate = new Date(event.startTime);
         return eventDate >= startOfMonth && eventDate <= endOfMonth;
       });
     }
+    
+    // Sort by time
+    return filtered.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
   };
 
   const navigateDate = (direction: "prev" | "next") => {
@@ -325,30 +344,35 @@ export default function Calendar() {
   };
 
   const handleStartTimeChange = (value: string) => {
-    setNewEvent({ ...newEvent, start_time: value });
-    
-    // Auto-adjust end_time to be 1 hour after start_time if end_time is empty
-    if (!newEvent.end_time && value) {
-      const startDate = new Date(value);
-      startDate.setHours(startDate.getHours() + 1);
-      const endTimeString = startDate.toISOString().slice(0, 16);
-      setNewEvent({ ...newEvent, start_time: value, end_time: endTimeString });
-    }
+    setNewEvent(prev => {
+      const updated = { ...prev, startTime: value };
+      // Auto-adjust end_time to be 1 hour after start_time if end_time is empty
+      if (!prev.endTime && value) {
+        const startDate = new Date(value);
+        startDate.setHours(startDate.getHours() + 1);
+        // Format to ISO string without seconds/ms for datetime-local input usually, 
+        // but here we just need a valid ISO string or matching format
+        // Input type="datetime-local" needs YYYY-MM-DDThh:mm
+        const endTimeString = startDate.toISOString().slice(0, 16);
+        updated.endTime = endTimeString;
+      }
+      return updated;
+    });
   };
 
-  const handleEventClick = useCallback((event: any) => {
-    // Don't edit tasks, only calendar events
-    if (event.event_type === "task") return;
+  const handleEventClick = useCallback((event: CalendarEventOrTask) => {
+    // Don't edit tasks via this form, only calendar events
+    if (event.eventType === "task") return;
 
     setEditingEventId(event.id);
     setNewEvent({
       title: event.title,
       description: event.description || "",
-      event_type: event.event_type,
-      start_time: event.start_time.slice(0, 16), // Format for datetime-local input
-      end_time: event.end_time ? event.end_time.slice(0, 16) : "",
-      lead_id: event.lead_id || "none",
-      property_id: event.property_id || "none",
+      eventType: event.eventType || "meeting",
+      startTime: event.startTime.slice(0, 16), // Format for datetime-local input
+      endTime: event.endTime ? event.endTime.slice(0, 16) : "",
+      leadId: event.leadId || "none",
+      propertyId: event.propertyId || "none",
     });
     setShowForm(true);
   }, []);
@@ -359,11 +383,11 @@ export default function Calendar() {
     setNewEvent({
       title: "",
       description: "",
-      event_type: "meeting",
-      start_time: "",
-      end_time: "",
-      lead_id: "none",
-      property_id: "none",
+      eventType: "meeting",
+      startTime: "",
+      endTime: "",
+      leadId: "none",
+      propertyId: "none",
     });
   };
 
@@ -384,12 +408,11 @@ export default function Calendar() {
         variant: "destructive",
       });
     }
-  }, []);
+  }, [editingEventId, toast]); // Added dependencies
 
   const handleDragStart = (e: React.DragEvent, item: { id: string; type: "event" | "task"; startTime: string }) => {
     setDraggedItem(item);
     e.dataTransfer.effectAllowed = "move";
-    // Add visual feedback
     if (e.currentTarget instanceof HTMLElement) {
       e.currentTarget.style.opacity = "0.5";
     }
@@ -413,7 +436,6 @@ export default function Calendar() {
     if (!draggedItem) return;
 
     try {
-      // Calculate new date while preserving time
       const originalDate = new Date(draggedItem.startTime);
       const newDate = new Date(targetDate);
       newDate.setHours(originalDate.getHours());
@@ -422,13 +444,12 @@ export default function Calendar() {
       newDate.setMilliseconds(0);
 
       if (draggedItem.type === "event") {
-        // Update calendar event
         const event = events.find(e => e.id === draggedItem.id);
         if (!event) return;
 
-        const timeDiff = newDate.getTime() - new Date(event.start_time).getTime();
-        const newEndTime = event.end_time 
-          ? new Date(new Date(event.end_time).getTime() + timeDiff).toISOString()
+        const timeDiff = newDate.getTime() - new Date(event.startTime).getTime();
+        const newEndTime = event.endTime 
+          ? new Date(new Date(event.endTime).getTime() + timeDiff).toISOString()
           : null;
 
         await updateCalendarEvent(draggedItem.id, {
@@ -436,7 +457,6 @@ export default function Calendar() {
           end_time: newEndTime,
         });
       } else {
-        // Update task due_date
         await updateTask(draggedItem.id, {
           due_date: newDate.toISOString(),
         });
@@ -450,14 +470,14 @@ export default function Calendar() {
     }
   };
 
-  const handleTaskClick = (task: any) => {
+  const handleTaskClick = (task: CalendarEventOrTask) => {
     setEditingTask({
       id: task.id,
       title: task.title,
       description: task.description || "",
-      status: task.task_status || "pending",
-      priority: task.task_priority || "medium",
-      due_date: task.start_time ? task.start_time.slice(0, 16) : "",
+      status: task.taskStatus || "pending",
+      priority: task.taskPriority || "medium",
+      due_date: task.startTime ? task.startTime.slice(0, 16) : "",
     });
     setShowTaskModal(true);
   };
@@ -545,7 +565,7 @@ export default function Calendar() {
     const endOfDay = new Date(day.setHours(23, 59, 59, 999));
     
     return events.filter(event => {
-      const eventDate = new Date(event.start_time);
+      const eventDate = new Date(event.startTime);
       return eventDate >= startOfDay && eventDate <= endOfDay;
     });
   };
@@ -564,8 +584,8 @@ export default function Calendar() {
     }
   };
 
-  // No filtering applied - show all events
-  const filteredEvents = events;
+  // Apply filtering based on view mode and current date
+  const filteredEvents = getEventsForView();
 
   return (
     <Layout title="Agenda">
@@ -749,8 +769,8 @@ export default function Calendar() {
                 <div>
                   <Label htmlFor="event_type">Tipo de Evento</Label>
                   <Select
-                    value={newEvent.event_type}
-                    onValueChange={(value) => setNewEvent({ ...newEvent, event_type: value as any })}
+                    value={newEvent.eventType}
+                    onValueChange={(value) => setNewEvent({ ...newEvent, eventType: value })}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -771,7 +791,7 @@ export default function Calendar() {
                     <Input
                       id="start_time"
                       type="datetime-local"
-                      value={newEvent.start_time}
+                      value={newEvent.startTime}
                       onChange={(e) => handleStartTimeChange(e.target.value)}
                       required
                     />
@@ -781,8 +801,8 @@ export default function Calendar() {
                     <Input
                       id="end_time"
                       type="datetime-local"
-                      value={newEvent.end_time}
-                      onChange={(e) => setNewEvent({ ...newEvent, end_time: e.target.value })}
+                      value={newEvent.endTime}
+                      onChange={(e) => setNewEvent({ ...newEvent, endTime: e.target.value })}
                     />
                   </div>
                 </div>
@@ -790,8 +810,8 @@ export default function Calendar() {
                 <div>
                   <Label htmlFor="lead">Lead Associada</Label>
                   <Select
-                    value={newEvent.lead_id}
-                    onValueChange={(value) => setNewEvent({ ...newEvent, lead_id: value === "none" ? "" : value })}
+                    value={newEvent.leadId}
+                    onValueChange={(value) => setNewEvent({ ...newEvent, leadId: value === "none" ? "" : value })}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione uma lead" />
@@ -810,8 +830,8 @@ export default function Calendar() {
                 <div>
                   <Label htmlFor="property">Imóvel Associado</Label>
                   <Select
-                    value={newEvent.property_id}
-                    onValueChange={(value) => setNewEvent({ ...newEvent, property_id: value === "none" ? "" : value })}
+                    value={newEvent.propertyId}
+                    onValueChange={(value) => setNewEvent({ ...newEvent, propertyId: value === "none" ? "" : value })}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione um imóvel" />
@@ -899,19 +919,19 @@ export default function Calendar() {
                           draggable
                           onDragStart={(e) => handleDragStart(e, { 
                             id: event.id, 
-                            type: event.event_type === "task" ? "task" : "event",
-                            startTime: event.start_time 
+                            type: event.eventType === "task" ? "task" : "event",
+                            startTime: event.startTime 
                           })}
                           onDragEnd={handleDragEnd}
                           className={`border rounded-lg p-4 cursor-move transition-opacity ${
-                            event.event_type === "task" 
+                            event.eventType === "task" 
                               ? "bg-blue-50 hover:bg-blue-100" 
                               : "bg-purple-50 hover:bg-purple-100"
                           }`}
                         >
                           <div className="flex items-start justify-between">
                             <div className="flex-1" onClick={() => {
-                              if (event.event_type === "task") {
+                              if (event.eventType === "task") {
                                 handleTaskClick(event);
                               } else {
                                 handleEventClick(event);
@@ -919,19 +939,19 @@ export default function Calendar() {
                             }}>
                               <div className="flex items-center gap-2">
                                 <h3 className="font-semibold">{event.title}</h3>
-                                {event.event_type === "task" && event.task_status && (
+                                {event.eventType === "task" && event.taskStatus && (
                                   <span className={`text-xs px-2 py-1 rounded ${
-                                    event.task_status === "completed" 
+                                    event.taskStatus === "completed" 
                                       ? "bg-green-100 text-green-800" 
-                                      : event.task_status === "in_progress"
+                                      : event.taskStatus === "in_progress"
                                       ? "bg-blue-100 text-blue-800"
                                       : "bg-gray-100 text-gray-800"
                                   }`}>
-                                    {event.task_status === "completed" ? "Concluída" : 
-                                     event.task_status === "in_progress" ? "Em Progresso" : "Pendente"}
+                                    {event.taskStatus === "completed" ? "Concluída" : 
+                                     event.taskStatus === "in_progress" ? "Em Progresso" : "Pendente"}
                                   </span>
                                 )}
-                                {event.google_event_id && (
+                                {event.googleEventId && (
                                   <Badge variant="outline" className="text-xs">
                                     <CalendarIcon className="h-3 w-3 mr-1" />
                                     Google
@@ -944,26 +964,26 @@ export default function Calendar() {
                               <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
                                 <span className="flex items-center gap-1">
                                   <Clock className="h-4 w-4" />
-                                  {new Date(event.start_time).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}
+                                  {new Date(event.startTime).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}
                                 </span>
                                 <span className="capitalize">
-                                  {event.event_type === "task" ? "Tarefa" : event.event_type}
+                                  {event.eventType === "task" ? "Tarefa" : event.eventType}
                                 </span>
-                                {event.event_type === "task" && event.task_priority && (
+                                {event.eventType === "task" && event.taskPriority && (
                                   <span className={`px-2 py-0.5 rounded text-xs ${
-                                    event.task_priority === "high" 
+                                    event.taskPriority === "high" 
                                       ? "bg-red-100 text-red-800" 
-                                      : event.task_priority === "medium"
+                                      : event.taskPriority === "medium"
                                       ? "bg-yellow-100 text-yellow-800"
                                       : "bg-gray-100 text-gray-800"
                                   }`}>
-                                    {event.task_priority === "high" ? "Alta" : 
-                                     event.task_priority === "medium" ? "Média" : "Baixa"}
+                                    {event.taskPriority === "high" ? "Alta" : 
+                                     event.taskPriority === "medium" ? "Média" : "Baixa"}
                                   </span>
                                 )}
                               </div>
                             </div>
-                            {googleConnected && googleConfigured && event.event_type !== "task" && !event.google_event_id && (
+                            {googleConnected && googleConfigured && event.eventType !== "task" && !event.googleEventId && (
                               <Button
                                 size="sm"
                                 variant="outline"
@@ -1007,18 +1027,18 @@ export default function Calendar() {
                                 draggable
                                 onDragStart={(e) => handleDragStart(e, { 
                                   id: event.id, 
-                                  type: event.event_type === "task" ? "task" : "event",
-                                  startTime: event.start_time 
+                                  type: event.eventType === "task" ? "task" : "event",
+                                  startTime: event.startTime 
                                 })}
                                 onDragEnd={handleDragEnd}
                                 className={`text-xs rounded p-1 truncate cursor-move transition-opacity ${
-                                  event.event_type === "task" 
+                                  event.eventType === "task" 
                                     ? "bg-blue-100 hover:bg-blue-200" 
                                     : "bg-purple-100 hover:bg-purple-200"
                                 }`}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  if (event.event_type === "task") {
+                                  if (event.eventType === "task") {
                                     handleTaskClick(event);
                                   } else {
                                     handleEventClick(event);
@@ -1026,7 +1046,7 @@ export default function Calendar() {
                                 }}
                               >
                                 <div className="font-medium">
-                                  {new Date(event.start_time).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}
+                                  {new Date(event.startTime).toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })}
                                 </div>
                                 <div className="truncate">{event.title}</div>
                               </div>
@@ -1072,18 +1092,18 @@ export default function Calendar() {
                                   draggable
                                   onDragStart={(e) => handleDragStart(e, { 
                                     id: event.id, 
-                                    type: event.event_type === "task" ? "task" : "event",
-                                    startTime: event.start_time 
+                                    type: event.eventType === "task" ? "task" : "event",
+                                    startTime: event.startTime 
                                   })}
                                   onDragEnd={handleDragEnd}
                                   className={`text-xs rounded p-1 truncate cursor-move transition-opacity ${
-                                    event.event_type === "task" 
+                                    event.eventType === "task" 
                                       ? "bg-blue-100 hover:bg-blue-200" 
                                       : "bg-purple-100 hover:bg-purple-200"
                                   }`}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    if (event.event_type === "task") {
+                                    if (event.eventType === "task") {
                                       handleTaskClick(event);
                                     } else {
                                       handleEventClick(event);

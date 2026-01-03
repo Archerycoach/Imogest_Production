@@ -26,17 +26,33 @@ export interface LeadWithDetails extends Lead {
 export type LeadWithContacts = LeadWithDetails;
 
 // Get all leads with filters
-export const getLeads = async () => {
-  const { data, error } = await supabase
-    .from("leads")
-    .select(`
-      *,
-      contact:contacts!leads_contact_id_fkey (*)
-    `)
-    .order("created_at", { ascending: false });
+export const getLeads = async (useCache = true) => {
+  try {
+    // Check cache first only if useCache is true
+    if (useCache) {
+      const cached = getCachedData<Lead[]>(LEADS_CACHE_KEY, CACHE_TTL);
+      if (cached) return cached;
+    }
 
-  if (error) throw error;
-  return (data as unknown) as Lead[];
+    const { data, error } = await supabase
+      .from("leads")
+      .select(`
+        *,
+        contact:contacts!leads_contact_id_fkey (*)
+      `)
+      .is("archived_at", null)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    const leads = data || [];
+    
+    // Always update cache with fresh data
+    setCachedData(LEADS_CACHE_KEY, leads);
+    
+    return leads;
+  } catch (e) {
+    throw e;
+  }
 };
 
 // Alias for compatibility with existing code
@@ -54,6 +70,7 @@ export const getAllLeads = async (useCache = true): Promise<Lead[]> => {
         *,
         contact:contacts!leads_contact_id_fkey (*)
       `)
+      .is("archived_at", null)
       .order("created_at", { ascending: false });
 
     if (error) throw error;
@@ -127,11 +144,12 @@ export const updateLead = async (id: string, updates: Partial<Lead>): Promise<Le
   return data as Lead;
 };
 
-// Delete lead
-export const deleteLead = async (id: string): Promise<void> => {
-  const { error } = await supabase
-    .from("leads")
-    .delete()
+// Archive lead (soft delete) - replaces deleteLead
+export const archiveLead = async (id: string): Promise<void> => {
+  const query: any = supabase.from("leads");
+  
+  const { error } = await query
+    .update({ archived_at: new Date().toISOString() })
     .eq("id", id);
 
   if (error) throw error;
@@ -139,6 +157,38 @@ export const deleteLead = async (id: string): Promise<void> => {
   // Invalidar caches relacionados
   CacheManager.invalidateLeadsRelated();
 };
+
+// Restore archived lead
+export const restoreLead = async (id: string): Promise<void> => {
+  const query: any = supabase.from("leads");
+  
+  const { error } = await query
+    .update({ archived_at: null })
+    .eq("id", id);
+
+  if (error) throw error;
+
+  // Invalidar caches relacionados
+  CacheManager.invalidateLeadsRelated();
+};
+
+// Get archived leads
+export const getArchivedLeads = async (): Promise<Lead[]> => {
+  const { data, error } = await supabase
+    .from("leads")
+    .select(`
+      *,
+      contact:contacts!leads_contact_id_fkey (*)
+    `)
+    .not("archived_at", "is", null)
+    .order("archived_at", { ascending: false });
+
+  if (error) throw error;
+  return (data as unknown) as Lead[];
+};
+
+// Keep deleteLead as alias for backward compatibility
+export const deleteLead = archiveLead;
 
 // Add interaction to lead
 export const addLeadInteraction = async (

@@ -41,30 +41,6 @@ export default function Leads() {
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Operation lock to prevent concurrent operations
-  const operationLockRef = useRef(false);
-  const loadTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  useEffect(() => {
-    checkAuth();
-  }, []);
-
-  useEffect(() => {
-    if (user) {
-      loadLeads();
-    }
-  }, [user]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (loadTimeoutRef.current) {
-        clearTimeout(loadTimeoutRef.current);
-      }
-      operationLockRef.current = false;
-    };
-  }, []);
-
   const checkAuth = async () => {
     try {
       const currentUser = await getCurrentUser();
@@ -79,64 +55,60 @@ export default function Leads() {
     }
   };
 
+  // Definir loadLeads ANTES de usar no useEffect
   const loadLeads = useCallback(async () => {
-    // Prevent concurrent loads
-    if (operationLockRef.current) {
-      console.log("[Leads Page] Load already in progress, skipping");
-      return;
-    }
-
     console.log("[Leads Page] Loading leads...");
-    operationLockRef.current = true;
     
     try {
       setIsLoading(true);
-      const data = await getAllLeads();
+      // Sempre bypassar cache para garantir dados frescos
+      const data = await getAllLeads(false); 
       console.log("[Leads Page] Leads loaded successfully:", data.length);
       setLeads(data);
     } catch (error) {
       console.error("[Leads Page] Error loading leads:", error);
     } finally {
-      // Clear any existing timeout
-      if (loadTimeoutRef.current) {
-        clearTimeout(loadTimeoutRef.current);
-      }
-      
-      // Force unlock after max 2 seconds
-      loadTimeoutRef.current = setTimeout(() => {
-        setIsLoading(false);
-        operationLockRef.current = false;
-        console.log("[Leads Page] Loading complete (timeout)");
-      }, 2000);
+      setIsLoading(false);
     }
   }, []);
 
+  useEffect(() => {
+    checkAuth();
+  }, []);
+
+  useEffect(() => {
+    if (user) {
+      loadLeads();
+    }
+  }, [user, loadLeads]);
+
   const handleDeleteLead = async (id: string) => {
     if (!confirm("Tem certeza que deseja eliminar este lead?")) return;
-    if (operationLockRef.current) return;
 
     console.log("[Leads Page] Deleting lead:", id);
-    operationLockRef.current = true;
     
     try {
+      setIsLoading(true);
+      
       // Optimistic update
       setLeads(prev => prev.filter(lead => lead.id !== id));
       
       await deleteLead(id);
       console.log("[Leads Page] Lead deleted successfully");
+      
+      // Force fresh reload
+      await loadLeads();
     } catch (error) {
       console.error("[Leads Page] Error deleting lead:", error);
       alert("Erro ao eliminar lead. Tente novamente.");
       // Reload on error
       await loadLeads();
     } finally {
-      operationLockRef.current = false;
+      setIsLoading(false);
     }
   };
 
   const handleEdit = (lead: LeadWithContacts) => {
-    if (operationLockRef.current) return;
-    
     console.log("[Leads Page] Editing lead:", lead.id);
     setEditingLead(lead);
     setShowForm(true);
@@ -149,10 +121,9 @@ export default function Leads() {
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file || operationLockRef.current) return;
+    if (!file) return;
 
     console.log("[Leads Page] Importing file:", file.name);
-    operationLockRef.current = true;
     
     try {
       setIsImporting(true);
@@ -169,7 +140,7 @@ export default function Leads() {
       setImportResult(result);
 
       if (result.success > 0) {
-        console.log("[Leads Page] Import successful, refreshing...");
+        console.log("[Leads Page] Import successful, forcing refresh...");
         await loadLeads();
       }
 
@@ -179,7 +150,6 @@ export default function Leads() {
       alert(`Erro ao importar ficheiro: ${error.message}`);
     } finally {
       setIsImporting(false);
-      operationLockRef.current = false;
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
@@ -188,16 +158,13 @@ export default function Leads() {
   };
 
   const handleFormSuccess = useCallback(async () => {
-    if (operationLockRef.current) return;
-    
     console.log("[Leads Page] Form success, closing and refreshing...");
-    operationLockRef.current = true;
     
     setShowForm(false);
     setEditingLead(null);
     
+    // Force fresh data load without cache
     await loadLeads();
-    operationLockRef.current = false;
   }, [loadLeads]);
 
   const handleFormCancel = () => {

@@ -195,7 +195,7 @@ export default function ContactsPage() {
       name: contact.name || "",
       email: contact.email || "",
       phone: contact.phone || "",
-      birth_date: contact.birth_date || "",
+      birth_date: contact.birth_date || "", // Convert null to empty string for input
       notes: contact.notes || "",
     });
     setDialogOpen(true);

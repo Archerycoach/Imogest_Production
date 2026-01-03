@@ -32,10 +32,16 @@ export const createContact = async (contact: ContactInsert): Promise<Contact> =>
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
+  // Sanitize data: convert empty strings to null for date fields
+  const sanitizedContact = {
+    ...contact,
+    birth_date: contact.birth_date === "" ? null : contact.birth_date,
+  };
+
   const { data, error } = await supabase
     .from("contacts")
     .insert({
-      ...contact,
+      ...sanitizedContact,
       user_id: user.id,
     })
     .select()
@@ -46,9 +52,15 @@ export const createContact = async (contact: ContactInsert): Promise<Contact> =>
 };
 
 export const updateContact = async (id: string, updates: ContactUpdate): Promise<Contact> => {
+  // Sanitize data: convert empty strings to null for date fields
+  const sanitizedUpdates = {
+    ...updates,
+    birth_date: updates.birth_date === "" ? null : updates.birth_date,
+  };
+
   const { data, error } = await supabase
     .from("contacts")
-    .update(updates)
+    .update(sanitizedUpdates)
     .eq("id", id)
     .select()
     .single();
