@@ -1088,7 +1088,9 @@ export type Database = {
           custom_fields: Json | null
           description: string | null
           due_date: string | null
+          google_event_id: string | null
           id: string
+          is_synced: boolean | null
           notes: string | null
           priority: string | null
           related_contact_id: string | null
@@ -1107,7 +1109,9 @@ export type Database = {
           custom_fields?: Json | null
           description?: string | null
           due_date?: string | null
+          google_event_id?: string | null
           id?: string
+          is_synced?: boolean | null
           notes?: string | null
           priority?: string | null
           related_contact_id?: string | null
@@ -1126,7 +1130,9 @@ export type Database = {
           custom_fields?: Json | null
           description?: string | null
           due_date?: string | null
+          google_event_id?: string | null
           id?: string
+          is_synced?: boolean | null
           notes?: string | null
           priority?: string | null
           related_contact_id?: string | null
