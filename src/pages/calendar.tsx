@@ -113,43 +113,39 @@ export default function Calendar() {
     try {
       setSyncing(true);
       
-      const response = await fetch("/api/google-calendar/list-events");
-      const googleEvents = await response.json();
-
-      if (googleEvents.error) {
-        throw new Error(googleEvents.error);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        alert("Sessão expirada. Por favor faça login novamente.");
+        return;
       }
 
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      const response = await fetch("/api/google-calendar/sync", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+      });
 
-      for (const event of googleEvents.events || []) {
-        const { data: existing } = await supabase
-          .from("calendar_events")
-          .select("id")
-          .eq("google_event_id", event.id)
-          .single();
+      const result = await response.json();
 
-        if (!existing) {
-          await createCalendarEvent({
-            title: event.summary || "Evento sem título",
-            description: event.description || null,
-            event_type: "other",
-            start_time: event.start.dateTime || event.start.date,
-            end_time: event.end.dateTime || event.end.date,
-            lead_id: null,
-            property_id: null,
-            user_id: session.user.id,
-            google_event_id: event.id,
-          });
-        }
+      if (!response.ok) {
+        throw new Error(result.error || "Erro ao sincronizar");
       }
 
       await loadData();
-      alert("Sincronização concluída com sucesso!");
+      
+      toast({
+        title: "Sincronização concluída!",
+        description: `${result.imported} eventos importados, ${result.skipped} já existentes`,
+      });
     } catch (error) {
       console.error("Error syncing with Google Calendar:", error);
-      alert("Erro ao sincronizar com Google Calendar. Tente novamente.");
+      toast({
+        title: "Erro na sincronização",
+        description: error instanceof Error ? error.message : "Erro ao sincronizar com Google Calendar",
+        variant: "destructive",
+      });
     } finally {
       setSyncing(false);
     }

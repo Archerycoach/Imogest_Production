@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-// Get credentials from database ONLY (no env fallback)
+// Get credentials from database
 const getGoogleCredentials = async () => {
   const { data, error } = await supabaseAdmin
     .from("integration_settings")
@@ -37,7 +37,7 @@ export default async function handler(
   console.log("📍 Full URL:", req.url);
   console.log("🔑 Query params:", req.query);
 
-  const { code, error: oauthError } = req.query;
+  const { code, state, error: oauthError } = req.query;
 
   if (oauthError) {
     console.error("❌ OAuth error from Google:", oauthError);
@@ -49,9 +49,25 @@ export default async function handler(
     return res.redirect("/integrations?error=no_code");
   }
 
+  if (!state || typeof state !== "string") {
+    console.error("❌ No state parameter received");
+    return res.redirect("/integrations?error=no_state");
+  }
+
   console.log("✅ Authorization code received (length:", code.length, ")");
 
   try {
+    // Decode state to get user ID
+    const stateData = JSON.parse(Buffer.from(state, "base64").toString());
+    const userId = stateData.userId;
+
+    if (!userId) {
+      console.error("❌ No user ID in state parameter");
+      return res.redirect("/integrations?error=invalid_state");
+    }
+
+    console.log("👤 User ID from state:", userId);
+
     // Get credentials from database
     const credentials = await getGoogleCredentials();
     
@@ -106,37 +122,9 @@ export default async function handler(
     console.log("  - Refresh token:", tokens.refresh_token ? "✅ Present" : "❌ Missing");
     console.log("  - Expires in:", tokens.expires_in, "seconds");
 
-    // Get user session - we need to use a regular Supabase client for auth
-    const { createClient } = await import("@supabase/supabase-js");
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        auth: {
-          persistSession: false
-        }
-      }
-    );
-
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      console.error("❌ No authorization header found in callback");
-      return res.redirect("/login?error=not_authenticated_callback");
-    }
-
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-
-    if (userError || !user) {
-      console.error("❌ Failed to get user from token:", userError);
-      return res.redirect("/login?error=not_authenticated_callback");
-    }
-
-    console.log("👤 User authenticated:", user.id);
-
     // Store tokens in database using user_integrations table
     const tokenData = {
-      user_id: user.id,
+      user_id: userId,
       integration_type: "google_calendar",
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
@@ -145,7 +133,7 @@ export default async function handler(
       updated_at: new Date().toISOString()
     };
 
-    console.log("\n💾 Storing tokens in database...");
+    console.log("\n💾 Storing tokens in database for user:", userId);
 
     const { error: upsertError } = await supabaseAdmin
       .from("user_integrations")
@@ -159,10 +147,10 @@ export default async function handler(
     }
 
     console.log("✅ Tokens stored successfully");
-    console.log("🎉 Google Calendar connected successfully for user:", user.id);
+    console.log("🎉 Google Calendar connected successfully for user:", userId);
 
-    // Redirect to integrations page with success
-    res.redirect("/integrations?success=google_calendar_connected");
+    // Redirect to calendar page with success
+    res.redirect("/calendar?success=google_calendar_connected");
   } catch (error) {
     console.error("\n❌ Unexpected error in Google Calendar callback:");
     console.error(error);
