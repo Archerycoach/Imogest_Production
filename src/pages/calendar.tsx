@@ -105,7 +105,11 @@ export default function Calendar() {
 
   const syncWithGoogleCalendar = async () => {
     if (!googleConnected) {
-      alert("Por favor conecte sua conta Google Calendar primeiro");
+      toast({
+        title: "Google Calendar não conectado",
+        description: "Por favor conecte sua conta Google Calendar primeiro",
+        variant: "destructive",
+      });
       setShowGoogleConnect(true);
       return;
     }
@@ -115,9 +119,15 @@ export default function Calendar() {
       
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        alert("Sessão expirada. Por favor faça login novamente.");
+        toast({
+          title: "Sessão expirada",
+          description: "Por favor faça login novamente.",
+          variant: "destructive",
+        });
         return;
       }
+
+      console.log("🔄 Starting Google Calendar sync...");
 
       const response = await fetch("/api/google-calendar/sync", {
         method: "POST",
@@ -133,16 +143,19 @@ export default function Calendar() {
         throw new Error(result.error || "Erro ao sincronizar");
       }
 
+      console.log("✅ Sync completed:", result);
+
+      // Reload calendar events
       await loadData();
       
       toast({
-        title: "Sincronização concluída!",
-        description: `${result.imported} eventos importados, ${result.skipped} já existentes`,
+        title: "✅ Sincronização concluída!",
+        description: `${result.imported} eventos importados, ${result.skipped} já existentes (${result.total} total no Google)`,
       });
     } catch (error) {
-      console.error("Error syncing with Google Calendar:", error);
+      console.error("❌ Error syncing with Google Calendar:", error);
       toast({
-        title: "Erro na sincronização",
+        title: "❌ Erro na sincronização",
         description: error instanceof Error ? error.message : "Erro ao sincronizar com Google Calendar",
         variant: "destructive",
       });
@@ -708,8 +721,8 @@ export default function Calendar() {
             >
               {googleConnected ? (
                 <>
-                  <CalendarIcon className="h-4 w-4" />
-                  Conectado
+                  <CalendarIcon className="h-4 w-4 text-green-600" />
+                  <span className="text-green-600">Conectado</span>
                 </>
               ) : (
                 <>
@@ -720,13 +733,13 @@ export default function Calendar() {
             </Button>
             {googleConnected && (
               <Button 
-                variant="outline"
+                variant="default"
                 onClick={syncWithGoogleCalendar}
                 disabled={syncing}
-                className="flex items-center gap-2"
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
               >
                 <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
-                {syncing ? "A sincronizar..." : "Sincronizar"}
+                {syncing ? "A sincronizar..." : "Sincronizar Agora"}
               </Button>
             )}
             <Button onClick={() => setShowForm(true)} className="bg-purple-600 hover:bg-purple-700">
