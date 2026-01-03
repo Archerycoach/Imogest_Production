@@ -1,29 +1,48 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "@/integrations/supabase/client";
 
-// Get credentials from database
+// Get credentials from database or fallback to environment variables
 const getGoogleCredentials = async () => {
+  // Try to get from database first
   const { data, error } = await supabase
     .from("integration_settings")
     .select("settings")
     .eq("integration_name", "google_calendar")
     .single();
 
-  if (error || !data) {
-    console.error("Failed to fetch Google Calendar credentials:", error);
-    return null;
+  if (!error && data) {
+    const settings = data.settings as any;
+    if (settings?.clientId && settings?.clientSecret) {
+      return {
+        clientId: settings.clientId,
+        clientSecret: settings.clientSecret,
+      };
+    }
   }
 
-  const settings = data.settings as any;
+  // Fallback to environment variables
+  const clientId = process.env.GOOGLE_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
 
-  return {
-    clientId: settings?.clientId || "",
-    clientSecret: settings?.clientSecret || "",
-  };
+  if (clientId && clientSecret) {
+    return {
+      clientId,
+      clientSecret,
+    };
+  }
+
+  return null;
 };
 
 // Dynamic redirect URI based on environment
 const getRedirectUri = (req: NextApiRequest) => {
+  // Check for environment variable first
+  const envRedirectUri = process.env.GOOGLE_REDIRECT_URI || process.env.NEXT_PUBLIC_GOOGLE_REDIRECT_URI;
+  if (envRedirectUri) {
+    return envRedirectUri;
+  }
+
+  // Fallback to dynamic URL construction
   const protocol = req.headers["x-forwarded-proto"] || "http";
   const host = req.headers["x-forwarded-host"] || req.headers.host || "localhost:3000";
   return `${protocol}://${host}/api/google-calendar/callback`;
@@ -33,52 +52,35 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  if (req.method !== "GET") {
-    return res.status(405).json({ error: "Method not allowed" });
+  const { code, error: oauthError } = req.query;
+
+  if (oauthError) {
+    console.error("OAuth error:", oauthError);
+    return res.redirect("/integrations?error=oauth_failed");
+  }
+
+  if (!code || typeof code !== "string") {
+    return res.redirect("/integrations?error=no_code");
   }
 
   try {
-    const { code, error, error_description } = req.query;
-
-    // Handle OAuth errors from Google
-    if (error) {
-      console.error("Google OAuth error:", error, error_description);
-      const errorUrl = new URL("/admin/integrations", req.headers.origin || "http://localhost:3000");
-      
-      let errorMessage = "Erro ao conectar Google Calendar";
-      
-      if (error === "access_denied") {
-        errorMessage = "Acesso negado. Por favor autorize o acesso ao calendário.";
-      } else if (error_description) {
-        errorMessage = String(error_description);
-      }
-      
-      errorUrl.searchParams.append("google_error", errorMessage);
-      return res.redirect(errorUrl.toString());
-    }
-
-    if (!code || typeof code !== "string") {
-      console.error("No authorization code provided");
-      return res.status(400).json({ error: "No authorization code provided" });
-    }
-
-    // Get credentials from database
+    // Get credentials
     const credentials = await getGoogleCredentials();
     
-    if (!credentials || !credentials.clientId || !credentials.clientSecret) {
-      console.error("Missing Google OAuth credentials in database");
-      const errorUrl = new URL("/admin/integrations", req.headers.origin || "http://localhost:3000");
-      errorUrl.searchParams.append("google_error", "Configuração OAuth incompleta. Por favor configure Client ID e Client Secret em /admin/integrations.");
-      return res.redirect(errorUrl.toString());
+    if (!credentials) {
+      console.error("No Google Calendar credentials available");
+      return res.redirect("/integrations?error=no_credentials");
     }
 
     const redirectUri = getRedirectUri(req);
 
-    console.log("🔐 Exchanging code for tokens...", {
+    console.log("🔄 Google OAuth Callback:", {
+      code_received: "✅",
+      client_id: credentials.clientId ? "✅" : "❌",
+      client_secret: credentials.clientSecret ? "✅" : "❌",
       redirect_uri: redirectUri,
-      has_code: !!code,
     });
-    
+
     // Exchange code for tokens
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
@@ -95,67 +97,75 @@ export default async function handler(
     });
 
     if (!tokenResponse.ok) {
-      const errorData = await tokenResponse.json();
-      console.error("Token exchange failed:", errorData);
-      
-      let errorMessage = "Falha ao obter tokens do Google";
-      
-      if (errorData.error === "invalid_grant") {
-        errorMessage = "Código de autorização inválido ou expirado. Tente novamente.";
-      } else if (errorData.error === "invalid_client") {
-        errorMessage = "Credenciais OAuth inválidas. Verifique Client ID e Secret em /admin/integrations.";
-      } else if (errorData.error === "redirect_uri_mismatch") {
-        errorMessage = "Redirect URI não corresponde. Verifique configuração no Google Cloud.";
-      }
-      
-      const errorUrl = new URL("/admin/integrations", req.headers.origin || "http://localhost:3000");
-      errorUrl.searchParams.append("google_error", errorMessage);
-      return res.redirect(errorUrl.toString());
+      const errorData = await tokenResponse.text();
+      console.error("Token exchange failed:", {
+        status: tokenResponse.status,
+        error: errorData,
+      });
+      return res.redirect("/integrations?error=token_exchange_failed");
     }
 
     const tokens = await tokenResponse.json();
-    
-    console.log("✅ Tokens received successfully");
 
-    // Get current user
-    const { data: { user } } = await supabase.auth.getUser();
+    console.log("✅ Tokens received:", {
+      access_token: tokens.access_token ? "✅" : "❌",
+      refresh_token: tokens.refresh_token ? "✅" : "❌",
+      expires_in: tokens.expires_in,
+    });
+
+    // Get user session
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    // If no session on server side, we can try to pass tokens to client
+    // But for security, we should really have a session here.
+    // If running in development with no cookie, this might fail.
     
-    if (!user) {
-      const errorUrl = new URL("/admin/integrations", req.headers.origin || "http://localhost:3000");
-      errorUrl.searchParams.append("google_error", "Utilizador não autenticado");
-      return res.redirect(errorUrl.toString());
+    // NOTE: In Next.js API routes, Supabase auth might not persist if cookies aren't passed correctly.
+    // For now, if no session, we'll try to use a service role if we had a user_id passed in state (advanced)
+    // OR we just fail and tell user to login.
+    
+    if (!session?.user) {
+        // Fallback: Check if we have a way to identify user, otherwise error
+        console.error("No authenticated user found in callback");
+        
+        // Em ambiente de desenvolvimento ou se os cookies não passarem,
+        // podemos ter problemas aqui.
+        // Vamos tentar redirecionar para uma página que trata de guardar os tokens
+        // ou simplesmente erro.
+        return res.redirect("/login?error=not_authenticated_callback");
     }
 
-    // Save tokens to user_integrations table
-    const { error: saveError } = await supabase
+    // Store tokens in database using user_integrations table
+    const { error: upsertError } = await supabase
       .from("user_integrations")
-      .upsert({
-        user_id: user.id,
-        integration_type: "google_calendar",
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token || null,
-        token_expiry: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
-        is_active: true,
-      }, {
-        onConflict: "user_id,integration_type",
-      });
+      .upsert(
+        {
+          user_id: session.user.id,
+          integration_type: "google_calendar",
+          access_token: tokens.access_token,
+          refresh_token: tokens.refresh_token,
+          token_expiry: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
+          is_active: true,
+          updated_at: new Date().toISOString()
+        },
+        {
+          onConflict: "user_id,integration_type",
+        }
+      );
 
-    if (saveError) {
-      console.error("Error saving tokens:", saveError);
-      const errorUrl = new URL("/admin/integrations", req.headers.origin || "http://localhost:3000");
-      errorUrl.searchParams.append("google_error", "Erro ao guardar tokens");
-      return res.redirect(errorUrl.toString());
+    if (upsertError) {
+      console.error("Failed to store tokens:", upsertError);
+      return res.redirect("/integrations?error=storage_failed");
     }
 
-    // Redirect back to integrations with success message
-    const redirectUrl = new URL("/admin/integrations", req.headers.origin || "http://localhost:3000");
-    redirectUrl.searchParams.append("google_calendar", "success");
+    console.log("✅ Google Calendar connected successfully for user:", session.user.id);
 
-    res.redirect(redirectUrl.toString());
+    // Redirect to integrations page with success
+    res.redirect("/integrations?success=google_calendar_connected");
   } catch (error) {
-    console.error("Error in Google OAuth callback:", error);
-    const errorUrl = new URL("/admin/integrations", req.headers.origin || "http://localhost:3000");
-    errorUrl.searchParams.append("google_error", "Erro inesperado ao conectar. Tente novamente.");
-    res.redirect(errorUrl.toString());
+    console.error("Error in Google Calendar callback:", error);
+    res.redirect("/integrations?error=callback_failed");
   }
 }
