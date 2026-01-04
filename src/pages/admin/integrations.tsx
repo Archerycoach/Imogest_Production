@@ -1,3 +1,4 @@
+// Last updated: 2026-01-04T22:47:00Z - Gmail SMTP fields fix
 import { useState, useEffect } from "react";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -62,18 +63,8 @@ export default function Integrations() {
   const [formData, setFormData] = useState<Record<string, Record<string, string>>>({});
   const [googleCalendarConnected, setGoogleCalendarConnected] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
-  const [googleCalendarConfig, setGoogleCalendarConfig] = useState({
-    client_id: "",
-    client_secret: "",
-    redirect_uri: "",
-  });
-  const [twilioConfig, setTwilioConfig] = useState({
-    account_sid: "",
-    auth_token: "",
-  });
 
   useEffect(() => {
-    // Wait for session to be fully ready before loading anything
     const initializeSession = async () => {
       try {
         const { data: { session }, error } = await supabase.auth.getSession();
@@ -90,7 +81,6 @@ export default function Integrations() {
           return;
         }
 
-        // Session is ready, proceed with initialization
         setSessionReady(true);
       } catch (error) {
         console.error("Error initializing session:", error);
@@ -102,7 +92,6 @@ export default function Integrations() {
   }, []);
 
   useEffect(() => {
-    // Only load data after session is confirmed ready
     if (sessionReady) {
       loadIntegrations();
       checkGoogleCalendarConnection();
@@ -114,18 +103,30 @@ export default function Integrations() {
       setLoading(true);
       const data = await getAllIntegrations();
       
-      // Ensure all defined integrations exist in the database
       const existingNames = data.map(i => i.integration_name);
       const missingIntegrations = Object.keys(INTEGRATIONS).filter(
         name => !existingNames.includes(name)
       );
 
-      // Create missing integrations
+      // Clean up Gmail integration if it has old OAuth fields instead of SMTP fields
+      const gmailIntegration = data.find(i => i.integration_name === 'gmail');
+      if (gmailIntegration && gmailIntegration.settings) {
+        const hasOldFields = 'clientId' in gmailIntegration.settings || 
+                            'clientSecret' in gmailIntegration.settings ||
+                            'redirectUri' in gmailIntegration.settings;
+        const hasNewFields = 'smtp_user' in gmailIntegration.settings;
+        
+        if (hasOldFields && !hasNewFields) {
+          console.log('Gmail has old OAuth fields, cleaning...');
+          await updateIntegrationSettings('gmail', {});
+          gmailIntegration.settings = {};
+        }
+      }
+
       if (missingIntegrations.length > 0) {
         for (const name of missingIntegrations) {
           await updateIntegrationSettings(name, {});
         }
-        // Reload to get the newly created integrations
         const updatedData = await getAllIntegrations();
         setIntegrations(updatedData);
 
@@ -191,7 +192,6 @@ export default function Integrations() {
       const integration = integrations.find((i) => i.integration_name === integrationName);
       if (!integration) return;
 
-      // Validate required fields before saving
       const config = INTEGRATIONS[integrationName];
       const missingFields = config.fields
         .filter(field => field.required && !formData[integrationName]?.[field.key])
@@ -232,7 +232,6 @@ export default function Integrations() {
 
   const handleTest = async (integrationName: string) => {
     try {
-      // Check if integration has saved credentials before testing
       const integration = integrations.find((i) => i.integration_name === integrationName);
       if (!integration || Object.keys(integration.settings || {}).length === 0) {
         toast({
@@ -243,7 +242,6 @@ export default function Integrations() {
         return;
       }
 
-      // Check if there are unsaved changes
       const hasChanges = JSON.stringify(formData[integrationName]) !== JSON.stringify(integration.settings);
       if (hasChanges) {
         toast({
@@ -322,66 +320,6 @@ export default function Integrations() {
     }));
   };
 
-  const handleSaveGoogleCalendar = async () => {
-    try {
-      setSaving("google_calendar");
-
-      await updateIntegrationSettings(
-        "google_calendar",
-        googleCalendarConfig
-      );
-
-      toast({
-        title: "Sucesso",
-        description: "Configurações do Google Calendar guardadas",
-      });
-    } catch (error) {
-      console.error("Error saving Google Calendar config:", error);
-      toast({
-        title: "Erro",
-        description: "Erro ao guardar configurações",
-        variant: "destructive",
-      });
-    } finally {
-      setSaving(null);
-    }
-  };
-
-  const handleTestGoogleCalendar = async () => {
-    // Check if integration has saved credentials before testing
-    const integration = integrations.find((i) => i.integration_name === "google_calendar");
-    if (!integration || Object.keys(integration.settings || {}).length === 0) {
-      toast({
-        title: "⚠️ Credenciais não guardadas",
-        description: "Por favor guarde a configuração antes de testar a conexão.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Check if there are unsaved changes
-    const hasChanges = JSON.stringify(formData.google_calendar) !== JSON.stringify(integration.settings);
-    if (hasChanges) {
-      toast({
-        title: "⚠️ Alterações não guardadas",
-        description: "Guarde as alterações antes de testar a conexão.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setTesting("google_calendar");
-    const result = await testIntegration("google_calendar");
-
-    toast({
-      title: result.success ? "✅ Teste bem-sucedido!" : "❌ Teste falhou",
-      description: result.message,
-      variant: result.success ? "default" : "destructive",
-    });
-
-    await loadIntegrations();
-  };
-
   const renderIntegrationCard = (config: IntegrationConfig, data: IntegrationSettings) => {
     const Icon = ICONS[config.icon];
     const isSaving = saving === config.name;
@@ -390,161 +328,8 @@ export default function Integrations() {
     const hasCredentials = Object.keys(data.settings || {}).length > 0;
     const canTest = hasCredentials && !hasChanges && config.testEndpoint;
 
-    if (config.name === "google_calendar") {
-      return (
-        <Card key={config.name}>
-          <CardHeader>
-            <div className="flex items-start justify-between">
-              <div className="flex items-start gap-4">
-                <div className={`p-3 rounded-lg ${config.color} text-white`}>
-                  <Icon className="h-6 w-6" />
-                </div>
-                <div className="flex-1">
-                  <CardTitle className="flex items-center gap-2">
-                    {config.displayName}
-                    {data.is_active && (
-                      <Badge variant="default" className="bg-green-500">
-                        <Check className="h-3 w-3 mr-1" />
-                        Ativa
-                      </Badge>
-                    )}
-                    {googleCalendarConnected && (
-                      <Badge variant="outline" className="text-green-600 border-green-600">
-                        Conectado ✓
-                      </Badge>
-                    )}
-                  </CardTitle>
-                  <CardDescription className="mt-1">{config.description}</CardDescription>
-                </div>
-              </div>
-              <Switch
-                checked={data.is_active}
-                onCheckedChange={(checked) => handleToggle(config.name, checked)}
-              />
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <h4 className="font-semibold mb-2 flex items-center gap-2">
-                <Calendar className="h-4 w-4" />
-                Conexão OAuth
-              </h4>
-              <p className="text-sm text-gray-600 mb-3">
-                Conecte sua conta Google para sincronizar eventos automaticamente
-              </p>
-              <GoogleCalendarConnect
-                isConnected={googleCalendarConnected}
-                onConnect={() => {
-                  setGoogleCalendarConnected(true);
-                  checkGoogleCalendarConnection();
-                }}
-                onDisconnect={() => {
-                  setGoogleCalendarConnected(false);
-                  checkGoogleCalendarConnection();
-                }}
-              />
-            </div>
-
-            <div className="space-y-4 pt-4 border-t">
-              <h4 className="font-semibold">Configuração OAuth 2.0</h4>
-              {config.fields.map((field) => {
-                const fieldId = `${config.name}-${field.key}`;
-                const isPassword = field.type === "password";
-                const showPassword = showPasswords[fieldId];
-
-                return (
-                  <div key={field.key} className="space-y-2">
-                    <Label htmlFor={fieldId}>
-                      {field.label}
-                      {field.required && <span className="text-red-500 ml-1">*</span>}
-                    </Label>
-                    <div className="relative">
-                      <Input
-                        id={fieldId}
-                        type={isPassword && !showPassword ? "password" : "text"}
-                        placeholder={field.placeholder}
-                        value={formData[config.name]?.[field.key] || ""}
-                        onChange={(e) => handleInputChange(config.name, field.key, e.target.value)}
-                        className="pr-10"
-                      />
-                      {isPassword && (
-                        <button
-                          type="button"
-                          onClick={() => togglePasswordVisibility(fieldId)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                        >
-                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </button>
-                      )}
-                    </div>
-                    {field.helpText && (
-                      <p className="text-sm text-gray-500">{field.helpText}</p>
-                    )}
-                  </div>
-                );
-              })}
-
-              <div className="space-y-2">
-                <Label htmlFor={`${config.name}-redirectUri`}>
-                  Redirect URI (Callback URL)
-                </Label>
-                <Input
-                  id={`${config.name}-redirectUri`}
-                  type="url"
-                  placeholder="https://www.imogest.pt/api/google-calendar/callback"
-                  value={formData[config.name]?.redirectUri || ""}
-                  onChange={(e) => handleInputChange(config.name, "redirectUri", e.target.value)}
-                />
-                <p className="text-sm text-gray-500">
-                  URL para onde o Google redireciona após autorização. Use este valor no Google Cloud Console.
-                </p>
-              </div>
-            </div>
-
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription className="text-sm">
-                <strong>Como obter credenciais:</strong>
-                <ol className="list-decimal list-inside mt-2 space-y-1">
-                  <li>Acesse o Google Cloud Console</li>
-                  <li>Crie um projeto ou selecione existente</li>
-                  <li>Ative a Google Calendar API</li>
-                  <li>Crie credenciais OAuth 2.0</li>
-                  <li>Configure Redirect URIs corretamente</li>
-                </ol>
-              </AlertDescription>
-            </Alert>
-
-            <div className="flex items-center gap-2 pt-4">
-              <Button
-                onClick={() => handleSave(config.name)}
-                disabled={isSaving || !hasChanges}
-                className="flex-1"
-              >
-                {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Guardar Configuração
-              </Button>
-              <Button
-                onClick={() => handleTest(config.name)}
-                disabled={isTesting}
-                variant="outline"
-              >
-                {isTesting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Testar
-              </Button>
-              <Button variant="ghost" size="icon" asChild>
-                <a href={config.docsUrl} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="h-4 w-4" />
-                </a>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      );
-    }
-
     return (
-      <Card key={config.name}>
+      <Card key={`${config.name}-v2`}>
         <CardHeader>
           <div className="flex items-start justify-between">
             <div className="flex items-start gap-4">
@@ -581,44 +366,116 @@ export default function Integrations() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {config.fields.map((field) => {
-            const fieldId = `${config.name}-${field.key}`;
-            const isPassword = field.type === "password";
-            const showPassword = showPasswords[fieldId];
+          {/* Special OAuth connection section for Google Calendar */}
+          {config.name === "google_calendar" && (
+            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 mb-4">
+              <h4 className="font-semibold mb-2 flex items-center gap-2">
+                <Calendar className="h-4 w-4" />
+                Conexão OAuth (Recomendado)
+              </h4>
+              <p className="text-sm text-gray-600 mb-3">
+                Conecte sua conta Google para sincronizar eventos automaticamente
+              </p>
+              <GoogleCalendarConnect
+                isConnected={googleCalendarConnected}
+                onConnect={() => {
+                  setGoogleCalendarConnected(true);
+                  checkGoogleCalendarConnection();
+                }}
+                onDisconnect={() => {
+                  setGoogleCalendarConnected(false);
+                  checkGoogleCalendarConnection();
+                }}
+              />
+            </div>
+          )}
 
-            return (
-              <div key={field.key} className="space-y-2">
-                <Label htmlFor={fieldId}>
-                  {field.label}
-                  {field.required && <span className="text-red-500 ml-1">*</span>}
+          {/* Configuration fields (shown for ALL integrations including Google Calendar) */}
+          <div className="space-y-4">
+            {config.name === "google_calendar" && (
+              <div className="pb-2 border-b">
+                <h4 className="font-semibold text-sm text-gray-700">
+                  Configuração Manual (Fallback)
+                </h4>
+                <p className="text-xs text-gray-500 mt-1">
+                  Configure credenciais OAuth manualmente caso a conexão automática não funcione
+                </p>
+              </div>
+            )}
+
+            {/* Redirect URI for Google Calendar - Read-only field */}
+            {config.name === "google_calendar" && (
+              <div className="space-y-2">
+                <Label htmlFor="google-calendar-redirect-uri">
+                  Redirect URI
                 </Label>
                 <div className="relative">
                   <Input
-                    id={fieldId}
-                    type={isPassword && !showPassword ? "password" : "text"}
-                    placeholder={field.placeholder}
-                    value={formData[config.name]?.[field.key] || ""}
-                    onChange={(e) => handleInputChange(config.name, field.key, e.target.value)}
-                    className="pr-10"
+                    id="google-calendar-redirect-uri"
+                    type="text"
+                    value={`${typeof window !== 'undefined' ? window.location.origin : 'https://www.imogest.pt'}/api/google-calendar/callback`}
+                    readOnly
+                    className="pr-20 bg-gray-50"
                   />
-                  {isPassword && (
-                    <button
-                      type="button"
-                      onClick={() => togglePasswordVisibility(fieldId)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                    >
-                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const redirectUri = `${typeof window !== 'undefined' ? window.location.origin : 'https://www.imogest.pt'}/api/google-calendar/callback`;
+                      navigator.clipboard.writeText(redirectUri);
+                      toast({
+                        title: "✅ Copiado!",
+                        description: "Redirect URI copiado para a área de transferência",
+                      });
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    Copiar
+                  </button>
+                </div>
+                <p className="text-sm text-gray-500">
+                  Cole este URL nos Authorized Redirect URIs no Google Cloud Console
+                </p>
+              </div>
+            )}
+
+            {config.fields.map((field) => {
+              const fieldId = `${config.name}-${field.key}`;
+              const isPassword = field.type === "password";
+              const showPassword = showPasswords[fieldId];
+
+              return (
+                <div key={field.key} className="space-y-2">
+                  <Label htmlFor={fieldId}>
+                    {field.label}
+                    {field.required && <span className="text-red-500 ml-1">*</span>}
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      id={fieldId}
+                      type={isPassword && !showPassword ? "password" : "text"}
+                      placeholder={field.placeholder}
+                      value={formData[config.name]?.[field.key] || ""}
+                      onChange={(e) => handleInputChange(config.name, field.key, e.target.value)}
+                      className="pr-10"
+                    />
+                    {isPassword && (
+                      <button
+                        type="button"
+                        onClick={() => togglePasswordVisibility(fieldId)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    )}
+                  </div>
+                  {field.helpText && (
+                    <p className="text-sm text-gray-500">{field.helpText}</p>
                   )}
                 </div>
-                {field.helpText && (
-                  <p className="text-sm text-gray-500">{field.helpText}</p>
-                )}
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
 
-          {/* Show info alert if no credentials saved yet */}
           {!hasCredentials && (
             <Alert>
               <AlertCircle className="h-4 w-4" />
@@ -628,7 +485,6 @@ export default function Integrations() {
             </Alert>
           )}
 
-          {/* Show warning if there are unsaved changes */}
           {hasChanges && hasCredentials && (
             <Alert className="border-orange-200 bg-orange-50">
               <AlertCircle className="h-4 w-4 text-orange-600" />
@@ -714,7 +570,7 @@ export default function Integrations() {
     ["stripe", "eupago"].includes(i.integration_name)
   );
   const communicationIntegrations = integrations.filter((i) =>
-    ["whatsapp", "mailersend", "gmail"].includes(i.integration_name)
+    ["whatsapp", "gmail"].includes(i.integration_name)
   );
   const toolsIntegrations = integrations.filter((i) =>
     ["google_calendar", "google_maps"].includes(i.integration_name)
@@ -765,8 +621,6 @@ export default function Integrations() {
               const config = INTEGRATIONS[integration.integration_name];
               return config ? renderIntegrationCard(config, integration) : null;
             })}
-            
-            {/* Gmail integration is now handled automatically via INTEGRATIONS map */}
           </TabsContent>
 
           <TabsContent value="payment" className="space-y-6">

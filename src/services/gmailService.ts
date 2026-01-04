@@ -24,6 +24,8 @@ export const checkGmailConnection = async (): Promise<boolean> => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return false;
 
+    // Use maybeSingle to avoid errors if no row exists
+    // Explicitly select just the is_active column to minimize data transfer
     const { data, error } = await supabase
       .from("user_integrations")
       .select("is_active")
@@ -31,7 +33,11 @@ export const checkGmailConnection = async (): Promise<boolean> => {
       .eq("integration_type", "gmail")
       .maybeSingle();
 
-    if (error) return false;
+    if (error) {
+      console.error("Error checking gmail connection:", error);
+      return false;
+    }
+    
     return data?.is_active || false;
   } catch (error) {
     console.error("❌ [gmailService] Error checking Gmail connection:", error);

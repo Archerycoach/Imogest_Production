@@ -180,6 +180,33 @@ export const INTEGRATIONS: Record<string, IntegrationConfig> = {
       },
     ],
   },
+  whatsapp: {
+    name: "whatsapp",
+    displayName: "WhatsApp Business API",
+    description: "Envio de mensagens via WhatsApp Business",
+    icon: "MessageCircle",
+    color: "bg-green-500",
+    docsUrl: "https://developers.facebook.com/docs/whatsapp",
+    testEndpoint: "/api/integrations/test-whatsapp",
+    fields: [
+      {
+        key: "phoneNumberId",
+        label: "Phone Number ID",
+        type: "text",
+        placeholder: "123456789012345",
+        helpText: "ID do número WhatsApp Business (Meta Business Suite)",
+        required: true,
+      },
+      {
+        key: "accessToken",
+        label: "Access Token",
+        type: "password",
+        placeholder: "EAAT...",
+        helpText: "Token permanente da Facebook Graph API",
+        required: true,
+      },
+    ],
+  },
 };
 
 // Get all integrations

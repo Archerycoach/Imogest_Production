@@ -15,7 +15,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    // 1. Get Integration Settings (Client ID & Secret)
+    // 1. Get authenticated user from session
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.replace("Bearer ", "") || req.cookies["sb-access-token"];
+    
+    if (!token) {
+      return res.status(401).json({ error: "Not authenticated. Please login first." });
+    }
+
+    // Create Supabase client with user token
+    const supabaseClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
+
+    if (userError || !user) {
+      return res.status(401).json({ error: "Invalid session. Please login again." });
+    }
+
+    // 2. Get Integration Settings (Client ID & Secret)
+    // NOTE: integration_settings table uses 'integration_name'
     const { data: integration, error: intError } = await supabaseAdmin
       .from("integration_settings")
       .select("settings")
@@ -28,26 +49,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const { clientId, clientSecret, redirectUri } = integration.settings;
 
-    // 2. Setup OAuth2 Client
+    // 3. Setup OAuth2 Client
     const oauth2Client = new google.auth.OAuth2(
       clientId,
       clientSecret,
       redirectUri
     );
 
-    // 3. Generate Auth URL
-    // Requesting 'https://www.googleapis.com/auth/gmail.send' scope
+    // 4. Generate Auth URL with user_id in state parameter
     const scopes = [
       "https://www.googleapis.com/auth/gmail.send",
+      "https://www.googleapis.com/auth/gmail.readonly",
       "https://www.googleapis.com/auth/userinfo.email",
       "https://www.googleapis.com/auth/userinfo.profile"
     ];
+
+    // Pass user_id in state so callback knows who is connecting
+    const state = Buffer.from(JSON.stringify({ user_id: user.id })).toString("base64");
 
     const url = oauth2Client.generateAuthUrl({
       access_type: "offline", // Essential for receiving refresh_token
       scope: scopes,
       prompt: "consent", // Force consent to ensure we get refresh_token
-      include_granted_scopes: true
+      include_granted_scopes: true,
+      state: state // Pass user context
     });
 
     return res.status(200).json({ url });
