@@ -29,6 +29,7 @@ import {
   EyeOff,
   Save,
   TestTube,
+  Play,
 } from "lucide-react";
 import {
   getAllIntegrations,
@@ -61,6 +62,15 @@ export default function Integrations() {
   const [formData, setFormData] = useState<Record<string, Record<string, string>>>({});
   const [googleCalendarConnected, setGoogleCalendarConnected] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
+  const [googleCalendarConfig, setGoogleCalendarConfig] = useState({
+    client_id: "",
+    client_secret: "",
+    redirect_uri: "",
+  });
+  const [twilioConfig, setTwilioConfig] = useState({
+    account_sid: "",
+    auth_token: "",
+  });
 
   useEffect(() => {
     // Wait for session to be fully ready before loading anything
@@ -310,6 +320,66 @@ export default function Integrations() {
       ...prev,
       [fieldId]: !prev[fieldId],
     }));
+  };
+
+  const handleSaveGoogleCalendar = async () => {
+    try {
+      setSaving("google_calendar");
+
+      await updateIntegrationSettings(
+        "google_calendar",
+        googleCalendarConfig
+      );
+
+      toast({
+        title: "Sucesso",
+        description: "Configurações do Google Calendar guardadas",
+      });
+    } catch (error) {
+      console.error("Error saving Google Calendar config:", error);
+      toast({
+        title: "Erro",
+        description: "Erro ao guardar configurações",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const handleTestGoogleCalendar = async () => {
+    // Check if integration has saved credentials before testing
+    const integration = integrations.find((i) => i.integration_name === "google_calendar");
+    if (!integration || Object.keys(integration.settings || {}).length === 0) {
+      toast({
+        title: "⚠️ Credenciais não guardadas",
+        description: "Por favor guarde a configuração antes de testar a conexão.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check if there are unsaved changes
+    const hasChanges = JSON.stringify(formData.google_calendar) !== JSON.stringify(integration.settings);
+    if (hasChanges) {
+      toast({
+        title: "⚠️ Alterações não guardadas",
+        description: "Guarde as alterações antes de testar a conexão.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setTesting("google_calendar");
+    const result = await testIntegration("google_calendar");
+
+    toast({
+      title: result.success ? "✅ Teste bem-sucedido!" : "❌ Teste falhou",
+      description: result.message,
+      variant: result.success ? "default" : "destructive",
+    });
+
+    await loadIntegrations();
   };
 
   const renderIntegrationCard = (config: IntegrationConfig, data: IntegrationSettings) => {
@@ -644,7 +714,7 @@ export default function Integrations() {
     ["stripe", "eupago"].includes(i.integration_name)
   );
   const communicationIntegrations = integrations.filter((i) =>
-    ["whatsapp", "mailersend"].includes(i.integration_name)
+    ["whatsapp", "mailersend", "gmail"].includes(i.integration_name)
   );
   const toolsIntegrations = integrations.filter((i) =>
     ["google_calendar", "google_maps"].includes(i.integration_name)
@@ -695,6 +765,8 @@ export default function Integrations() {
               const config = INTEGRATIONS[integration.integration_name];
               return config ? renderIntegrationCard(config, integration) : null;
             })}
+            
+            {/* Gmail integration is now handled automatically via INTEGRATIONS map */}
           </TabsContent>
 
           <TabsContent value="payment" className="space-y-6">

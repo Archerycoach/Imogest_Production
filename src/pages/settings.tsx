@@ -7,17 +7,28 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
-import { ArrowLeft, User, Lock, Building2, Bell, Calendar, Upload, Loader2, Save } from "lucide-react";
+import { ArrowLeft, User, Lock, Building2, Bell, Calendar, Upload, Loader2, Save, Mail, Key } from "lucide-react";
 import { getUserProfile, updateUserProfile, uploadAvatar } from "@/services/profileService";
 import { updatePassword, getSession, signOut } from "@/services/authService";
 import { GoogleCalendarConnect } from "@/components/GoogleCalendarConnect";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { GmailConnect } from "@/components/GmailConnect";
 
 export default function Settings() {
   const router = useRouter();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [profile, setProfile] = useState<any>(null);
+  const [notifications, setNotifications] = useState({
+    email: true,
+    push: false,
+    marketing: false,
+  });
+  
+  // Integration States
+  const [googleCalendarConnected, setGoogleCalendarConnected] = useState(false);
+  const [gmailConnected, setGmailConnected] = useState(false);
   
   // Auth check
   const [authChecking, setAuthChecking] = useState(true);
@@ -40,13 +51,97 @@ export default function Settings() {
   // Notifications
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [pushNotifications, setPushNotifications] = useState(true);
-  
-  // Google Calendar
-  const [googleCalendarConnected, setGoogleCalendarConnected] = useState(false);
 
   useEffect(() => {
     checkAuthentication();
+    checkIntegrations();
   }, []);
+
+  // Handle Gmail OAuth Callback
+  useEffect(() => {
+    const handleGmailCallback = async () => {
+      const { gmail_code, error } = router.query;
+
+      if (error) {
+        toast({
+          title: "Erro na conexão Gmail",
+          description: decodeURIComponent(error as string),
+          variant: "destructive",
+        });
+        // Remove params
+        router.replace("/settings", undefined, { shallow: true });
+        return;
+      }
+
+      if (gmail_code) {
+        try {
+          setLoading(true);
+          const { data: { session } } = await supabase.auth.getSession();
+          if (!session) return;
+
+          const response = await fetch("/api/gmail/exchange", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({ code: gmail_code }),
+          });
+
+          if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.error || "Failed to exchange code");
+          }
+
+          toast({
+            title: "Gmail conectado!",
+            description: "Sua conta foi vinculada com sucesso.",
+          });
+          
+          setGmailConnected(true);
+        } catch (err: any) {
+          toast({
+            title: "Erro ao conectar Gmail",
+            description: err.message,
+            variant: "destructive",
+          });
+        } finally {
+          setLoading(false);
+          // Remove query params
+          router.replace("/settings", undefined, { shallow: true });
+        }
+      }
+    };
+
+    if (router.isReady) {
+      handleGmailCallback();
+    }
+  }, [router.isReady, router.query]);
+
+  const checkIntegrations = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    // Check Google Calendar
+    const { data: calData } = await supabase
+      .from("user_integrations")
+      .select("is_active")
+      .eq("user_id", session.user.id)
+      .eq("integration_type", "google_calendar")
+      .maybeSingle();
+      
+    setGoogleCalendarConnected(calData?.is_active || false);
+
+    // Check Gmail
+    const { data: gmailData } = await supabase
+      .from("user_integrations")
+      .select("is_active")
+      .eq("user_id", session.user.id)
+      .eq("integration_type", "gmail")
+      .maybeSingle();
+
+    setGmailConnected(gmailData?.is_active || false);
+  };
 
   const checkAuthentication = async () => {
     try {
@@ -254,7 +349,7 @@ export default function Settings() {
               Empresa
             </TabsTrigger>
             <TabsTrigger value="integrations">
-              <Calendar className="h-4 w-4 mr-2" />
+              <Key className="h-4 w-4 mr-2" />
               Integrações
             </TabsTrigger>
             <TabsTrigger value="notifications">
@@ -415,119 +510,79 @@ export default function Settings() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="integrations">
+          <TabsContent value="integrations" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Integrações</CardTitle>
+                <CardTitle>Contas Conectadas</CardTitle>
                 <CardDescription>
-                  Conecte serviços externos para melhorar a sua produtividade
+                  Gerencie suas conexões com serviços externos.
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <GoogleCalendarConnect
-                  isConnected={googleCalendarConnected}
-                  onConnect={() => setGoogleCalendarConnected(true)}
-                  onDisconnect={() => setGoogleCalendarConnected(false)}
-                />
+              <CardContent className="space-y-6">
+                
+                <div className="space-y-4">
+                  <h3 className="font-medium flex items-center gap-2">
+                    <Mail className="h-4 w-4" /> Email
+                  </h3>
+                  <GmailConnect 
+                    isConnected={gmailConnected} 
+                    onConnect={() => setGmailConnected(true)}
+                    onDisconnect={() => setGmailConnected(false)}
+                  />
+                </div>
+
+                <div className="space-y-4 pt-4 border-t">
+                  <h3 className="font-medium flex items-center gap-2">
+                    <Calendar className="h-4 w-4" /> Calendário
+                  </h3>
+                  <GoogleCalendarConnect
+                    isConnected={googleCalendarConnected}
+                    onConnect={() => setGoogleCalendarConnected(true)}
+                    onDisconnect={() => setGoogleCalendarConnected(false)}
+                  />
+                </div>
+
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="notifications">
+          <TabsContent value="notifications" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Preferências de Notificações</CardTitle>
+                <CardTitle>Preferências de Notificação</CardTitle>
                 <CardDescription>
-                  Escolha como quer receber notificações
+                  Escolha como você deseja receber atualizações.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold">Notificações Gerais</h3>
-                  
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-medium">Notificações por Email</h4>
-                      <p className="text-sm text-slate-500">
-                        Receber atualizações importantes por email
-                      </p>
-                    </div>
-                    <Switch
-                      checked={emailNotifications}
-                      onCheckedChange={setEmailNotifications}
-                    />
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label>Notificações por Email</Label>
+                    <p className="text-sm text-gray-500">
+                      Receba atualizações sobre suas leads e tarefas.
+                    </p>
                   </div>
-
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-medium">Notificações Push</h4>
-                      <p className="text-sm text-slate-500">
-                        Receber alertas instantâneos no navegador
-                      </p>
-                    </div>
-                    <Switch
-                      checked={pushNotifications}
-                      onCheckedChange={setPushNotifications}
-                    />
-                  </div>
+                  <Switch
+                    checked={notifications.email}
+                    onCheckedChange={(checked) =>
+                      setNotifications({ ...notifications, email: checked })
+                    }
+                  />
                 </div>
-
-                <div className="border-t pt-6 space-y-4">
-                  <h3 className="text-lg font-semibold">📧 Emails Automáticos</h3>
-                  <p className="text-sm text-slate-500 mb-4">
-                    Configure emails automáticos para manter-se organizado e nunca perder uma oportunidade
-                  </p>
-                  
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div>
-                      <h4 className="font-medium">📋 Tarefas Diárias</h4>
-                      <p className="text-sm text-slate-500">
-                        Receber email todas as manhãs (8h) com lista de tarefas do dia
-                      </p>
-                    </div>
-                    <Switch
-                      checked={profile?.email_daily_tasks || false}
-                      onCheckedChange={(checked) => 
-                        setProfile(prev => prev ? {...prev, email_daily_tasks: checked} : null)
-                      }
-                    />
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <Label>Notificações Push</Label>
+                    <p className="text-sm text-gray-500">
+                      Receba alertas em tempo real no navegador.
+                    </p>
                   </div>
-
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div>
-                      <h4 className="font-medium">📅 Eventos Diários</h4>
-                      <p className="text-sm text-slate-500">
-                        Receber email todas as manhãs (8h) com eventos agendados do dia
-                      </p>
-                    </div>
-                    <Switch
-                      checked={profile?.email_daily_events || false}
-                      onCheckedChange={(checked) => 
-                        setProfile(prev => prev ? {...prev, email_daily_events: checked} : null)
-                      }
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div>
-                      <h4 className="font-medium">🎯 Nova Lead Atribuída</h4>
-                      <p className="text-sm text-slate-500">
-                        Receber email imediato quando lhe for atribuída uma nova lead
-                      </p>
-                    </div>
-                    <Switch
-                      checked={profile?.email_new_lead_assigned || false}
-                      onCheckedChange={(checked) => 
-                        setProfile(prev => prev ? {...prev, email_new_lead_assigned: checked} : null)
-                      }
-                    />
-                  </div>
+                  <Switch
+                    checked={notifications.push}
+                    onCheckedChange={(checked) =>
+                      setNotifications({ ...notifications, push: checked })
+                    }
+                  />
                 </div>
-
-                <Button onClick={updateProfile} disabled={loading} className="w-full">
-                  <Save className="mr-2 h-4 w-4" />
-                  {loading ? "A guardar..." : "Guardar Preferências"}
-                </Button>
               </CardContent>
             </Card>
           </TabsContent>

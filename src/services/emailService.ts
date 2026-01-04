@@ -23,40 +23,47 @@ export const getEmailTemplates = async () => {
   return data;
 };
 
-export const sendEmail = async (
-  to: string,
-  subject: string,
-  content: string,
-  relatedTo?: {
-    leadId?: string;
-    propertyId?: string;
-  }
-) => {
+interface EmailOptions {
+  to: string;
+  subject: string;
+  html: string;
+  userId?: string;
+}
+
+/**
+ * Send email using Gmail OAuth2 integration
+ * Calls the backend API which uses the user's connected Gmail account
+ */
+export const sendEmail = async (options: EmailOptions): Promise<{ success: boolean; error?: string }> => {
   try {
-    // Call API endpoint to send email (uses MailerSend credentials from database)
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      return { success: false, error: "User not authenticated" };
+    }
+
     const response = await fetch("/api/integrations/send-email", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "Authorization": `Bearer ${session.access_token}`,
       },
-      body: JSON.stringify({
-        to,
-        subject,
-        html: content,
-        leadId: relatedTo?.leadId,
-        propertyId: relatedTo?.propertyId,
-      }),
+      body: JSON.stringify(options),
     });
 
+    const result = await response.json();
+
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || "Erro ao enviar email");
+      throw new Error(result.error || "Failed to send email");
     }
 
-    return true;
-  } catch (error) {
-    console.error("Error sending email:", error);
-    throw error;
+    return { success: true };
+  } catch (error: any) {
+    console.error("❌ [emailService] Error sending email:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
   }
 };
 

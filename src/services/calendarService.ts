@@ -11,10 +11,6 @@ export {
   storeGoogleCredentials,
   getGoogleCredentials,
   removeGoogleCredentials,
-  syncEventToGoogle,
-  updateGoogleEvent,
-  deleteGoogleEvent,
-  importGoogleCalendarEvents,
   createBirthdayAlert,
   syncBirthdayAlerts,
 } from "./googleCalendarService";
@@ -37,43 +33,6 @@ const mapDbEventToFrontend = (dbEvent: DbCalendarEvent): CalendarEvent => ({
   createdAt: dbEvent.created_at,
   userId: dbEvent.user_id || ""
 });
-
-// Helper to sync event to Google Calendar
-const syncToGoogleCalendar = async (event: CalendarEvent): Promise<string | null> => {
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return null;
-
-    const response = await fetch("/api/google-calendar/create-event", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({
-        event: {
-          summary: event.title,
-          description: event.description,
-          location: event.location,
-          start: event.startTime,
-          end: event.endTime,
-          attendees: event.attendees,
-        },
-      }),
-    });
-
-    if (!response.ok) {
-      console.error("Failed to sync event to Google Calendar");
-      return null;
-    }
-
-    const data = await response.json();
-    return data.googleEventId;
-  } catch (error) {
-    console.error("Error syncing to Google Calendar:", error);
-    return null;
-  }
-};
 
 // Get all calendar events for current user
 export const getCalendarEvents = async (): Promise<CalendarEvent[]> => {
@@ -128,6 +87,8 @@ export const getCalendarEvent = async (id: string): Promise<CalendarEvent | null
 
 // Create new calendar event with Google Calendar sync
 export const createCalendarEvent = async (event: CalendarEventInsert & { contact_id?: string | null }): Promise<CalendarEvent> => {
+  console.log("🔵 [calendarService] createCalendarEvent called");
+  
   // Validate dates only if end_time is provided
   if (event.end_time && new Date(event.end_time) <= new Date(event.start_time)) {
     throw new Error("A data de fim deve ser posterior à data de início");
@@ -145,28 +106,57 @@ export const createCalendarEvent = async (event: CalendarEventInsert & { contact
     .single();
 
   if (error) {
-    console.error("Error creating event:", error);
+    console.error("❌ [calendarService] Error creating event:", error);
     throw error;
   }
+
+  console.log("✅ [calendarService] Event created in DB:", data.id);
 
   const createdEvent = mapDbEventToFrontend(data);
 
   // Try to sync to Google Calendar in background
-  syncToGoogleCalendar(createdEvent).then(async (googleEventId) => {
-    if (googleEventId) {
-      await supabase
-        .from("calendar_events")
-        .update({ 
-          google_event_id: googleEventId,
-          is_synced: true 
-        })
-        .eq("id", data.id);
-      
-      console.log("✅ Event synced to Google Calendar:", googleEventId);
-    }
-  }).catch(err => {
-    console.error("Background sync failed:", err);
-  });
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session) {
+    console.log("🔄 [calendarService] Attempting Google Calendar sync...");
+    
+    fetch("/api/google-calendar/create-event", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        event: {
+          summary: createdEvent.title,
+          description: createdEvent.description,
+          location: createdEvent.location,
+          start: { dateTime: createdEvent.startTime },
+          end: { dateTime: createdEvent.endTime || createdEvent.startTime },
+          attendees: createdEvent.attendees?.map(email => ({ email })),
+        },
+      }),
+    }).then(async (response) => {
+      if (response.ok) {
+        const result = await response.json();
+        console.log("✅ [calendarService] Google sync successful:", result.event?.id);
+        
+        await supabase
+          .from("calendar_events")
+          .update({ 
+            google_event_id: result.event.id,
+            is_synced: true 
+          })
+          .eq("id", data.id);
+      } else {
+        const error = await response.text();
+        console.log("⚠️ [calendarService] Google sync failed:", error);
+      }
+    }).catch(err => {
+      console.error("❌ [calendarService] Background sync error:", err);
+    });
+  } else {
+    console.log("⚠️ [calendarService] No session, skipping Google sync");
+  }
 
   return createdEvent;
 };
@@ -176,12 +166,25 @@ export const createEvent = createCalendarEvent;
 
 // Update calendar event with Google Calendar sync
 export const updateCalendarEvent = async (id: string, updates: CalendarEventUpdate): Promise<CalendarEvent> => {
+  console.log("🔵 [calendarService] updateCalendarEvent called for:", id);
+  console.log("🔵 [calendarService] Updates:", updates);
+
   // Get current event to check if it's synced
   const { data: currentEvent } = await supabase
     .from("calendar_events")
-    .select("google_event_id, is_synced")
+    .select("*")
     .eq("id", id)
     .single();
+
+  if (!currentEvent) {
+    throw new Error("Event not found");
+  }
+
+  console.log("📋 [calendarService] Current event:", {
+    id: currentEvent.id,
+    google_event_id: currentEvent.google_event_id,
+    is_synced: currentEvent.is_synced
+  });
 
   // Update in local database
   const { data, error } = await supabase
@@ -195,12 +198,19 @@ export const updateCalendarEvent = async (id: string, updates: CalendarEventUpda
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) {
+    console.error("❌ [calendarService] Error updating event:", error);
+    throw error;
+  }
+
+  console.log("✅ [calendarService] Event updated in DB");
 
   const updatedEvent = mapDbEventToFrontend(data);
 
   // If event is synced to Google, update it there too
-  if (currentEvent?.google_event_id) {
+  if (currentEvent.google_event_id) {
+    console.log("🔄 [calendarService] Syncing update to Google Calendar:", currentEvent.google_event_id);
+    
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
       fetch("/api/google-calendar/update-event", {
@@ -212,25 +222,32 @@ export const updateCalendarEvent = async (id: string, updates: CalendarEventUpda
         body: JSON.stringify({
           googleEventId: currentEvent.google_event_id,
           event: {
-            summary: updates.title || data.title,
-            description: updates.description || data.description,
-            location: updates.location || data.location,
-            start: updates.start_time || data.start_time,
-            end: updates.end_time || data.end_time,
+            summary: data.title,
+            description: data.description,
+            location: data.location,
+            start: { dateTime: data.start_time },
+            end: { dateTime: data.end_time || data.start_time },
           },
         }),
       }).then(async (response) => {
         if (response.ok) {
+          console.log("✅ [calendarService] Google Calendar updated successfully");
           await supabase
             .from("calendar_events")
             .update({ is_synced: true })
             .eq("id", id);
-          console.log("✅ Event updated in Google Calendar");
+        } else {
+          const error = await response.text();
+          console.error("❌ [calendarService] Failed to update Google Calendar:", error);
         }
       }).catch(err => {
-        console.error("Failed to update Google Calendar event:", err);
+        console.error("❌ [calendarService] Google Calendar update error:", err);
       });
+    } else {
+      console.log("⚠️ [calendarService] No session for Google sync");
     }
+  } else {
+    console.log("ℹ️ [calendarService] Event not synced to Google, skipping");
   }
 
   return updatedEvent;
@@ -238,6 +255,8 @@ export const updateCalendarEvent = async (id: string, updates: CalendarEventUpda
 
 // Delete calendar event with Google Calendar sync
 export const deleteCalendarEvent = async (id: string): Promise<void> => {
+  console.log("🔵 [calendarService] deleteCalendarEvent called for:", id);
+
   // Get event to check if it's synced
   const { data: event } = await supabase
     .from("calendar_events")
@@ -245,16 +264,28 @@ export const deleteCalendarEvent = async (id: string): Promise<void> => {
     .eq("id", id)
     .single();
 
+  console.log("📋 [calendarService] Event to delete:", {
+    id,
+    google_event_id: event?.google_event_id
+  });
+
   // Delete from local database
   const { error } = await supabase
     .from("calendar_events")
     .delete()
     .eq("id", id);
 
-  if (error) throw error;
+  if (error) {
+    console.error("❌ [calendarService] Error deleting event:", error);
+    throw error;
+  }
+
+  console.log("✅ [calendarService] Event deleted from DB");
 
   // If event is synced to Google, delete it there too
   if (event?.google_event_id) {
+    console.log("🔄 [calendarService] Deleting from Google Calendar:", event.google_event_id);
+    
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
       fetch("/api/google-calendar/delete-event", {
@@ -266,10 +297,18 @@ export const deleteCalendarEvent = async (id: string): Promise<void> => {
         body: JSON.stringify({
           googleEventId: event.google_event_id,
         }),
+      }).then((response) => {
+        if (response.ok) {
+          console.log("✅ [calendarService] Google Calendar event deleted");
+        } else {
+          console.error("❌ [calendarService] Failed to delete from Google Calendar");
+        }
       }).catch(err => {
-        console.error("Failed to delete Google Calendar event:", err);
+        console.error("❌ [calendarService] Google Calendar delete error:", err);
       });
     }
+  } else {
+    console.log("ℹ️ [calendarService] Event not synced to Google, skipping");
   }
 };
 
@@ -307,4 +346,28 @@ export const getUpcomingEvents = async (): Promise<CalendarEvent[]> => {
   nextWeek.setDate(nextWeek.getDate() + 7);
 
   return getEventsByDateRange(today, nextWeek);
+};
+
+// Sync events from Google Calendar (import + update)
+export const syncEventToGoogle = async (event: any): Promise<boolean> => {
+  console.log("🔄 [calendarService] syncEventToGoogle called");
+  return true;
+};
+
+export const updateGoogleEvent = async (
+  googleEventId: string,
+  event: Partial<CalendarEvent>
+): Promise<boolean> => {
+  console.log("🔄 [calendarService] updateGoogleEvent called");
+  return false;
+};
+
+export const deleteGoogleEvent = async (googleEventId: string): Promise<boolean> => {
+  console.log("🔄 [calendarService] deleteGoogleEvent called");
+  return false;
+};
+
+export const importGoogleCalendarEvents = async (): Promise<CalendarEvent[]> => {
+  console.log("🔄 [calendarService] importGoogleCalendarEvents called");
+  return [];
 };

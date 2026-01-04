@@ -164,11 +164,20 @@ export default function Dashboard() {
       // Filtrar leads baseado no role e seleção
       let allLeads: Lead[] = [];
       
+      console.log("📊 Dashboard - Starting lead filtering...");
+      console.log("📊 Dashboard - User Role:", userRole);
+      console.log("📊 Dashboard - Current User ID:", currentUserId);
+      console.log("📊 Dashboard - Selected Agent:", selectedAgent);
+      
       if (userRole === "admin") {
         // Admin vê tudo ou filtra por agente específico
-        allLeads = selectedAgent !== "all" 
-          ? rawLeads.filter(l => l.assigned_to === selectedAgent)
-          : rawLeads;
+        if (selectedAgent !== "all") {
+          allLeads = rawLeads.filter(l => l.assigned_to === selectedAgent);
+          console.log("📊 Dashboard - Admin filtering by agent:", selectedAgent);
+        } else {
+          allLeads = rawLeads;
+          console.log("📊 Dashboard - Admin viewing all leads");
+        }
       } else if (userRole === "team_lead") {
         // Team Lead vê:
         // 1. Leads criadas por ele (user_id = currentUserId)
@@ -177,9 +186,12 @@ export default function Dashboard() {
         if (selectedAgent !== "all") {
           // Agente específico da equipa
           allLeads = rawLeads.filter(l => l.assigned_to === selectedAgent);
+          console.log("📊 Dashboard - Team Lead filtering by agent:", selectedAgent);
         } else {
           // Todas as leads relevantes para o team lead
           const teamAgentIds = agents.map(a => a.id);
+          console.log("📊 Dashboard - Team agents IDs:", teamAgentIds);
+          
           allLeads = rawLeads.filter(l => {
             // Lead criada pelo team lead
             if (l.user_id === currentUserId) return true;
@@ -189,10 +201,17 @@ export default function Dashboard() {
             if (l.assigned_to && teamAgentIds.includes(l.assigned_to)) return true;
             return false;
           });
+          console.log("📊 Dashboard - Team Lead viewing team leads");
         }
-      } else {
-        // Agente vê apenas suas próprias leads
+      } else if (userRole === "agent") {
+        // Agente vê apenas suas próprias leads assignadas
         allLeads = rawLeads.filter(l => l.assigned_to === currentUserId);
+        console.log("📊 Dashboard - Agent viewing assigned leads");
+      } else {
+        // DEFAULT: Se role não está definido ou é desconhecido, mostrar TODAS as leads
+        // Isto garante que o dashboard funciona mesmo sem role configurado
+        console.log("📊 Dashboard - No role or unknown role, showing ALL leads (default behavior)");
+        allLeads = rawLeads;
       }
 
       console.log("📊 Dashboard - Filtered Leads Count:", allLeads.length);

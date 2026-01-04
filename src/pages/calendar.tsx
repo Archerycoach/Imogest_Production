@@ -14,7 +14,7 @@ import { getProperties } from "@/services/propertiesService";
 import { getAllTasks, updateTask, deleteTask } from "@/services/tasksService";
 import { getGoogleCredentials } from "@/services/googleCalendarService";
 import { supabase } from "@/integrations/supabase/client";
-import { Plus, Clock, ChevronLeft, ChevronRight, RefreshCw, Calendar as CalendarIcon, Link } from "lucide-react";
+import { Plus, Clock, ChevronLeft, ChevronRight, RefreshCw, Calendar as CalendarIcon, Link, Loader2 } from "lucide-react";
 import { GoogleCalendarConnect } from "@/components/GoogleCalendarConnect";
 import type { Lead, Property, CalendarEvent } from "@/types";
 import { useToast } from "@/hooks/use-toast";
@@ -64,6 +64,12 @@ export default function Calendar() {
     leadId: "none",
     propertyId: "none",
   });
+
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [showQuickTaskDialog, setShowQuickTaskDialog] = useState(false);
+  const [showQuickEventDialog, setShowQuickEventDialog] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
 
   useEffect(() => {
     checkAuth();
@@ -161,6 +167,51 @@ export default function Calendar() {
       });
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleGoogleSync = async () => {
+    if (!googleConnected) {
+      toast({
+        title: "Google Calendar não conectado",
+        description: "Por favor, conecte sua conta Google primeiro.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSyncing(true);
+    try {
+      console.log("🔄 [Calendar] Manual sync started");
+      const response = await fetch("/api/google-calendar/sync", {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to sync");
+      }
+
+      const result = await response.json();
+      console.log("✅ [Calendar] Sync result:", result);
+
+      setLastSyncTime(new Date());
+
+      toast({
+        title: "Sincronização concluída",
+        description: `${result.imported || 0} eventos importados, ${result.updated || 0} atualizados, ${result.skipped || 0} ignorados.`,
+      });
+
+      // Refresh events after sync
+      loadData();
+    } catch (error) {
+      console.error("❌ [Calendar] Sync error:", error);
+      toast({
+        title: "Erro na sincronização",
+        description: "Não foi possível sincronizar com o Google Calendar.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -868,6 +919,58 @@ export default function Calendar() {
                   )}
                 </div>
               </form>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Google Calendar Sync Status */}
+        {googleConnected && (
+          <Card className="mb-6">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                    <span className="text-sm font-medium">Sincronização Automática Ativa</span>
+                  </div>
+                  <Badge variant="outline" className="text-xs">
+                    A cada 15 minutos
+                  </Badge>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  {lastSyncTime && (
+                    <div className="text-sm text-muted-foreground">
+                      Última sincronização:{" "}
+                      <span className="font-medium">
+                        {lastSyncTime.toLocaleTimeString("pt-PT", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
+                  )}
+
+                  <Button
+                    onClick={handleGoogleSync}
+                    disabled={isSyncing}
+                    size="sm"
+                    variant="outline"
+                  >
+                    {isSyncing ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Sincronizando...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        Sincronizar Agora
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
         )}
