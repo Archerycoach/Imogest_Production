@@ -26,6 +26,7 @@ export default function Settings() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [replyEmail, setReplyEmail] = useState("");
   const [companyName, setCompanyName] = useState("");
   
   // Password form
@@ -53,7 +54,6 @@ export default function Settings() {
       const session = await getSession();
       
       if (!session) {
-        // No session - redirect to login
         toast({
           title: "Sessão expirada",
           description: "Por favor, faça login novamente.",
@@ -63,12 +63,10 @@ export default function Settings() {
         return;
       }
 
-      // Session exists - load profile
       await loadProfile();
     } catch (error) {
       console.error("Authentication error:", error);
       
-      // Clear invalid session and redirect
       try {
         await signOut();
       } catch (signOutError) {
@@ -94,6 +92,7 @@ export default function Settings() {
         setFullName(data.full_name || "");
         setEmail(data.email || "");
         setPhone(data.phone || "");
+        setReplyEmail(data.reply_email || "");
         setAvatarPreview(data.avatar_url || "");
       }
     } catch (error) {
@@ -111,6 +110,12 @@ export default function Settings() {
         full_name: profile.full_name,
         email: profile.email,
         phone: profile.phone,
+        reply_email: profile.reply_email,
+      });
+      
+      toast({
+        title: "Perfil atualizado",
+        description: "As suas alterações foram guardadas com sucesso.",
       });
     } catch (error) {
       console.error("Error updating profile:", error);
@@ -256,16 +261,34 @@ export default function Settings() {
                   <Input 
                     value={profile?.full_name || ""} 
                     onChange={e => setProfile(prev => prev ? {...prev, full_name: e.target.value} : null)}
+                    placeholder="Ex: João Silva"
                   />
                 </div>
                 
                 <div className="space-y-2">
-                  <Label>Email</Label>
+                  <Label>Email da Conta</Label>
                   <Input 
                     value={profile?.email || ""} 
                     disabled 
                     className="bg-gray-50"
                   />
+                  <p className="text-xs text-slate-500">
+                    Este é o email usado para login. Não pode ser alterado.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Email para Respostas</Label>
+                  <Input 
+                    type="email"
+                    value={profile?.reply_email || ""} 
+                    onChange={e => setProfile(prev => prev ? {...prev, reply_email: e.target.value} : null)}
+                    placeholder="Ex: joao.silva@imobiliaria.pt"
+                  />
+                  <p className="text-xs text-slate-500">
+                    📧 Quando enviar emails via Imogest, os clientes responderão para este endereço.
+                    Se deixar vazio, será usado o email da conta.
+                  </p>
                 </div>
 
                 <div className="space-y-2">
@@ -273,6 +296,7 @@ export default function Settings() {
                   <Input 
                     value={profile?.phone || ""} 
                     onChange={e => setProfile(prev => prev ? {...prev, phone: e.target.value} : null)}
+                    placeholder="Ex: +351 912 345 678"
                   />
                 </div>
 

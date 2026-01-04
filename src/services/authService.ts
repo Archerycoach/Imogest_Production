@@ -5,24 +5,40 @@ import { CacheManager } from "@/lib/cacheInvalidation";
 // --- Core Auth Functions ---
 
 export const getSession = async (): Promise<Session | null> => {
-  const { data: { session }, error } = await supabase.auth.getSession();
-  if (error) {
-    console.error("Error getting session:", error);
+  try {
+    const { data: { session }, error } = await supabase.auth.getSession();
+    if (error) {
+      console.error("Error getting session:", error);
+      return null;
+    }
+    return session;
+  } catch (error) {
+    console.error("Unexpected error in getSession:", error);
     return null;
   }
-  return session;
 };
 
 // Alias for compatibility
 export const getCurrentSession = getSession;
 
 export const getCurrentUser = async (): Promise<User | null> => {
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error) {
-    console.error("Error getting user:", error);
+  try {
+    // First check if we have a session
+    const session = await getSession();
+    if (!session) {
+      return null;
+    }
+
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error) {
+      console.error("Error getting user:", error);
+      return null;
+    }
+    return user;
+  } catch (error) {
+    console.error("Unexpected error in getCurrentUser:", error);
     return null;
   }
-  return user;
 };
 
 export const signInWithEmail = async (email: string, password: string) => {

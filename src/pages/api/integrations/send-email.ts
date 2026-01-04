@@ -1,96 +1,136 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "@/integrations/supabase/client";
 
+interface EmailRequest {
+  to: string;
+  subject: string;
+  html: string;
+  leadId?: string;
+  propertyId?: string;
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
   if (req.method !== "POST") {
-    return res.status(405).json({ success: false, message: "Method not allowed" });
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
-    const { to, subject, html } = req.body;
+    const { to, subject, html, leadId, propertyId } = req.body as EmailRequest;
 
     if (!to || !subject || !html) {
       return res.status(400).json({
         success: false,
-        message: "Parâmetros obrigatórios: to (email), subject (assunto) e html (conteúdo)",
+        message: "Campos obrigatórios: to, subject, html",
       });
     }
 
-    // Get SendGrid integration settings
+    // ✅ Get authenticated user session
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    
+    if (userError || !user) {
+      return res.status(401).json({
+        success: false,
+        message: "Não autenticado. Faça login novamente.",
+      });
+    }
+
+    // ✅ Get user profile for reply_email and full_name
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("full_name, email, reply_email")
+      .eq("id", user.id)
+      .single();
+
+    if (profileError || !profile) {
+      return res.status(400).json({
+        success: false,
+        message: "Perfil do utilizador não encontrado.",
+      });
+    }
+
+    // ✅ CRITICAL: Get MailerSend credentials ONLY from database, NEVER from .env
     const { data: integration, error: integrationError } = await supabase
       .from("integration_settings")
       .select("settings, is_active")
-      .eq("integration_name", "sendgrid")
+      .eq("integration_name", "mailersend")
       .single();
 
     if (integrationError || !integration) {
       return res.status(400).json({
         success: false,
-        message: "SendGrid não configurado",
+        message: "MailerSend não está configurado. Configure em Admin → Integrações.",
       });
     }
 
     if (!integration.is_active) {
       return res.status(400).json({
         success: false,
-        message: "SendGrid não está ativo",
+        message: "Integração MailerSend está desativada. Ative em Admin → Integrações.",
       });
     }
 
-    const settings = integration.settings as Record<string, any>;
-    const { apiKey, fromEmail, fromName } = settings;
+    // ✅ Extract credentials from database (NOT from .env)
+    const { apiKey, fromEmail, fromName } = integration.settings as {
+      apiKey?: string;
+      fromEmail?: string;
+      fromName?: string;
+    };
 
     if (!apiKey || !fromEmail) {
       return res.status(400).json({
         success: false,
-        message: "Configuração SendGrid incompleta",
+        message: "Credenciais MailerSend incompletas na base de dados",
       });
     }
 
-    // Send email via SendGrid
-    const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
+    // ✅ Prepare reply-to: Use reply_email if set, otherwise use account email
+    const replyToEmail = profile.reply_email || profile.email;
+    const senderName = profile.full_name || fromName || "Imogest";
+
+    // ✅ Send email using MailerSend API with reply-to header
+    const response = await fetch("https://api.mailersend.com/v1/email", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        personalizations: [
-          {
-            to: [{ email: to }],
-            subject: subject,
-          },
-        ],
         from: {
           email: fromEmail,
-          name: fromName || "Imogest",
+          name: `${senderName} (Imogest)`, // Shows: "João Silva (Imogest)"
         },
-        content: [
+        to: [
           {
-            type: "text/html",
-            value: html,
+            email: to,
           },
         ],
+        reply_to: {
+          email: replyToEmail,
+          name: senderName, // Client replies to user's configured email
+        },
+        subject,
+        html,
       }),
     });
 
     if (!response.ok) {
       const errorData = await response.json();
-      return res.status(400).json({
-        success: false,
-        message: `Erro SendGrid: ${errorData.errors?.[0]?.message || "Erro ao enviar email"}`,
-      });
+      throw new Error(errorData.message || "Erro ao enviar email via MailerSend");
     }
 
     return res.status(200).json({
       success: true,
       message: "Email enviado com sucesso!",
+      details: {
+        from: `${senderName} (Imogest) <${fromEmail}>`,
+        replyTo: `${senderName} <${replyToEmail}>`,
+      },
     });
   } catch (error: any) {
-    console.error("Email send error:", error);
+    console.error("Error sending email:", error);
     return res.status(500).json({
       success: false,
       message: `Erro ao enviar email: ${error.message}`,

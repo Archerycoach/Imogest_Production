@@ -735,6 +735,7 @@ export type Database = {
           id: string
           is_active: boolean | null
           phone: string | null
+          reply_email: string | null
           role: string | null
           team_lead_id: string | null
           updated_at: string | null
@@ -748,6 +749,7 @@ export type Database = {
           id: string
           is_active?: boolean | null
           phone?: string | null
+          reply_email?: string | null
           role?: string | null
           team_lead_id?: string | null
           updated_at?: string | null
@@ -761,6 +763,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           phone?: string | null
+          reply_email?: string | null
           role?: string | null
           team_lead_id?: string | null
           updated_at?: string | null

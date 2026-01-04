@@ -60,44 +60,81 @@ export default function Integrations() {
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
   const [formData, setFormData] = useState<Record<string, Record<string, string>>>({});
   const [googleCalendarConnected, setGoogleCalendarConnected] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
 
   useEffect(() => {
-    // Wait for session to be available before loading integrations
-    const initializeIntegrations = async () => {
+    // Wait for session to be fully ready before loading anything
+    const initializeSession = async () => {
       try {
-        // Check if user is authenticated first
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session }, error } = await supabase.auth.getSession();
         
-        if (!session) {
-          console.warn("No session available, skipping integrations load");
+        if (error) {
+          console.error("Session error:", error);
           setLoading(false);
           return;
         }
 
-        // Only load integrations if session exists
-        await loadIntegrations();
-        await checkGoogleCalendarConnection();
+        if (!session) {
+          console.warn("No active session");
+          setLoading(false);
+          return;
+        }
+
+        // Session is ready, proceed with initialization
+        setSessionReady(true);
       } catch (error) {
-        console.error("Error initializing integrations:", error);
+        console.error("Error initializing session:", error);
         setLoading(false);
       }
     };
 
-    initializeIntegrations();
+    initializeSession();
   }, []);
+
+  useEffect(() => {
+    // Only load data after session is confirmed ready
+    if (sessionReady) {
+      loadIntegrations();
+      checkGoogleCalendarConnection();
+    }
+  }, [sessionReady]);
 
   const loadIntegrations = async () => {
     try {
       setLoading(true);
       const data = await getAllIntegrations();
-      setIntegrations(data);
+      
+      // Ensure all defined integrations exist in the database
+      const existingNames = data.map(i => i.integration_name);
+      const missingIntegrations = Object.keys(INTEGRATIONS).filter(
+        name => !existingNames.includes(name)
+      );
 
-      const initialFormData: Record<string, Record<string, string>> = {};
-      data.forEach((integration) => {
-        initialFormData[integration.integration_name] = integration.settings;
-      });
-      setFormData(initialFormData);
+      // Create missing integrations
+      if (missingIntegrations.length > 0) {
+        for (const name of missingIntegrations) {
+          await updateIntegrationSettings(name, {});
+        }
+        // Reload to get the newly created integrations
+        const updatedData = await getAllIntegrations();
+        setIntegrations(updatedData);
+
+        const initialFormData: Record<string, Record<string, string>> = {};
+        updatedData.forEach((integration) => {
+          initialFormData[integration.integration_name] = integration.settings;
+        });
+        setFormData(initialFormData);
+      } else {
+        setIntegrations(data);
+
+        const initialFormData: Record<string, Record<string, string>> = {};
+        data.forEach((integration) => {
+          initialFormData[integration.integration_name] = integration.settings;
+        });
+        setFormData(initialFormData);
+      }
     } catch (error: any) {
+      console.error("Error loading integrations:", error);
       toast({
         title: "Erro ao carregar integrações",
         description: error.message,
@@ -110,25 +147,30 @@ export default function Integrations() {
 
   const checkGoogleCalendarConnection = async () => {
     try {
-      const { data: { user }, error } = await supabase.auth.getUser();
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
-      if (error || !user) {
-        console.warn("No authenticated user, skipping Google Calendar check");
+      if (sessionError || !session?.user) {
+        console.warn("No session for Google Calendar check");
         setGoogleCalendarConnected(false);
         return;
       }
 
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("user_integrations")
         .select("is_active")
-        .eq("user_id", user.id)
+        .eq("user_id", session.user.id)
         .eq("integration_type", "google_calendar")
         .maybeSingle();
 
+      if (error) {
+        console.error("Error checking Google Calendar:", error);
+        setGoogleCalendarConnected(false);
+        return;
+      }
+
       setGoogleCalendarConnected(data?.is_active || false);
     } catch (error) {
-      console.error("Error checking Google Calendar connection:", error);
-      // Gracefully handle auth errors - assume not connected
+      console.error("Error in checkGoogleCalendarConnection:", error);
       setGoogleCalendarConnected(false);
     }
   };
@@ -139,6 +181,21 @@ export default function Integrations() {
       const integration = integrations.find((i) => i.integration_name === integrationName);
       if (!integration) return;
 
+      // Validate required fields before saving
+      const config = INTEGRATIONS[integrationName];
+      const missingFields = config.fields
+        .filter(field => field.required && !formData[integrationName]?.[field.key])
+        .map(field => field.label);
+
+      if (missingFields.length > 0) {
+        toast({
+          title: "Campos obrigatórios em falta",
+          description: `Por favor preencha: ${missingFields.join(", ")}`,
+          variant: "destructive",
+        });
+        return;
+      }
+
       await updateIntegrationSettings(
         integrationName,
         formData[integrationName] || {}
@@ -147,8 +204,8 @@ export default function Integrations() {
       await syncToSupabaseSecrets(integrationName);
 
       toast({
-        title: "Configuração salva!",
-        description: "As credenciais foram atualizadas com sucesso.",
+        title: "✅ Configuração guardada!",
+        description: "As credenciais foram atualizadas com sucesso. Pode agora testar a conexão.",
       });
 
       await loadIntegrations();
@@ -165,11 +222,33 @@ export default function Integrations() {
 
   const handleTest = async (integrationName: string) => {
     try {
+      // Check if integration has saved credentials before testing
+      const integration = integrations.find((i) => i.integration_name === integrationName);
+      if (!integration || Object.keys(integration.settings || {}).length === 0) {
+        toast({
+          title: "⚠️ Credenciais não guardadas",
+          description: "Por favor guarde a configuração antes de testar a conexão.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Check if there are unsaved changes
+      const hasChanges = JSON.stringify(formData[integrationName]) !== JSON.stringify(integration.settings);
+      if (hasChanges) {
+        toast({
+          title: "⚠️ Alterações não guardadas",
+          description: "Guarde as alterações antes de testar a conexão.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       setTesting(integrationName);
       const result = await testIntegration(integrationName);
 
       toast({
-        title: result.success ? "Teste bem-sucedido!" : "Teste falhou",
+        title: result.success ? "✅ Teste bem-sucedido!" : "❌ Teste falhou",
         description: result.message,
         variant: result.success ? "default" : "destructive",
       });
@@ -238,6 +317,8 @@ export default function Integrations() {
     const isSaving = saving === config.name;
     const isTesting = testing === config.name;
     const hasChanges = JSON.stringify(formData[config.name]) !== JSON.stringify(data.settings);
+    const hasCredentials = Object.keys(data.settings || {}).length > 0;
+    const canTest = hasCredentials && !hasChanges && config.testEndpoint;
 
     if (config.name === "google_calendar") {
       return (
@@ -467,6 +548,26 @@ export default function Integrations() {
             );
           })}
 
+          {/* Show info alert if no credentials saved yet */}
+          {!hasCredentials && (
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                ℹ️ Preencha os campos obrigatórios e clique em "Guardar Configuração" para configurar esta integração.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Show warning if there are unsaved changes */}
+          {hasChanges && hasCredentials && (
+            <Alert className="border-orange-200 bg-orange-50">
+              <AlertCircle className="h-4 w-4 text-orange-600" />
+              <AlertDescription className="text-orange-800">
+                ⚠️ Tem alterações não guardadas. Clique em "Guardar Configuração" antes de testar.
+              </AlertDescription>
+            </Alert>
+          )}
+
           {data.test_status === "failed" && data.test_message && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
@@ -480,17 +581,42 @@ export default function Integrations() {
               disabled={isSaving || !hasChanges}
               className="flex-1"
             >
-              {isSaving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Guardar Configuração
+              {isSaving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  A guardar...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Guardar Configuração
+                </>
+              )}
             </Button>
             {config.testEndpoint && (
               <Button
                 onClick={() => handleTest(config.name)}
-                disabled={isTesting}
+                disabled={isTesting || !canTest}
                 variant="outline"
+                title={
+                  !hasCredentials 
+                    ? "Guarde a configuração primeiro" 
+                    : hasChanges 
+                    ? "Guarde as alterações antes de testar" 
+                    : "Testar conexão"
+                }
               >
-                {isTesting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Testar
+                {isTesting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    A testar...
+                  </>
+                ) : (
+                  <>
+                    <TestTube className="h-4 w-4 mr-2" />
+                    Testar
+                  </>
+                )}
               </Button>
             )}
             <Button variant="ghost" size="icon" asChild>
@@ -518,10 +644,10 @@ export default function Integrations() {
     ["stripe", "eupago"].includes(i.integration_name)
   );
   const communicationIntegrations = integrations.filter((i) =>
-    ["whatsapp", "sendgrid", "twilio"].includes(i.integration_name)
+    ["whatsapp", "mailersend"].includes(i.integration_name)
   );
   const toolsIntegrations = integrations.filter((i) =>
-    ["google_calendar", "google_maps", "firebase"].includes(i.integration_name)
+    ["google_calendar", "google_maps"].includes(i.integration_name)
   );
 
   return (

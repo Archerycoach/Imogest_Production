@@ -33,7 +33,7 @@ export const sendEmail = async (
   }
 ) => {
   try {
-    // Call API endpoint to send email (uses SendGrid credentials from database)
+    // Call API endpoint to send email (uses MailerSend credentials from database)
     const response = await fetch("/api/integrations/send-email", {
       method: "POST",
       headers: {
@@ -42,7 +42,7 @@ export const sendEmail = async (
       body: JSON.stringify({
         to,
         subject,
-        content,
+        html: content,
         leadId: relatedTo?.leadId,
         propertyId: relatedTo?.propertyId,
       }),
@@ -50,7 +50,7 @@ export const sendEmail = async (
 
     if (!response.ok) {
       const error = await response.json();
-      throw new Error(error.error || "Erro ao enviar email");
+      throw new Error(error.message || "Erro ao enviar email");
     }
 
     return true;

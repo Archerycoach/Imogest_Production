@@ -172,21 +172,21 @@ export const INTEGRATIONS: Record<string, IntegrationConfig> = {
       },
     ],
   },
-  sendgrid: {
-    name: "sendgrid",
-    displayName: "SendGrid",
-    description: "Envio de emails transacionais e marketing",
+  mailersend: {
+    name: "mailersend",
+    displayName: "MailerSend",
+    description: "Envio de emails transacionais e notificações",
     icon: "Mail",
     color: "bg-blue-600",
-    docsUrl: "https://sendgrid.com/docs",
-    testEndpoint: "/api/integrations/test-sendgrid",
+    docsUrl: "https://www.mailersend.com/help/api-tokens",
+    testEndpoint: "/api/integrations/test-mailersend",
     fields: [
       {
         key: "apiKey",
-        label: "API Key",
+        label: "API Token",
         type: "password",
-        placeholder: "SG.xxxxx...",
-        helpText: "Chave API do SendGrid",
+        placeholder: "mlsn.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        helpText: "Token de API do MailerSend (começa com 'mlsn.')",
         required: true,
       },
       {
@@ -194,7 +194,7 @@ export const INTEGRATIONS: Record<string, IntegrationConfig> = {
         label: "Email Remetente",
         type: "email",
         placeholder: "noreply@seudominio.com",
-        helpText: "Email verificado no SendGrid",
+        helpText: "Email verificado no MailerSend (domínio verificado necessário)",
         required: true,
       },
       {
@@ -202,77 +202,8 @@ export const INTEGRATIONS: Record<string, IntegrationConfig> = {
         label: "Nome Remetente",
         type: "text",
         placeholder: "Imogest",
-        helpText: "Nome que aparece como remetente",
+        helpText: "Nome que aparece como remetente dos emails",
         required: false,
-      },
-    ],
-  },
-  twilio: {
-    name: "twilio",
-    displayName: "Twilio",
-    description: "SMS e chamadas telefónicas",
-    icon: "Phone",
-    color: "bg-red-600",
-    docsUrl: "https://www.twilio.com/docs",
-    testEndpoint: "/api/integrations/test-twilio",
-    fields: [
-      {
-        key: "accountSid",
-        label: "Account SID",
-        type: "text",
-        placeholder: "ACxxxxx...",
-        helpText: "SID da conta Twilio",
-        required: true,
-      },
-      {
-        key: "authToken",
-        label: "Auth Token",
-        type: "password",
-        placeholder: "xxxxx...",
-        helpText: "Token de autenticação",
-        required: true,
-      },
-      {
-        key: "phoneNumber",
-        label: "Número de Telefone",
-        type: "text",
-        placeholder: "+351912345678",
-        helpText: "Número Twilio para envio de SMS",
-        required: true,
-      },
-    ],
-  },
-  firebase: {
-    name: "firebase",
-    displayName: "Firebase",
-    description: "Push notifications e analytics (opcional)",
-    icon: "Bell",
-    color: "bg-yellow-500",
-    docsUrl: "https://firebase.google.com/docs",
-    fields: [
-      {
-        key: "projectId",
-        label: "Project ID",
-        type: "text",
-        placeholder: "meu-projeto-123",
-        helpText: "ID do projeto Firebase",
-        required: true,
-      },
-      {
-        key: "apiKey",
-        label: "API Key",
-        type: "password",
-        placeholder: "AIzaSyXxxxx...",
-        helpText: "Chave API web do Firebase",
-        required: true,
-      },
-      {
-        key: "messagingSenderId",
-        label: "Messaging Sender ID",
-        type: "text",
-        placeholder: "123456789012",
-        helpText: "ID do remetente de mensagens",
-        required: true,
       },
     ],
   },
@@ -438,17 +369,33 @@ export const testIntegration = async (name: string): Promise<{ success: boolean;
 };
 
 // Sync integration to Supabase secrets (Edge Functions)
-export const syncToSupabaseSecrets = async (name: string): Promise<{ success: boolean; message: string }> => {
+export const syncToSupabaseSecrets = async (integrationName: string): Promise<void> => {
   try {
+    // Get current session token
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session?.access_token) {
+      throw new Error("No active session");
+    }
+
     const response = await fetch("/api/admin/sync-integration-secrets", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ integrationName: name }),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ integration_name: integrationName }),
     });
 
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || "Failed to sync secrets");
+    }
+
     const result = await response.json();
-    return result;
-  } catch (error: any) {
-    return { success: false, message: error.message || "Erro ao sincronizar secrets" };
+    console.log(`Secrets synced for ${integrationName}:`, result);
+  } catch (error) {
+    console.error("Error syncing secrets to Supabase:", error);
+    throw error;
   }
 };
