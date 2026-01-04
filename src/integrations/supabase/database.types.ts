@@ -731,6 +731,9 @@ export type Database = {
           created_at: string | null
           deleted_at: string | null
           email: string | null
+          email_daily_events: boolean | null
+          email_daily_tasks: boolean | null
+          email_new_lead_assigned: boolean | null
           full_name: string | null
           id: string
           is_active: boolean | null
@@ -745,6 +748,9 @@ export type Database = {
           created_at?: string | null
           deleted_at?: string | null
           email?: string | null
+          email_daily_events?: boolean | null
+          email_daily_tasks?: boolean | null
+          email_new_lead_assigned?: boolean | null
           full_name?: string | null
           id: string
           is_active?: boolean | null
@@ -759,6 +765,9 @@ export type Database = {
           created_at?: string | null
           deleted_at?: string | null
           email?: string | null
+          email_daily_events?: boolean | null
+          email_daily_tasks?: boolean | null
+          email_new_lead_assigned?: boolean | null
           full_name?: string | null
           id?: string
           is_active?: boolean | null

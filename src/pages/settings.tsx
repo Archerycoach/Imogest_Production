@@ -88,6 +88,7 @@ export default function Settings() {
     try {
       const data = await getUserProfile();
       if (data) {
+        console.log("[Settings] Profile loaded:", data);
         setProfile(data);
         setFullName(data.full_name || "");
         setEmail(data.email || "");
@@ -106,11 +107,24 @@ export default function Settings() {
     
     setLoading(true);
     try {
+      console.log("[Settings] Updating profile with:", {
+        full_name: profile.full_name,
+        email: profile.email,
+        phone: profile.phone,
+        reply_email: profile.reply_email,
+        email_daily_tasks: profile.email_daily_tasks,
+        email_daily_events: profile.email_daily_events,
+        email_new_lead_assigned: profile.email_new_lead_assigned,
+      });
+
       await updateUserProfile(profile.id, {
         full_name: profile.full_name,
         email: profile.email,
         phone: profile.phone,
         reply_email: profile.reply_email,
+        email_daily_tasks: profile.email_daily_tasks,
+        email_daily_events: profile.email_daily_events,
+        email_new_lead_assigned: profile.email_new_lead_assigned,
       });
       
       toast({
@@ -428,31 +442,92 @@ export default function Settings() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="font-medium">Notificações por Email</h4>
-                    <p className="text-sm text-slate-500">
-                      Receber atualizações importantes por email
-                    </p>
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Notificações Gerais</h3>
+                  
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-medium">Notificações por Email</h4>
+                      <p className="text-sm text-slate-500">
+                        Receber atualizações importantes por email
+                      </p>
+                    </div>
+                    <Switch
+                      checked={emailNotifications}
+                      onCheckedChange={setEmailNotifications}
+                    />
                   </div>
-                  <Switch
-                    checked={emailNotifications}
-                    onCheckedChange={setEmailNotifications}
-                  />
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-medium">Notificações Push</h4>
+                      <p className="text-sm text-slate-500">
+                        Receber alertas instantâneos no navegador
+                      </p>
+                    </div>
+                    <Switch
+                      checked={pushNotifications}
+                      onCheckedChange={setPushNotifications}
+                    />
+                  </div>
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="font-medium">Notificações Push</h4>
-                    <p className="text-sm text-slate-500">
-                      Receber alertas instantâneos no navegador
-                    </p>
+                <div className="border-t pt-6 space-y-4">
+                  <h3 className="text-lg font-semibold">📧 Emails Automáticos</h3>
+                  <p className="text-sm text-slate-500 mb-4">
+                    Configure emails automáticos para manter-se organizado e nunca perder uma oportunidade
+                  </p>
+                  
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <div>
+                      <h4 className="font-medium">📋 Tarefas Diárias</h4>
+                      <p className="text-sm text-slate-500">
+                        Receber email todas as manhãs (8h) com lista de tarefas do dia
+                      </p>
+                    </div>
+                    <Switch
+                      checked={profile?.email_daily_tasks || false}
+                      onCheckedChange={(checked) => 
+                        setProfile(prev => prev ? {...prev, email_daily_tasks: checked} : null)
+                      }
+                    />
                   </div>
-                  <Switch
-                    checked={pushNotifications}
-                    onCheckedChange={setPushNotifications}
-                  />
+
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <div>
+                      <h4 className="font-medium">📅 Eventos Diários</h4>
+                      <p className="text-sm text-slate-500">
+                        Receber email todas as manhãs (8h) com eventos agendados do dia
+                      </p>
+                    </div>
+                    <Switch
+                      checked={profile?.email_daily_events || false}
+                      onCheckedChange={(checked) => 
+                        setProfile(prev => prev ? {...prev, email_daily_events: checked} : null)
+                      }
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between p-4 border rounded-lg">
+                    <div>
+                      <h4 className="font-medium">🎯 Nova Lead Atribuída</h4>
+                      <p className="text-sm text-slate-500">
+                        Receber email imediato quando lhe for atribuída uma nova lead
+                      </p>
+                    </div>
+                    <Switch
+                      checked={profile?.email_new_lead_assigned || false}
+                      onCheckedChange={(checked) => 
+                        setProfile(prev => prev ? {...prev, email_new_lead_assigned: checked} : null)
+                      }
+                    />
+                  </div>
                 </div>
+
+                <Button onClick={updateProfile} disabled={loading} className="w-full">
+                  <Save className="mr-2 h-4 w-4" />
+                  {loading ? "A guardar..." : "Guardar Preferências"}
+                </Button>
               </CardContent>
             </Card>
           </TabsContent>

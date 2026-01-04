@@ -28,12 +28,18 @@ export type LeadWithContacts = LeadWithDetails;
 // Get all leads with filters
 export const getLeads = async (useCache = true) => {
   try {
+    console.log("[leadsService] getLeads called, useCache:", useCache);
+    
     // Check cache first only if useCache is true
     if (useCache) {
       const cached = getCachedData<Lead[]>(LEADS_CACHE_KEY, CACHE_TTL);
-      if (cached) return cached;
+      if (cached) {
+        console.log("[leadsService] Returning cached leads:", cached.length);
+        return cached;
+      }
     }
 
+    console.log("[leadsService] Fetching leads from database...");
     const { data, error } = await supabase
       .from("leads")
       .select(`
@@ -43,14 +49,20 @@ export const getLeads = async (useCache = true) => {
       .is("archived_at", null)
       .order("created_at", { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+      console.error("[leadsService] Error fetching leads:", error);
+      throw error;
+    }
+    
     const leads = data || [];
+    console.log("[leadsService] Leads fetched successfully:", leads.length);
     
     // Always update cache with fresh data
     setCachedData(LEADS_CACHE_KEY, leads);
     
     return leads;
   } catch (e) {
+    console.error("[leadsService] Exception in getLeads:", e);
     throw e;
   }
 };
@@ -58,12 +70,18 @@ export const getLeads = async (useCache = true) => {
 // Alias for compatibility with existing code
 export const getAllLeads = async (useCache = true): Promise<Lead[]> => {
   try {
+    console.log("[leadsService] getAllLeads called, useCache:", useCache);
+    
     // Check cache first
     if (useCache) {
       const cached = getCachedData<Lead[]>(LEADS_CACHE_KEY, CACHE_TTL);
-      if (cached) return cached;
+      if (cached) {
+        console.log("[leadsService] getAllLeads returning cached:", cached.length);
+        return cached;
+      }
     }
     
+    console.log("[leadsService] getAllLeads fetching from database...");
     const { data, error } = await supabase
       .from("leads")
       .select(`
@@ -73,8 +91,13 @@ export const getAllLeads = async (useCache = true): Promise<Lead[]> => {
       .is("archived_at", null)
       .order("created_at", { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+      console.error("[leadsService] getAllLeads error:", error);
+      throw error;
+    }
+    
     const leads = data || [];
+    console.log("[leadsService] getAllLeads fetched:", leads.length, "leads");
     
     // Cache the result
     if (useCache) {
@@ -83,6 +106,7 @@ export const getAllLeads = async (useCache = true): Promise<Lead[]> => {
     
     return leads;
   } catch (e) {
+    console.error("[leadsService] getAllLeads exception:", e);
     throw e;
   }
 };
@@ -109,39 +133,70 @@ export const getLead = async (id: string): Promise<LeadWithDetails | null> => {
 
 // Create new lead
 export const createLead = async (lead: Omit<Lead, "id" | "created_at" | "updated_at">): Promise<Lead> => {
+  console.log("[leadsService] createLead called with:", lead);
+  
   const { data, error } = await supabase
     .from("leads")
     .insert(lead)
     .select()
     .single();
 
-  if (error) throw error;
-  if (!data) throw new Error("Failed to create lead");
+  if (error) {
+    console.error("[leadsService] createLead error:", error);
+    throw error;
+  }
+  
+  if (!data) {
+    console.error("[leadsService] createLead failed: no data returned");
+    throw new Error("Failed to create lead");
+  }
+
+  console.log("[leadsService] Lead created successfully:", data.id);
 
   // Invalidar caches relacionados
   CacheManager.invalidateLeadsRelated();
+  console.log("[leadsService] Cache invalidated");
 
   return data as Lead;
 };
 
-// Update lead - Public API with type safety
-export const updateLead = async (id: string, updates: Partial<Lead>): Promise<Lead> => {
-  // Cast query builder to any to bypass strict Supabase type checking
-  const query: any = supabase.from("leads");
-  
-  const { data, error } = await query
-    .update(updates as any)
+// Update lead
+export const updateLead = async (id: string, updates: Partial<Lead>) => {
+  // Get current lead to compare assigned_to
+  const { data: currentLead } = await supabase
+    .from("leads")
+    .select("assigned_to")
+    .eq("id", id)
+    .single();
+
+  const { data, error } = await supabase
+    .from("leads")
+    .update(updates)
     .eq("id", id)
     .select()
     .single();
 
   if (error) throw error;
-  if (!data) throw new Error("Failed to update lead");
 
-  // Invalidar caches relacionados
-  CacheManager.invalidateLeadsRelated();
+  // ✅ Send notification if lead was assigned to someone new
+  if (updates.assigned_to && currentLead?.assigned_to !== updates.assigned_to) {
+    try {
+      await fetch("/api/notifications/new-lead-assigned", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          assignedToUserId: updates.assigned_to,
+          leadId: id,
+        }),
+      });
+      console.log("✅ New lead assignment notification sent");
+    } catch (notifError) {
+      console.error("⚠️ Failed to send lead assignment notification:", notifError);
+      // Don't throw - notification failure shouldn't block lead update
+    }
+  }
 
-  return data as Lead;
+  return data;
 };
 
 // Archive lead (soft delete) - replaces deleteLead
