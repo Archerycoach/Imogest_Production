@@ -18,11 +18,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Clock } from "lucide-react";
-import { format } from "date-fns";
-import { pt } from "date-fns/locale";
 import { createTask } from "@/services/tasksService";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -45,12 +40,19 @@ export function QuickTaskDialog({
   onSuccess,
 }: QuickTaskDialogProps) {
   const [loading, setLoading] = useState(false);
+  
+  // Default to today at 9:00 AM
+  const getDefaultDateTime = () => {
+    const now = new Date();
+    now.setHours(9, 0, 0, 0);
+    return now.toISOString().slice(0, 16); // Format: YYYY-MM-DDTHH:mm
+  };
+
   const [formData, setFormData] = useState({
     title: "",
     description: "",
     priority: "medium" as "low" | "medium" | "high",
-    due_date: new Date(),
-    due_time: "09:00",
+    due_datetime: getDefaultDateTime(),
   });
   const { toast } = useToast();
 
@@ -66,10 +68,8 @@ export function QuickTaskDialog({
         throw new Error("Utilizador não autenticado");
       }
 
-      // Combine date and time
-      const [hours, minutes] = formData.due_time.split(":");
-      const dueDateTime = new Date(formData.due_date);
-      dueDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+      // Convert datetime-local to ISO string
+      const dueDateTime = new Date(formData.due_datetime);
 
       await createTask({
         title: formData.title,
@@ -92,8 +92,7 @@ export function QuickTaskDialog({
         title: "",
         description: "",
         priority: "medium",
-        due_date: new Date(),
-        due_time: "09:00",
+        due_datetime: getDefaultDateTime(),
       });
 
       onOpenChange(false);
@@ -187,41 +186,16 @@ export function QuickTaskDialog({
             </div>
 
             <div>
-              <Label htmlFor="due_time">Hora</Label>
-              <div className="relative">
-                <Clock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                <Input
-                  id="due_time"
-                  type="time"
-                  value={formData.due_time}
-                  onChange={(e) => setFormData({ ...formData, due_time: e.target.value })}
-                  className="pl-10"
-                />
-              </div>
+              <Label htmlFor="due_datetime">Data/Hora de Vencimento *</Label>
+              <Input
+                id="due_datetime"
+                type="datetime-local"
+                value={formData.due_datetime}
+                onChange={(e) => setFormData({ ...formData, due_datetime: e.target.value })}
+                required
+                className="w-full"
+              />
             </div>
-          </div>
-
-          <div>
-            <Label>Data de Vencimento</Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="w-full justify-start text-left font-normal"
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {format(formData.due_date, "PPP", { locale: pt })}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={formData.due_date}
-                  onSelect={(date) => date && setFormData({ ...formData, due_date: date })}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
           </div>
 
           <DialogFooter>

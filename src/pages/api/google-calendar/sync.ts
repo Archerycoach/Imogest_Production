@@ -1,6 +1,20 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
+interface SyncStats {
+  google_to_app: {
+    imported: number;
+    updated: number;
+    deleted: number;
+    skipped: number;
+    total: number;
+  };
+  app_to_google: {
+    exported: number;
+    updated: number;
+  };
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -12,318 +26,371 @@ export default async function handler(
   try {
     console.log("🔄 [sync] Starting bidirectional Google Calendar sync...");
 
-    // Get auth token from header
+    // Get user from authorization header
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      console.error("❌ [sync] No authorization header");
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const accessToken = authHeader.replace("Bearer ", "");
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
 
-    // Get user from token
-    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(accessToken);
-    if (userError || !user) {
-      console.error("❌ [sync] Invalid user token:", userError);
+    if (authError || !user) {
+      console.error("❌ [sync] Auth error:", authError);
       return res.status(401).json({ error: "Invalid token" });
     }
 
     console.log("✅ [sync] User authenticated:", user.id);
 
-    // Get Google Calendar credentials
-    const { data: credentials, error: credError } = await supabaseAdmin
-      .from("user_integrations")
-      .select("access_token, refresh_token, token_expiry, is_active")
+    // Get Google credentials
+    // Using (supabaseAdmin as any) to bypass type errors with integration_credentials table
+    const { data: credentials, error: credError } = await (supabaseAdmin as any)
+      .from("integration_credentials")
+      .select("*")
       .eq("user_id", user.id)
-      .eq("integration_type", "google_calendar")
-      .maybeSingle();
+      .eq("provider", "google_calendar")
+      .single();
 
-    if (credError) {
-      console.error("❌ [sync] Error fetching credentials:", credError);
-      return res.status(400).json({ error: "Failed to fetch Google Calendar credentials" });
-    }
-
-    if (!credentials) {
-      console.error("❌ [sync] No Google credentials found for user:", user.id);
+    if (credError || !credentials) {
+      console.error("❌ [sync] No Google credentials found");
       return res.status(400).json({ error: "Google Calendar not connected" });
-    }
-
-    if (!credentials.is_active) {
-      console.error("❌ [sync] Google Calendar integration is inactive");
-      return res.status(400).json({ error: "Google Calendar is inactive" });
     }
 
     console.log("✅ [sync] Google credentials retrieved and active");
 
-    // Check if token is expired
+    const stats: SyncStats = {
+      google_to_app: {
+        imported: 0,
+        updated: 0,
+        deleted: 0,
+        skipped: 0,
+        total: 0,
+      },
+      app_to_google: {
+        exported: 0,
+        updated: 0,
+      },
+    };
+
+    // Get access token (refresh if needed)
+    let accessToken = credentials.access_token;
+    const expiresAt = new Date(credentials.expires_at);
     const now = new Date();
-    const expiryDate = new Date(credentials.token_expiry);
-    
-    if (expiryDate <= now) {
-      console.log("⚠️ [sync] Token expired, please reconnect");
-      return res.status(401).json({ error: "Token expired, please reconnect Google Calendar" });
+
+    if (expiresAt <= now) {
+      console.log("🔄 [sync] Access token expired, refreshing...");
+      
+      const refreshResponse = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!,
+          client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+          refresh_token: credentials.refresh_token,
+          grant_type: "refresh_token",
+        }),
+      });
+
+      if (!refreshResponse.ok) {
+        throw new Error("Failed to refresh token");
+      }
+
+      const refreshData = await refreshResponse.json();
+      accessToken = refreshData.access_token;
+
+      // Update credentials in database
+      await (supabaseAdmin as any)
+        .from("integration_credentials")
+        .update({
+          access_token: accessToken,
+          expires_at: new Date(now.getTime() + refreshData.expires_in * 1000).toISOString(),
+        })
+        .eq("id", credentials.id);
+
+      console.log("✅ [sync] Access token refreshed successfully");
     }
 
-    // ===========================================================
-    // STEP 1: SYNC FROM GOOGLE → APP (Import/Update/Delete)
-    // ===========================================================
-    
+    // ==================================================================
+    // PART 1: SYNC FROM GOOGLE CALENDAR TO APP (Import/Update/Delete)
+    // ==================================================================
+
+    // Fetch events from Google Calendar (last month to +3 months)
     const timeMin = new Date();
     timeMin.setMonth(timeMin.getMonth() - 1);
     const timeMax = new Date();
     timeMax.setMonth(timeMax.getMonth() + 3);
 
-    console.log("📅 [sync] Fetching Google events from", timeMin.toISOString(), "to", timeMax.toISOString());
+    console.log(`📅 [sync] Fetching Google events from ${timeMin.toISOString().split('T')[0]} to ${timeMax.toISOString().split('T')[0]}`);
 
-    const googleResponse = await fetch(
+    const calendarResponse = await fetch(
       `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
       `timeMin=${timeMin.toISOString()}&` +
       `timeMax=${timeMax.toISOString()}&` +
       `singleEvents=true&` +
-      `orderBy=startTime&` +
-      `showDeleted=false`,
+      `orderBy=startTime`,
       {
         headers: {
-          Authorization: `Bearer ${credentials.access_token}`,
+          Authorization: `Bearer ${accessToken}`,
         },
       }
     );
 
-    if (!googleResponse.ok) {
-      const error = await googleResponse.text();
-      console.error("❌ [sync] Google API error:", error);
-      return res.status(500).json({ error: "Failed to fetch Google Calendar events" });
+    if (!calendarResponse.ok) {
+      const errorText = await calendarResponse.text();
+      console.error("❌ [sync] Google Calendar API error:", errorText);
+      throw new Error(`Google Calendar API error: ${errorText}`);
     }
 
-    const googleData = await googleResponse.json();
-    const googleEvents = googleData.items || [];
+    const calendarData = await calendarResponse.json();
+    const googleEvents = calendarData.items || [];
+    stats.google_to_app.total = googleEvents.length;
 
-    console.log("📊 [sync] Google events fetched:", googleEvents.length);
+    console.log(`📊 [sync] Google events fetched: ${googleEvents.length}`);
 
-    // Get existing events from database
-    const { data: existingEventsData } = await supabaseAdmin
+    // Get existing synced events from database
+    const { data: existingEvents } = await supabaseAdmin
       .from("calendar_events")
-      .select("id, google_event_id, start_time, title, description, updated_at")
+      .select("id, google_event_id, updated_at")
       .eq("user_id", user.id)
       .not("google_event_id", "is", null);
-      
-    const existingEvents: any[] = existingEventsData || [];
 
-    console.log("📊 [sync] Existing synced events in DB:", existingEvents.length);
-
-    // Create maps for efficient lookup
     const existingEventsMap = new Map(
-      existingEvents.map((e) => [e.google_event_id, e])
-    );
-    
-    const googleEventIdsSet = new Set(
-      googleEvents.map((e: any) => e.id)
+      (existingEvents || []).map((e) => [e.google_event_id!, { id: e.id, updated_at: e.updated_at }])
     );
 
-    let imported = 0;
-    let updated = 0;
-    let skipped = 0;
-    let deleted = 0;
+    console.log(`📊 [sync] Existing synced events in DB: ${existingEventsMap.size}`);
 
-    // IMPORT/UPDATE events from Google
+    // Process each Google event
     for (const gEvent of googleEvents) {
       const googleEventId = gEvent.id;
-      const summary = gEvent.summary || "Untitled Event";
-      const description = gEvent.description || "";
-      const location = gEvent.location || "";
-      
-      const startTime = gEvent.start?.dateTime || gEvent.start?.date;
-      const endTime = gEvent.end?.dateTime || gEvent.end?.date;
-
-      if (!startTime) {
-        console.log("⚠️ [sync] Skipping event without start time:", googleEventId);
-        skipped++;
-        continue;
-      }
-
       const existingEvent = existingEventsMap.get(googleEventId);
 
       if (existingEvent) {
-        // Check if event needs updating
-        const googleUpdated = new Date(gEvent.updated || 0);
-        const localUpdated = new Date(existingEvent.updated_at || 0);
+        // Event exists - check if it needs updating
+        const googleUpdated = new Date(gEvent.updated);
+        const localUpdated = new Date(existingEvent.updated_at);
 
         if (googleUpdated > localUpdated) {
-          console.log("🔄 [sync] Updating existing event:", googleEventId);
+          // Google version is newer - update local event
+          console.log(`🔄 [sync] Updating existing event: ${googleEventId}`);
           
           const { error: updateError } = await supabaseAdmin
             .from("calendar_events")
             .update({
-              title: summary,
-              description: description,
-              location: location,
-              start_time: startTime,
-              end_time: endTime,
+              title: gEvent.summary || "Sem título",
+              description: gEvent.description || null,
+              start_time: gEvent.start.dateTime || gEvent.start.date,
+              end_time: gEvent.end?.dateTime || gEvent.end?.date || null,
+              location: gEvent.location || null,
               is_synced: true,
               updated_at: new Date().toISOString(),
             })
             .eq("id", existingEvent.id);
 
-          if (updateError) {
-            console.error("❌ [sync] Error updating event:", updateError);
+          if (!updateError) {
+            stats.google_to_app.updated++;
+            console.log(`✅ [sync] Event updated: ${existingEvent.id}`);
           } else {
-            console.log("✅ [sync] Event updated:", existingEvent.id);
-            updated++;
+            console.error(`❌ [sync] Error updating event:`, updateError);
           }
         } else {
-          skipped++;
+          stats.google_to_app.skipped++;
         }
-      } else {
-        // New event - import it
-        console.log("➕ [sync] Importing new event:", googleEventId);
 
+        // Remove from map so we know it still exists in Google
+        existingEventsMap.delete(googleEventId);
+      } else {
+        // New event from Google - import it
+        console.log(`➕ [sync] Importing new event: ${googleEventId}`);
+        
         const { error: insertError } = await supabaseAdmin
           .from("calendar_events")
           .insert({
             user_id: user.id,
-            title: summary,
-            description: description,
-            location: location,
-            start_time: startTime,
-            end_time: endTime,
+            title: gEvent.summary || "Sem título",
+            description: gEvent.description || null,
+            start_time: gEvent.start.dateTime || gEvent.start.date,
+            end_time: gEvent.end?.dateTime || gEvent.end?.date || null,
+            location: gEvent.location || null,
             google_event_id: googleEventId,
             is_synced: true,
-            event_type: "other",
-            attendees: gEvent.attendees?.map((a: any) => a.email) || [],
-          });
+            event_type: "meeting",
+          })
+          .select()
+          .single();
 
-        if (insertError) {
-          console.error("❌ [sync] Error importing event:", insertError);
-          skipped++;
+        if (!insertError) {
+          stats.google_to_app.imported++;
+          console.log(`✅ [sync] Event imported: ${googleEventId}`);
         } else {
-          console.log("✅ [sync] Event imported:", googleEventId);
-          imported++;
+          // Ignore duplicate errors (constraint violation)
+          if (insertError.code !== "23505") {
+            console.error(`❌ [sync] Error importing event:`, insertError);
+          } else {
+            console.log(`⏭️ [sync] Event already exists (duplicate), skipping`);
+            stats.google_to_app.skipped++;
+          }
         }
       }
     }
 
-    // DELETE events that were removed from Google
-    for (const existingEvent of existingEvents) {
-      if (!googleEventIdsSet.has(existingEvent.google_event_id)) {
-        console.log("🗑️ [sync] Deleting event removed from Google:", existingEvent.google_event_id);
-        
+    // Events remaining in the map were deleted from Google - delete from app
+    if (existingEventsMap.size > 0) {
+      console.log(`🗑️ [sync] Deleting ${existingEventsMap.size} events removed from Google`);
+      
+      for (const [googleEventId, eventData] of existingEventsMap) {
         const { error: deleteError } = await supabaseAdmin
           .from("calendar_events")
           .delete()
-          .eq("id", existingEvent.id);
+          .eq("id", eventData.id);
 
-        if (deleteError) {
-          console.error("❌ [sync] Error deleting event:", deleteError);
+        if (!deleteError) {
+          stats.google_to_app.deleted++;
+          console.log(`✅ [sync] Event deleted: ${eventData.id}`);
         } else {
-          console.log("✅ [sync] Event deleted:", existingEvent.id);
-          deleted++;
+          console.error(`❌ [sync] Error deleting event:`, deleteError);
         }
       }
     }
 
-    console.log("✅ [sync] Google → App sync completed:", { imported, updated, deleted, skipped });
+    console.log(
+      `✅ [sync] Google → App sync completed: ${stats.google_to_app.imported} imported, ` +
+      `${stats.google_to_app.updated} updated, ${stats.google_to_app.deleted} deleted, ` +
+      `${stats.google_to_app.skipped} skipped`
+    );
 
-    // ===========================================================
-    // STEP 2: SYNC FROM APP → GOOGLE (Export new events)
-    // ===========================================================
+    // ==================================================================
+    // PART 2: SYNC FROM APP TO GOOGLE CALENDAR (Export New + Update Modified)
+    // ==================================================================
 
-    console.log("📤 [sync] Checking for local events to export to Google...");
+    console.log("📤 [sync] Checking for local events to export/update to Google...");
 
-    // Get local events that are not synced to Google yet
-    const { data: localEvents, error: localError } = await supabaseAdmin
+    // Get local events that need syncing
+    const { data: localEvents } = await supabaseAdmin
       .from("calendar_events")
-      .select("id, title, description, location, start_time, end_time, attendees")
+      .select("*")
       .eq("user_id", user.id)
-      .is("google_event_id", null)
-      .gte("start_time", timeMin.toISOString())
-      .lte("start_time", timeMax.toISOString());
+      .eq("is_synced", false);
 
-    if (localError) {
-      console.error("❌ [sync] Error fetching local events:", localError);
-    }
+    console.log(`📊 [sync] Local events needing sync: ${localEvents?.length || 0}`);
 
-    let exported = 0;
-    const localEventsToSync = localEvents || [];
+    if (localEvents && localEvents.length > 0) {
+      for (const event of localEvents) {
+        try {
+          if (!event.google_event_id) {
+            // NEW EVENT - Export to Google
+            console.log(`📤 [sync] Exporting NEW event to Google: ${event.title}`);
 
-    console.log("📊 [sync] Local events to export:", localEventsToSync.length);
+            const googleEventData = {
+              summary: event.title,
+              description: event.description || undefined,
+              start: {
+                dateTime: event.start_time,
+                timeZone: "Europe/Lisbon",
+              },
+              end: event.end_time
+                ? {
+                    dateTime: event.end_time,
+                    timeZone: "Europe/Lisbon",
+                  }
+                : undefined,
+              location: event.location || undefined,
+            };
 
-    for (const localEvent of localEventsToSync) {
-      try {
-        console.log("📤 [sync] Exporting local event to Google:", localEvent.title);
+            const createResponse = await fetch(
+              "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+              {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify(googleEventData),
+              }
+            );
 
-        // Create event in Google Calendar
-        const googleEventData = {
-          summary: localEvent.title,
-          description: localEvent.description || "",
-          location: localEvent.location || "",
-          start: {
-            dateTime: localEvent.start_time,
-            timeZone: "Europe/Lisbon",
-          },
-          end: {
-            dateTime: localEvent.end_time,
-            timeZone: "Europe/Lisbon",
-          },
-          attendees: localEvent.attendees?.map((email: string) => ({ email })) || [],
-        };
+            if (createResponse.ok) {
+              const createdEvent = await createResponse.json();
+              
+              // Update local event with Google ID
+              await supabaseAdmin
+                .from("calendar_events")
+                .update({
+                  google_event_id: createdEvent.id,
+                  is_synced: true,
+                })
+                .eq("id", event.id);
 
-        const createResponse = await fetch(
-          "https://www.googleapis.com/calendar/v3/calendars/primary/events",
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${credentials.access_token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(googleEventData),
+              stats.app_to_google.exported++;
+              console.log(`✅ [sync] Event exported to Google: ${createdEvent.id}`);
+            } else {
+              const errorText = await createResponse.text();
+              console.error(`❌ [sync] Error exporting event to Google:`, errorText);
+            }
+          } else {
+            // MODIFIED EVENT - Update in Google
+            console.log(`🔄 [sync] Updating MODIFIED event in Google: ${event.title} (${event.google_event_id})`);
+
+            const googleEventData = {
+              summary: event.title,
+              description: event.description || undefined,
+              start: {
+                dateTime: event.start_time,
+                timeZone: "Europe/Lisbon",
+              },
+              end: event.end_time
+                ? {
+                    dateTime: event.end_time,
+                    timeZone: "Europe/Lisbon",
+                  }
+                : undefined,
+              location: event.location || undefined,
+            };
+
+            const updateResponse = await fetch(
+              `https://www.googleapis.com/calendar/v3/calendars/primary/events/${event.google_event_id}`,
+              {
+                method: "PUT",
+                headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify(googleEventData),
+              }
+            );
+
+            if (updateResponse.ok) {
+              // Mark as synced
+              await supabaseAdmin
+                .from("calendar_events")
+                .update({
+                  is_synced: true,
+                })
+                .eq("id", event.id);
+
+              stats.app_to_google.updated++;
+              console.log(`✅ [sync] Event updated in Google: ${event.google_event_id}`);
+            } else {
+              const errorText = await updateResponse.text();
+              console.error(`❌ [sync] Error updating event in Google:`, errorText);
+            }
           }
-        );
-
-        if (createResponse.ok) {
-          const createdEvent = await createResponse.json();
-          console.log("✅ [sync] Event exported to Google:", createdEvent.id);
-
-          // Update local event with Google ID
-          await supabaseAdmin
-            .from("calendar_events")
-            .update({
-              google_event_id: createdEvent.id,
-              is_synced: true,
-            })
-            .eq("id", localEvent.id);
-
-          exported++;
-        } else {
-          const errorText = await createResponse.text();
-          console.error("❌ [sync] Failed to export event to Google:", errorText);
+        } catch (error) {
+          console.error(`❌ [sync] Error processing event ${event.id}:`, error);
         }
-      } catch (exportError) {
-        console.error("❌ [sync] Error exporting event:", exportError);
       }
     }
 
-    console.log("✅ [sync] App → Google sync completed. Exported:", exported);
-
-    // ===========================================================
-    // FINAL RESULTS
-    // ===========================================================
+    console.log(
+      `✅ [sync] App → Google sync completed. Exported: ${stats.app_to_google.exported}, Updated: ${stats.app_to_google.updated}`
+    );
 
     console.log("🎉 [sync] Bidirectional sync completed successfully");
 
     return res.status(200).json({
       success: true,
-      google_to_app: {
-        imported,
-        updated,
-        deleted,
-        skipped,
-        total: googleEvents.length,
-      },
-      app_to_google: {
-        exported,
-      },
+      ...stats,
     });
-
   } catch (error) {
     console.error("❌ [sync] Sync error:", error);
     return res.status(500).json({

@@ -11,11 +11,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Clock } from "lucide-react";
-import { format } from "date-fns";
-import { pt } from "date-fns/locale";
 import { createEvent } from "@/services/calendarService";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -38,14 +33,26 @@ export function QuickEventDialog({
   onSuccess,
 }: QuickEventDialogProps) {
   const [loading, setLoading] = useState(false);
+  
+  // Default to today at 9:00 AM - 10:00 AM
+  const getDefaultStartDateTime = () => {
+    const now = new Date();
+    now.setHours(9, 0, 0, 0);
+    return now.toISOString().slice(0, 16); // Format: YYYY-MM-DDTHH:mm
+  };
+
+  const getDefaultEndDateTime = () => {
+    const now = new Date();
+    now.setHours(10, 0, 0, 0);
+    return now.toISOString().slice(0, 16); // Format: YYYY-MM-DDTHH:mm
+  };
+
   const [formData, setFormData] = useState({
     title: "",
     description: "",
     location: "",
-    start_date: new Date(),
-    start_time: "09:00",
-    end_date: new Date(),
-    end_time: "10:00",
+    start_datetime: getDefaultStartDateTime(),
+    end_datetime: getDefaultEndDateTime(),
   });
   const { toast } = useToast();
 
@@ -61,15 +68,14 @@ export function QuickEventDialog({
         throw new Error("Utilizador não autenticado");
       }
 
-      // Combine date and time for start
-      const [startHours, startMinutes] = formData.start_time.split(":");
-      const startDateTime = new Date(formData.start_date);
-      startDateTime.setHours(parseInt(startHours), parseInt(startMinutes), 0, 0);
+      // Convert datetime-local to ISO strings
+      const startDateTime = new Date(formData.start_datetime);
+      const endDateTime = new Date(formData.end_datetime);
 
-      // Combine date and time for end
-      const [endHours, endMinutes] = formData.end_time.split(":");
-      const endDateTime = new Date(formData.end_date);
-      endDateTime.setHours(parseInt(endHours), parseInt(endMinutes), 0, 0);
+      // Validate end time is after start time
+      if (endDateTime <= startDateTime) {
+        throw new Error("A hora de fim deve ser posterior à hora de início");
+      }
 
       await createEvent({
         title: formData.title,
@@ -92,10 +98,8 @@ export function QuickEventDialog({
         title: "",
         description: "",
         location: "",
-        start_date: new Date(),
-        start_time: "09:00",
-        end_date: new Date(),
-        end_time: "10:00",
+        start_datetime: getDefaultStartDateTime(),
+        end_datetime: getDefaultEndDateTime(),
       });
 
       onOpenChange(false);
@@ -114,7 +118,7 @@ export function QuickEventDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Novo Evento - {entityName}</DialogTitle>
           <DialogDescription>
@@ -155,87 +159,29 @@ export function QuickEventDialog({
             />
           </div>
 
-          <div className="space-y-4 border-t pt-4">
-            <h4 className="font-medium text-sm">Início</h4>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Data de Início</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className="w-full justify-start text-left font-normal"
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {format(formData.start_date, "PPP", { locale: pt })}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={formData.start_date}
-                      onSelect={(date) => date && setFormData({ ...formData, start_date: date })}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-
-              <div>
-                <Label htmlFor="start_time">Hora de Início</Label>
-                <div className="relative">
-                  <Clock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                  <Input
-                    id="start_time"
-                    type="time"
-                    value={formData.start_time}
-                    onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
-                    className="pl-10"
-                  />
-                </div>
-              </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="start_datetime">Data/Hora de Início *</Label>
+              <Input
+                id="start_datetime"
+                type="datetime-local"
+                value={formData.start_datetime}
+                onChange={(e) => setFormData({ ...formData, start_datetime: e.target.value })}
+                required
+                className="w-full"
+              />
             </div>
-          </div>
 
-          <div className="space-y-4 border-t pt-4">
-            <h4 className="font-medium text-sm">Fim</h4>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Data de Fim</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className="w-full justify-start text-left font-normal"
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {format(formData.end_date, "PPP", { locale: pt })}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={formData.end_date}
-                      onSelect={(date) => date && setFormData({ ...formData, end_date: date })}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-
-              <div>
-                <Label htmlFor="end_time">Hora de Fim</Label>
-                <div className="relative">
-                  <Clock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                  <Input
-                    id="end_time"
-                    type="time"
-                    value={formData.end_time}
-                    onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
-                    className="pl-10"
-                  />
-                </div>
-              </div>
+            <div>
+              <Label htmlFor="end_datetime">Data/Hora de Fim *</Label>
+              <Input
+                id="end_datetime"
+                type="datetime-local"
+                value={formData.end_datetime}
+                onChange={(e) => setFormData({ ...formData, end_datetime: e.target.value })}
+                required
+                className="w-full"
+              />
             </div>
           </div>
 
