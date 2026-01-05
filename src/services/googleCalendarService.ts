@@ -17,7 +17,7 @@ export const storeGoogleCredentials = async (
   // Format date for PostgreSQL
   const expiryDate = new Date(expiresAt).toISOString();
 
-  const { error } = await supabase
+  const { error } = await (supabase as any)
     .from("user_integrations")
     .upsert({
       user_id: user.id,
@@ -37,7 +37,7 @@ export const getGoogleCredentials = async () => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from("user_integrations")
     .select("access_token, refresh_token, token_expiry")
     .eq("user_id", user.id)
@@ -68,7 +68,7 @@ export const removeGoogleCredentials = async () => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
-  const { error } = await supabase
+  const { error } = await (supabase as any)
     .from("user_integrations")
     .delete()
     .eq("user_id", user.id)
@@ -81,7 +81,7 @@ export const checkGoogleCalendarConnection = async () => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return false;
 
-  const { data } = await supabase
+  const { data } = await (supabase as any)
     .from("user_integrations")
     .select("is_active")
     .eq("user_id", user.id)
@@ -214,8 +214,7 @@ export const isGoogleCalendarConnected = async (): Promise<boolean> => {
     
     if (!user) return false;
 
-    // Use maybeSingle instead of single to avoid errors when no rows found
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from("user_integrations")
       .select("is_active")
       .eq("user_id", user.id)
@@ -241,7 +240,7 @@ export const getGoogleCalendarToken = async (): Promise<string | null> => {
     
     if (!user) return null;
 
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from("user_integrations")
       .select("access_token")
       .eq("user_id", user.id)

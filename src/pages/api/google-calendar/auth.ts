@@ -17,7 +17,7 @@ const getGoogleCredentials = async () => {
 
   const settings = data.settings as any;
   
-  if (!settings?.clientId || !settings?.clientSecret || !settings?.redirectUri) {
+  if (!settings?.clientId || !settings?.clientSecret) {
     console.error("❌ Incomplete Google Calendar credentials in database");
     return null;
   }
@@ -26,7 +26,7 @@ const getGoogleCredentials = async () => {
   return {
     clientId: settings.clientId,
     clientSecret: settings.clientSecret,
-    redirectUri: settings.redirectUri,
+    redirectUri: settings.redirectUri, // Can be undefined, handled in handler
   };
 };
 
@@ -76,8 +76,20 @@ export default async function handler(
       });
     }
 
+    // Generate redirectUri from request host if not in database
+    // Priority: 1. DB setting, 2. Origin header, 3. Host header
+    const protocol = req.headers["x-forwarded-proto"] || "https";
+    const host = req.headers.host;
+    const origin = req.headers.origin;
+    
+    const fallbackRedirectUri = origin 
+      ? `${origin}/api/google-calendar/callback`
+      : `${protocol}://${host}/api/google-calendar/callback`;
+
+    const redirectUri = credentials.redirectUri || fallbackRedirectUri;
+
     console.log("✅ Credentials loaded successfully");
-    console.log("🔗 Using redirect URI:", credentials.redirectUri);
+    console.log("🔗 Using redirect URI:", redirectUri);
 
     // Create state parameter with user ID (for security and user context)
     const state = Buffer.from(JSON.stringify({
@@ -88,7 +100,7 @@ export default async function handler(
     // Build authorization URL with state
     const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
     authUrl.searchParams.append("client_id", credentials.clientId);
-    authUrl.searchParams.append("redirect_uri", credentials.redirectUri);
+    authUrl.searchParams.append("redirect_uri", redirectUri);
     authUrl.searchParams.append("response_type", "code");
     authUrl.searchParams.append("scope", "https://www.googleapis.com/auth/calendar");
     authUrl.searchParams.append("access_type", "offline");
