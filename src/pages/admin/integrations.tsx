@@ -206,9 +206,15 @@ export default function Integrations() {
         return;
       }
 
+      // Auto-add redirectUri for Google Calendar if not present
+      const settingsToSave = { ...formData[integrationName] };
+      if (integrationName === "google_calendar" && !settingsToSave.redirectUri) {
+        settingsToSave.redirectUri = `${typeof window !== 'undefined' ? window.location.origin : 'https://www.imogest.pt'}/api/google-calendar/callback`;
+      }
+
       await updateIntegrationSettings(
         integrationName,
-        formData[integrationName] || {}
+        settingsToSave
       );
 
       await syncToSupabaseSecrets(integrationName);
@@ -413,8 +419,11 @@ export default function Integrations() {
                   <Input
                     id="google-calendar-redirect-uri"
                     type="text"
-                    value={`${typeof window !== 'undefined' ? window.location.origin : 'https://www.imogest.pt'}/api/google-calendar/callback`}
-                    readOnly
+                    value={
+                      formData[config.name]?.redirectUri || 
+                      `${typeof window !== 'undefined' ? window.location.origin : 'https://www.imogest.pt'}/api/google-calendar/callback`
+                    }
+                    onChange={(e) => handleInputChange(config.name, "redirectUri", e.target.value)}
                     className="pr-20 bg-gray-50"
                   />
                   <button

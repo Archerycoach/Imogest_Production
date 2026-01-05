@@ -183,8 +183,23 @@ export default function Calendar() {
     setIsSyncing(true);
     try {
       console.log("🔄 [Calendar] Manual sync started");
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast({
+          title: "Sessão expirada",
+          description: "Por favor faça login novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const response = await fetch("/api/google-calendar/sync", {
         method: "POST",
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
       });
 
       if (!response.ok) {
