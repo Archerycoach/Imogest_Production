@@ -138,12 +138,12 @@ export const createCalendarEvent = async (event: CalendarEventInsert & { contact
     }).then(async (response) => {
       if (response.ok) {
         const result = await response.json();
-        console.log("✅ [calendarService] Google sync successful:", result.event?.id);
+        console.log("✅ [calendarService] Google sync successful:", result.googleEventId);
         
         await supabase
           .from("calendar_events")
           .update({ 
-            google_event_id: result.event.id,
+            google_event_id: result.googleEventId,
             is_synced: true 
           })
           .eq("id", data.id);

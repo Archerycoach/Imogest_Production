@@ -1,6 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { createClient } from "@supabase/supabase-js";
 
 export default async function handler(
   req: NextApiRequest,
@@ -11,17 +10,6 @@ export default async function handler(
   }
 
   try {
-    // Get user from session
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        auth: {
-          persistSession: false
-        }
-      }
-    );
-
     const authHeader = req.headers.authorization;
     const token = authHeader?.replace("Bearer ", "");
     
@@ -29,7 +17,8 @@ export default async function handler(
       return res.status(401).json({ error: "Not authenticated" });
     }
 
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    // Get user from token using supabaseAdmin
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
 
     if (userError || !user) {
       return res.status(401).json({ error: "Not authenticated" });

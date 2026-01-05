@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { supabase } from "@/integrations/supabase/client";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export default async function handler(
   req: NextApiRequest,
@@ -30,8 +30,8 @@ export default async function handler(
 
     const accessToken = authHeader.replace("Bearer ", "");
 
-    // Get user from token
-    const { data: { user }, error: userError } = await supabase.auth.getUser(accessToken);
+    // Get user from token using supabaseAdmin
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(accessToken);
     if (userError || !user) {
       console.error("❌ [update-event] Invalid user token");
       return res.status(401).json({ error: "Invalid token" });
@@ -39,8 +39,8 @@ export default async function handler(
 
     console.log("✅ [update-event] User authenticated:", user.id);
 
-    // Get Google Calendar credentials
-    const { data: credentials, error: credError } = await supabase
+    // Get Google Calendar credentials using supabaseAdmin
+    const { data: credentials, error: credError } = await supabaseAdmin
       .from("user_integrations")
       .select("access_token")
       .eq("user_id", user.id)
