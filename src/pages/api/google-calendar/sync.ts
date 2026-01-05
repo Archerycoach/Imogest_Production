@@ -42,17 +42,16 @@ export default async function handler(
 
     console.log("✅ [sync] User authenticated:", user.id);
 
-    // Get Google credentials
-    // Using (supabaseAdmin as any) to bypass type errors with integration_credentials table
+    // Get Google credentials from user_integrations table
     const { data: credentials, error: credError } = await (supabaseAdmin as any)
-      .from("integration_credentials")
+      .from("user_integrations")
       .select("*")
       .eq("user_id", user.id)
-      .eq("provider", "google_calendar")
-      .single();
+      .eq("integration_type", "google_calendar")
+      .maybeSingle();
 
-    if (credError || !credentials) {
-      console.error("❌ [sync] No Google credentials found");
+    if (credError || !credentials || !credentials.is_active) {
+      console.error("❌ [sync] No Google credentials found or integration not active");
       return res.status(400).json({ error: "Google Calendar not connected" });
     }
 
@@ -74,7 +73,7 @@ export default async function handler(
 
     // Get access token (refresh if needed)
     let accessToken = credentials.access_token;
-    const expiresAt = new Date(credentials.expires_at);
+    const expiresAt = new Date(credentials.token_expiry);
     const now = new Date();
 
     if (expiresAt <= now) {
@@ -98,12 +97,12 @@ export default async function handler(
       const refreshData = await refreshResponse.json();
       accessToken = refreshData.access_token;
 
-      // Update credentials in database
+      // Update credentials in user_integrations table
       await (supabaseAdmin as any)
-        .from("integration_credentials")
+        .from("user_integrations")
         .update({
           access_token: accessToken,
-          expires_at: new Date(now.getTime() + refreshData.expires_in * 1000).toISOString(),
+          token_expiry: new Date(now.getTime() + refreshData.expires_in * 1000).toISOString(),
         })
         .eq("id", credentials.id);
 
