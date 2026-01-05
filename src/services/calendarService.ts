@@ -119,7 +119,7 @@ export const createCalendarEvent = async (event: CalendarEventInsert & { contact
   if (session) {
     console.log("🔄 [calendarService] Attempting Google Calendar sync...");
     
-    fetch("/api/google-calendar/create-event", {
+    const response = await fetch("/api/google-calendar/create-event", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -135,25 +135,23 @@ export const createCalendarEvent = async (event: CalendarEventInsert & { contact
           attendees: createdEvent.attendees?.map(email => ({ email })),
         },
       }),
-    }).then(async (response) => {
-      if (response.ok) {
-        const result = await response.json();
-        console.log("✅ [calendarService] Google sync successful:", result.googleEventId);
-        
-        await supabase
-          .from("calendar_events")
-          .update({ 
-            google_event_id: result.googleEventId,
-            is_synced: true 
-          })
-          .eq("id", data.id);
-      } else {
-        const error = await response.text();
-        console.log("⚠️ [calendarService] Google sync failed:", error);
-      }
-    }).catch(err => {
-      console.error("❌ [calendarService] Background sync error:", err);
     });
+
+    if (response.ok) {
+      const result = await response.json();
+      console.log("✅ [calendarService] Google sync successful:", result.googleEventId);
+      
+      await supabase
+        .from("calendar_events")
+        .update({ 
+          google_event_id: result.googleEventId,
+          is_synced: true 
+        })
+        .eq("id", data.id);
+    } else {
+      const error = await response.text();
+      console.log("⚠️ [calendarService] Google sync failed:", error);
+    }
   } else {
     console.log("⚠️ [calendarService] No session, skipping Google sync");
   }
@@ -213,7 +211,7 @@ export const updateCalendarEvent = async (id: string, updates: CalendarEventUpda
     
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
-      fetch("/api/google-calendar/update-event", {
+      await fetch("/api/google-calendar/update-event", {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -288,7 +286,7 @@ export const deleteCalendarEvent = async (id: string): Promise<void> => {
     
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
-      fetch("/api/google-calendar/delete-event", {
+      await fetch("/api/google-calendar/delete-event", {
         method: "DELETE",
         headers: {
           "Content-Type": "application/json",

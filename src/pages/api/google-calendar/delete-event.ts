@@ -24,14 +24,13 @@ export default async function handler(
       return res.status(401).json({ error: "Not authenticated" });
     }
 
-    // Get Google Calendar credentials using supabaseAdmin
+    // Get Google Calendar credentials
     const { data: integration, error: integrationError } = await supabaseAdmin
       .from("user_integrations")
-      .select("access_token")
+      .select("access_token, refresh_token, token_expiry, is_active")
       .eq("user_id", user.id)
       .eq("integration_type", "google_calendar")
-      .eq("is_active", true)
-      .single();
+      .maybeSingle();
 
     if (integrationError || !integration) {
       return res.status(400).json({ error: "Google Calendar not connected" });

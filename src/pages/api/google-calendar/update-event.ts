@@ -39,15 +39,15 @@ export default async function handler(
 
     console.log("✅ [update-event] User authenticated:", user.id);
 
-    // Get Google Calendar credentials using supabaseAdmin
-    const { data: credentials, error: credError } = await supabaseAdmin
+    // Get Google Calendar credentials
+    const { data: integration, error: integrationError } = await supabaseAdmin
       .from("user_integrations")
-      .select("access_token")
+      .select("access_token, refresh_token, token_expiry, is_active")
       .eq("user_id", user.id)
       .eq("integration_type", "google_calendar")
       .maybeSingle();
 
-    if (credError || !credentials) {
+    if (integrationError || !integration) {
       console.error("❌ [update-event] No Google credentials found");
       return res.status(400).json({ error: "Google Calendar not connected" });
     }
@@ -60,7 +60,7 @@ export default async function handler(
       {
         method: "PATCH",
         headers: {
-          "Authorization": `Bearer ${credentials.access_token}`,
+          "Authorization": `Bearer ${integration.access_token}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
