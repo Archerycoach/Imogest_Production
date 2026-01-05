@@ -31,11 +31,11 @@ export default async function handler(
     console.log("✅ [sync] User authenticated:", user.id);
 
     // Get Google Calendar credentials
-    const { data: credentials, error: credError } = await supabase
+    const { data: credentials, error: credError } = await (supabase as any)
       .from("user_integrations")
       .select("access_token, refresh_token, token_expiry")
       .eq("user_id", user.id)
-      .eq("integration_type", "google_calendar")
+      .eq("integration_name", "google_calendar")
       .maybeSingle();
 
     if (credError || !credentials) {
