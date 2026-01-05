@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { supabase } from "@/integrations/supabase/client";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export default async function handler(
   req: NextApiRequest,
@@ -21,8 +21,8 @@ export default async function handler(
 
     const accessToken = authHeader.replace("Bearer ", "");
 
-    // Get user from token
-    const { data: { user }, error: userError } = await supabase.auth.getUser(accessToken);
+    // Get user from token using supabaseAdmin (bypasses RLS issues if any, but getUser verifies token)
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(accessToken);
     if (userError || !user) {
       console.error("❌ [sync] Invalid user token:", userError);
       return res.status(401).json({ error: "Invalid token" });
@@ -31,19 +31,30 @@ export default async function handler(
     console.log("✅ [sync] User authenticated:", user.id);
 
     // Get Google Calendar credentials
-    const { data: credentials, error: credError } = await (supabase as any)
+    // Using supabaseAdmin to ensure we can read user_integrations even if RLS is strict
+    const { data: credentials, error: credError } = await supabaseAdmin
       .from("user_integrations")
-      .select("access_token, refresh_token, token_expiry")
+      .select("access_token, refresh_token, token_expiry, is_active")
       .eq("user_id", user.id)
-      .eq("integration_name", "google_calendar")
+      .eq("integration_type", "google_calendar")
       .maybeSingle();
 
-    if (credError || !credentials) {
-      console.error("❌ [sync] No Google credentials found");
-      return res.status(400).json({ error: "Google Calendar not connected" });
+    if (credError) {
+      console.error("❌ [sync] Error fetching credentials:", credError);
+      return res.status(400).json({ error: "Failed to fetch Google Calendar credentials" });
     }
 
-    console.log("✅ [sync] Google credentials retrieved");
+    if (!credentials) {
+      console.error("❌ [sync] No Google credentials found for user:", user.id);
+      return res.status(400).json({ error: "Google Calendar not connected. Please connect in /admin/integrations" });
+    }
+
+    if (!credentials.is_active) {
+      console.error("❌ [sync] Google Calendar integration is inactive for user:", user.id);
+      return res.status(400).json({ error: "Google Calendar is inactive. Please reconnect in /admin/integrations" });
+    }
+
+    console.log("✅ [sync] Google credentials retrieved and active");
 
     // Check if token is expired
     const now = new Date();
@@ -51,7 +62,8 @@ export default async function handler(
     
     if (expiryDate <= now) {
       console.log("⚠️ [sync] Token expired, refreshing...");
-      // TODO: Implement token refresh
+      // TODO: Implement token refresh mechanism here if needed
+      // For now, ask user to reconnect
       return res.status(401).json({ error: "Token expired, please reconnect Google Calendar" });
     }
 
@@ -88,22 +100,19 @@ export default async function handler(
     console.log("📊 [sync] Google events fetched:", googleEvents.length);
 
     // Get existing events from database
-    const { data: existingEvents } = await supabase
+    const { data: existingEventsData } = await supabaseAdmin
       .from("calendar_events")
       .select("id, google_event_id, start_time, title, description")
       .eq("user_id", user.id)
       .not("google_event_id", "is", null);
+      
+    const existingEvents: any[] = existingEventsData || [];
 
-    console.log("📊 [sync] Existing synced events in DB:", existingEvents?.length || 0);
-
-    // Create map of existing Google event IDs
-    const existingGoogleIds = new Set(
-      (existingEvents || []).map(e => e.google_event_id)
-    );
+    console.log("📊 [sync] Existing synced events in DB:", existingEvents.length);
 
     // Map existing events by Google ID for updates
     const existingEventsMap = new Map(
-      (existingEvents || []).map(e => [e.google_event_id, e])
+      existingEvents.map((e) => [e.google_event_id, e])
     );
 
     let imported = 0;
@@ -140,7 +149,7 @@ export default async function handler(
         if (needsUpdate) {
           console.log("🔄 [sync] Updating existing event:", googleEventId);
           
-          const { error: updateError } = await supabase
+          const { error: updateError } = await supabaseAdmin
             .from("calendar_events")
             .update({
               title: summary,
@@ -166,7 +175,7 @@ export default async function handler(
         // New event - import it
         console.log("➕ [sync] Importing new event:", googleEventId);
 
-        const { error: insertError } = await supabase
+        const { error: insertError } = await supabaseAdmin
           .from("calendar_events")
           .insert({
             user_id: user.id,
