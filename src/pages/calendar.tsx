@@ -154,10 +154,15 @@ export default function Calendar() {
       // Reload calendar events
       await loadData();
       
+      const googleToApp = result.google_to_app || {};
+      const appToGoogle = result.app_to_google || {};
+      
       toast({
         title: "✅ Sincronização concluída!",
-        description: `${result.imported} eventos importados, ${result.skipped} já existentes (${result.total} total no Google)`,
+        description: `Google → App: ${googleToApp.imported || 0} importados, ${googleToApp.updated || 0} atualizados, ${googleToApp.deleted || 0} apagados. App → Google: ${appToGoogle.exported || 0} exportados.`,
       });
+      
+      setLastSyncTime(new Date());
     } catch (error) {
       console.error("❌ Error syncing with Google Calendar:", error);
       toast({
@@ -171,63 +176,7 @@ export default function Calendar() {
   };
 
   const handleGoogleSync = async () => {
-    if (!googleConnected) {
-      toast({
-        title: "Google Calendar não conectado",
-        description: "Por favor, conecte sua conta Google primeiro.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsSyncing(true);
-    try {
-      console.log("🔄 [Calendar] Manual sync started");
-      
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        toast({
-          title: "Sessão expirada",
-          description: "Por favor faça login novamente.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const response = await fetch("/api/google-calendar/sync", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${session.access_token}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to sync");
-      }
-
-      const result = await response.json();
-      console.log("✅ [Calendar] Sync result:", result);
-
-      setLastSyncTime(new Date());
-
-      toast({
-        title: "Sincronização concluída",
-        description: `${result.imported || 0} eventos importados, ${result.updated || 0} atualizados, ${result.skipped || 0} ignorados.`,
-      });
-
-      // Refresh events after sync
-      loadData();
-    } catch (error) {
-      console.error("❌ [Calendar] Sync error:", error);
-      toast({
-        title: "Erro na sincronização",
-        description: "Não foi possível sincronizar com o Google Calendar.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSyncing(false);
-    }
+    await syncWithGoogleCalendar();
   };
 
   const exportToGoogleCalendar = async (eventId: string) => {
@@ -355,15 +304,37 @@ export default function Calendar() {
 
       if (editingEventId) {
         await updateCalendarEvent(editingEventId, eventData);
+        
+        toast({
+          title: "Evento atualizado",
+          description: "O evento foi atualizado com sucesso",
+        });
       } else {
         await createCalendarEvent(eventData);
+        
+        toast({
+          title: "Evento criado",
+          description: "O evento foi criado com sucesso",
+        });
       }
       
       handleCancelEdit();
       await loadData();
+      
+      // Auto-sync with Google Calendar after creating/updating event (if connected)
+      if (googleConnected) {
+        console.log("🔄 Auto-syncing with Google Calendar after event creation/update...");
+        setTimeout(() => {
+          syncWithGoogleCalendar();
+        }, 1000);
+      }
     } catch (error) {
       console.error("Error saving event:", error);
-      alert("Erro ao guardar evento. Tente novamente.");
+      toast({
+        title: "Erro",
+        description: "Erro ao guardar evento. Tente novamente.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -475,6 +446,19 @@ export default function Calendar() {
       await deleteCalendarEvent(editingEventId);
       handleCancelEdit();
       await loadData();
+      
+      toast({
+        title: "Evento eliminado",
+        description: "O evento foi eliminado com sucesso",
+      });
+      
+      // Auto-sync with Google Calendar after deleting event (if connected)
+      if (googleConnected) {
+        console.log("🔄 Auto-syncing with Google Calendar after event deletion...");
+        setTimeout(() => {
+          syncWithGoogleCalendar();
+        }, 1000);
+      }
     } catch (error) {
       console.error("Error deleting event:", error);
       toast({
@@ -483,7 +467,7 @@ export default function Calendar() {
         variant: "destructive",
       });
     }
-  }, [editingEventId, toast]); // Added dependencies
+  }, [editingEventId, toast, googleConnected]);
 
   const handleDragStart = (e: React.DragEvent, item: { id: string; type: "event" | "task"; startTime: string }) => {
     setDraggedItem(item);
@@ -531,17 +515,39 @@ export default function Calendar() {
           start_time: newDate.toISOString(),
           end_time: newEndTime,
         });
+        
+        toast({
+          title: "Evento movido",
+          description: "O evento foi movido com sucesso",
+        });
       } else {
         await updateTask(draggedItem.id, {
           due_date: newDate.toISOString(),
+        });
+        
+        toast({
+          title: "Tarefa movida",
+          description: "A tarefa foi movida com sucesso",
         });
       }
 
       await loadData();
       setDraggedItem(null);
+      
+      // Auto-sync with Google Calendar after moving event (if connected)
+      if (googleConnected && draggedItem.type === "event") {
+        console.log("🔄 Auto-syncing with Google Calendar after event move...");
+        setTimeout(() => {
+          syncWithGoogleCalendar();
+        }, 1000);
+      }
     } catch (error) {
       console.error("Error moving item:", error);
-      alert("Erro ao mover item. Tente novamente.");
+      toast({
+        title: "Erro",
+        description: "Erro ao mover item. Tente novamente.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -575,9 +581,18 @@ export default function Calendar() {
       
       setShowTaskModal(false);
       await loadData();
+      
+      toast({
+        title: "Tarefa atualizada",
+        description: "A tarefa foi atualizada com sucesso",
+      });
     } catch (error) {
       console.error("Error updating task:", error);
-      alert("Erro ao atualizar tarefa");
+      toast({
+        title: "Erro",
+        description: "Erro ao atualizar tarefa",
+        variant: "destructive",
+      });
     }
   };
 
@@ -588,9 +603,18 @@ export default function Calendar() {
       await deleteTask(editingTask.id);
       setShowTaskModal(false);
       await loadData();
+      
+      toast({
+        title: "Tarefa eliminada",
+        description: "A tarefa foi eliminada com sucesso",
+      });
     } catch (error) {
       console.error("Error deleting task:", error);
-      alert("Erro ao eliminar tarefa");
+      toast({
+        title: "Erro",
+        description: "Erro ao eliminar tarefa",
+        variant: "destructive",
+      });
     }
   };
 
@@ -946,10 +970,10 @@ export default function Calendar() {
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-2">
                     <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-                    <span className="text-sm font-medium">Sincronização Automática Ativa</span>
+                    <span className="text-sm font-medium">Sincronização Bidirecional Ativa</span>
                   </div>
                   <Badge variant="outline" className="text-xs">
-                    A cada 15 minutos
+                    Google ⟷ App
                   </Badge>
                 </div>
 
@@ -968,11 +992,11 @@ export default function Calendar() {
 
                   <Button
                     onClick={handleGoogleSync}
-                    disabled={isSyncing}
+                    disabled={isSyncing || syncing}
                     size="sm"
                     variant="outline"
                   >
-                    {isSyncing ? (
+                    {(isSyncing || syncing) ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Sincronizando...
