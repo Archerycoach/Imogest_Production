@@ -134,13 +134,36 @@ export function GoogleCalendarConnect({
       setConnecting(true);
       setError(null);
       
-      console.log("🔑 Initiating Google OAuth redirect...");
+      // Get current session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
-      // Direct redirect to auth endpoint - server will handle everything
-      window.location.href = "/api/google-calendar/auth";
-    } catch (err) {
+      if (sessionError || !session) {
+        setError("Sessão expirada. Por favor faça login novamente.");
+        setConnecting(false);
+        return;
+      }
+
+      console.log("🔑 Initiating Google OAuth with auth token...");
+
+      // Make POST request with token in body
+      // This allows the server to authenticate and then redirect
+      const form = document.createElement("form");
+      form.method = "POST";
+      form.action = "/api/google-calendar/auth";
+      
+      const tokenInput = document.createElement("input");
+      tokenInput.type = "hidden";
+      tokenInput.name = "token";
+      tokenInput.value = session.access_token;
+      
+      form.appendChild(tokenInput);
+      document.body.appendChild(form);
+      form.submit();
+      
+      // Note: Page will redirect, so no need to handle response
+    } catch (err: any) {
       console.error("Error connecting:", err);
-      setError(err instanceof Error ? err.message : "Erro ao conectar. Tente novamente.");
+      setError(err.message || "Erro ao conectar. Tente novamente.");
       setConnecting(false);
     }
   };

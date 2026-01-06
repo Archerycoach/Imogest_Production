@@ -1,37 +1,46 @@
 import { NextApiRequest, NextApiResponse } from "next";
-import { createServerClient } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  if (req.method !== "GET") {
+  // Accept both GET and POST methods
+  if (req.method !== "GET" && req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
     console.log("🔐 Starting Google Calendar OAuth flow...");
 
-    // Create Supabase client with SSR cookie support
-    const supabase = createServerClient(
+    // Extract auth token from Authorization header OR body
+    const authHeader = req.headers.authorization;
+    const authToken = authHeader?.replace("Bearer ", "") || req.body?.token;
+
+    if (!authToken) {
+      console.error("❌ No authentication token provided");
+      return res.status(401).json({ 
+        error: "Not authenticated. Please provide auth token." 
+      });
+    }
+
+    console.log("🔑 Using auth token from", authHeader ? "header" : "body");
+
+    // Initialize Supabase client with auth token
+    const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
-        cookies: {
-          get(name: string) {
-            return req.cookies[name];
-          },
-          set(name: string, value: string, options: any) {
-            res.setHeader('Set-Cookie', `${name}=${value}; Path=/; ${options.httpOnly ? 'HttpOnly;' : ''} ${options.secure ? 'Secure;' : ''} SameSite=${options.sameSite || 'Lax'}`);
-          },
-          remove(name: string, options: any) {
-            res.setHeader('Set-Cookie', `${name}=; Path=/; Max-Age=0`);
-          },
-        },
+        auth: { persistSession: false },
+        global: {
+          headers: {
+            Authorization: `Bearer ${authToken}`
+          }
+        }
       }
     );
 
-    // Get authenticated user from session cookies
+    // Get user from session
     const { data: { user }, error: userError } = await supabase.auth.getUser();
 
     if (!user || userError) {
@@ -97,7 +106,7 @@ export default async function handler(
     console.log("🔗 Redirecting to Google OAuth:", authUrl.toString());
 
     // Redirect to Google OAuth
-    res.redirect(authUrl.toString());
+    return res.redirect(302, authUrl.toString());
   } catch (error: any) {
     console.error("❌ Google Calendar auth error:", error);
     return res.status(500).json({ 
