@@ -64,7 +64,7 @@ export function GoogleCalendarConnect({
         setConnected(true);
         if (onConnect) onConnect();
       }
-      
+
       setLoading(false);
     } catch (error) {
       console.error("Error in checkConnection:", error);
@@ -117,7 +117,7 @@ export function GoogleCalendarConnect({
           errorMessage = "Erro no callback OAuth";
           break;
       }
-      
+
       setError(errorMessage);
       toast({
         title: "Erro de conexão",
@@ -145,25 +145,33 @@ export function GoogleCalendarConnect({
 
       console.log("🔑 Initiating Google OAuth with auth token...");
 
-      // Make POST request with token in body
-      // This allows the server to authenticate and then redirect
-      const form = document.createElement("form");
-      form.method = "POST";
-      form.action = "/api/google-calendar/auth";
+      // Call the auth endpoint with authorization header
+      const response = await fetch("/api/google-calendar/auth", {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Erro ao iniciar OAuth");
+      }
+
+      const data = await response.json();
       
-      const tokenInput = document.createElement("input");
-      tokenInput.type = "hidden";
-      tokenInput.name = "token";
-      tokenInput.value = session.access_token;
+      if (!data.url) {
+        throw new Error("URL de autorização não recebida");
+      }
+
+      console.log("✅ Redirecting to Google OAuth...");
       
-      form.appendChild(tokenInput);
-      document.body.appendChild(form);
-      form.submit();
-      
-      // Note: Page will redirect, so no need to handle response
-    } catch (err: any) {
+      // Redirect to Google OAuth
+      window.location.href = data.url;
+    } catch (err) {
       console.error("Error connecting:", err);
-      setError(err.message || "Erro ao conectar. Tente novamente.");
+      setError(err instanceof Error ? err.message : "Erro ao conectar. Tente novamente.");
       setConnecting(false);
     }
   };
@@ -171,8 +179,8 @@ export function GoogleCalendarConnect({
   const handleDisconnect = async () => {
     try {
       setLoading(true);
-      
       const { data: { user } } = await supabase.auth.getUser();
+      
       if (!user) {
         setError("Sessão expirada. Por favor faça login novamente.");
         setLoading(false);
@@ -198,7 +206,7 @@ export function GoogleCalendarConnect({
         title: "Google Calendar desconectado",
         description: "Sua conta foi desconectada com sucesso.",
       });
-      
+
       setLoading(false);
     } catch (err) {
       console.error("Error disconnecting:", err);
@@ -251,11 +259,13 @@ export function GoogleCalendarConnect({
               <CheckCircle2 className="h-3 w-3 mr-1" />
               Conectado e sincronizado
             </Badge>
+            
             <div className="text-sm text-gray-600">
               <p>✓ Eventos do CRM sincronizam automaticamente</p>
               <p>✓ Eventos do Google podem ser importados</p>
               <p>✓ Alertas de aniversário sincronizados</p>
             </div>
+
             <Button 
               variant="destructive" 
               onClick={handleDisconnect}
@@ -276,6 +286,7 @@ export function GoogleCalendarConnect({
             <p className="text-sm text-gray-600">
               Conecte sua conta Google para sincronizar eventos automaticamente entre o CRM e o Google Calendar.
             </p>
+
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
               <p className="text-xs text-blue-800 font-medium mb-2">
                 ℹ️ Nota sobre configuração:
@@ -292,6 +303,7 @@ export function GoogleCalendarConnect({
                 </a>
               </p>
             </div>
+
             <Button 
               onClick={handleConnect} 
               className="w-full"
