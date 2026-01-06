@@ -6,15 +6,6 @@ type DbCalendarEvent = Database["public"]["Tables"]["calendar_events"]["Row"];
 type CalendarEventInsert = Database["public"]["Tables"]["calendar_events"]["Insert"];
 type CalendarEventUpdate = Database["public"]["Tables"]["calendar_events"]["Update"];
 
-// Export Google Calendar functions
-export {
-  storeGoogleCredentials,
-  getGoogleCredentials,
-  removeGoogleCredentials,
-  createBirthdayAlert,
-  syncBirthdayAlerts,
-} from "./googleCalendarService";
-
 // Helper to map database event to frontend CalendarEvent
 const mapDbEventToFrontend = (dbEvent: DbCalendarEvent): CalendarEvent => ({
   id: dbEvent.id,
@@ -36,33 +27,8 @@ const mapDbEventToFrontend = (dbEvent: DbCalendarEvent): CalendarEvent => ({
 
 // Trigger full Google Calendar sync
 const triggerGoogleSync = async (): Promise<void> => {
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      console.log("⚠️ [calendarService] No session, skipping Google sync");
-      return;
-    }
-
-    console.log("🔄 [calendarService] Triggering full Google Calendar sync...");
-
-    const response = await fetch("/api/google-calendar/sync", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${session.access_token}`,
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (response.ok) {
-      const result = await response.json();
-      console.log("✅ [calendarService] Google sync completed:", result);
-    } else {
-      const error = await response.text();
-      console.log("⚠️ [calendarService] Google sync failed:", error);
-    }
-  } catch (error) {
-    console.error("❌ [calendarService] Error triggering Google sync:", error);
-  }
+  // Sync removed
+  console.log("Google sync not implemented");
 };
 
 // Get all calendar events for current user

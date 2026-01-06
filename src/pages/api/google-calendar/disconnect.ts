@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { importEventsFromGoogle } from "@/services/googleCalendarService";
+import { disconnectGoogleCalendar } from "@/services/googleCalendarService";
 import { createPagesServerClient } from "@/lib/supabase-server";
 
 export default async function handler(
@@ -19,18 +19,17 @@ export default async function handler(
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    // Import events from Google Calendar
-    const importedEventIds = await importEventsFromGoogle(session.user.id);
+    // Disconnect Google Calendar
+    await disconnectGoogleCalendar(session.user.id);
 
     return res.status(200).json({
       success: true,
-      message: `Imported ${importedEventIds.length} events from Google Calendar`,
-      eventIds: importedEventIds
+      message: "Google Calendar disconnected successfully"
     });
   } catch (error) {
-    console.error("Error syncing Google Calendar:", error);
+    console.error("Error disconnecting Google Calendar:", error);
     return res.status(500).json({
-      error: "Failed to sync with Google Calendar",
+      error: "Failed to disconnect Google Calendar",
       details: (error as Error).message
     });
   }

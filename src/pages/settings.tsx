@@ -10,7 +10,6 @@ import { Switch } from "@/components/ui/switch";
 import { ArrowLeft, User, Lock, Building2, Bell, Calendar, Upload, Loader2, Save, Mail, Key } from "lucide-react";
 import { getUserProfile, updateUserProfile, uploadAvatar } from "@/services/profileService";
 import { updatePassword, getSession, signOut } from "@/services/authService";
-import { GoogleCalendarConnect } from "@/components/GoogleCalendarConnect";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { GmailConnect } from "@/components/GmailConnect";
@@ -27,7 +26,6 @@ export default function Settings() {
   });
   
   // Integration States
-  const [googleCalendarConnected, setGoogleCalendarConnected] = useState(false);
   const [gmailConnected, setGmailConnected] = useState(false);
   
   // Auth check
@@ -121,16 +119,6 @@ export default function Settings() {
   const checkIntegrations = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
-
-    // Check Google Calendar
-    const { data: calData } = await supabase
-      .from("user_integrations")
-      .select("is_active")
-      .eq("user_id", session.user.id)
-      .eq("integration_type", "google_calendar")
-      .maybeSingle();
-      
-    setGoogleCalendarConnected(calData?.is_active || false);
 
     // Check Gmail
     const { data: gmailData } = await supabase
@@ -528,17 +516,6 @@ export default function Settings() {
                     isConnected={gmailConnected} 
                     onConnect={() => setGmailConnected(true)}
                     onDisconnect={() => setGmailConnected(false)}
-                  />
-                </div>
-
-                <div className="space-y-4 pt-4 border-t">
-                  <h3 className="font-medium flex items-center gap-2">
-                    <Calendar className="h-4 w-4" /> Calendário
-                  </h3>
-                  <GoogleCalendarConnect
-                    isConnected={googleCalendarConnected}
-                    onConnect={() => setGoogleCalendarConnected(true)}
-                    onDisconnect={() => setGoogleCalendarConnected(false)}
                   />
                 </div>
 

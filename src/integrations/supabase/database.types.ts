@@ -1249,8 +1249,10 @@ export type Database = {
           id: string
           integration_type: string
           is_active: boolean | null
+          last_sync: string | null
           metadata: Json | null
           refresh_token: string | null
+          sync_enabled: boolean | null
           token_expiry: string | null
           updated_at: string | null
           user_id: string
@@ -1265,8 +1267,10 @@ export type Database = {
           id?: string
           integration_type: string
           is_active?: boolean | null
+          last_sync?: string | null
           metadata?: Json | null
           refresh_token?: string | null
+          sync_enabled?: boolean | null
           token_expiry?: string | null
           updated_at?: string | null
           user_id: string
@@ -1281,8 +1285,10 @@ export type Database = {
           id?: string
           integration_type?: string
           is_active?: boolean | null
+          last_sync?: string | null
           metadata?: Json | null
           refresh_token?: string | null
+          sync_enabled?: boolean | null
           token_expiry?: string | null
           updated_at?: string | null
           user_id?: string

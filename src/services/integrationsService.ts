@@ -276,7 +276,7 @@ export const updateIntegrationSettings = async (
       .from("integration_settings")
       .select("*")
       .eq("integration_name", integration)
-      .single();
+      .maybeSingle();
 
     let result;
     
@@ -290,7 +290,7 @@ export const updateIntegrationSettings = async (
         })
         .eq("integration_name", integration)
         .select()
-        .single();
+        .maybeSingle();
     } else {
       // Insert new integration
       result = await supabase
@@ -303,7 +303,7 @@ export const updateIntegrationSettings = async (
           updated_at: new Date().toISOString(),
         })
         .select()
-        .single();
+        .maybeSingle();
     }
 
     if (result.error) throw result.error;
