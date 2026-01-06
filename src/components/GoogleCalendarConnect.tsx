@@ -134,41 +134,10 @@ export function GoogleCalendarConnect({
       setConnecting(true);
       setError(null);
       
-      // Get current session
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      console.log("🔑 Initiating Google OAuth redirect...");
       
-      if (sessionError || !session) {
-        setError("Sessão expirada. Por favor faça login novamente.");
-        setConnecting(false);
-        return;
-      }
-
-      console.log("🔑 Initiating Google OAuth with auth token...");
-
-      // Call the auth endpoint with authorization header
-      const response = await fetch("/api/google-calendar/auth", {
-        method: "GET",
-        headers: {
-          "Authorization": `Bearer ${session.access_token}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Erro ao iniciar OAuth");
-      }
-
-      const data = await response.json();
-      
-      if (!data.url) {
-        throw new Error("URL de autorização não recebida");
-      }
-
-      console.log("✅ Redirecting to Google OAuth...");
-      
-      // Redirect to Google OAuth
-      window.location.href = data.url;
+      // Direct redirect to auth endpoint - server will handle everything
+      window.location.href = "/api/google-calendar/auth";
     } catch (err) {
       console.error("Error connecting:", err);
       setError(err instanceof Error ? err.message : "Erro ao conectar. Tente novamente.");
