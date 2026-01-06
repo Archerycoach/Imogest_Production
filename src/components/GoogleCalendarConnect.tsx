@@ -51,7 +51,9 @@ export function GoogleCalendarConnect() {
     
     // Check for success/error params in URL
     const params = new URLSearchParams(window.location.search);
+    
     if (params.get("calendar_success")) {
+      console.log("[GoogleCalendarConnect] Success parameter detected, showing success message");
       toast({
         title: "Conectado com sucesso",
         description: "O Google Calendar foi integrado corretamente.",
@@ -61,12 +63,31 @@ export function GoogleCalendarConnect() {
       window.history.replaceState({}, "", window.location.pathname);
       checkStatus();
     }
+    
     if (params.get("calendar_error")) {
+      const errorType = params.get("calendar_error");
+      const details = params.get("details");
+      
+      console.error("[GoogleCalendarConnect] Error parameter detected:", { errorType, details });
+      
+      let errorMessage = "Não foi possível conectar ao Google Calendar.";
+      
+      if (errorType === "oauth_denied") {
+        errorMessage = "Autorização negada. Por favor, aceite as permissões necessárias.";
+      } else if (errorType === "no_code") {
+        errorMessage = "Código de autorização não recebido.";
+      } else if (errorType === "token_exchange_failed") {
+        errorMessage = `Falha ao trocar tokens de autorização.${details ? ` Detalhes: ${details}` : ""}`;
+      }
+      
       toast({
         variant: "destructive",
         title: "Erro na conexão",
-        description: "Não foi possível conectar ao Google Calendar."
+        description: errorMessage
       });
+      
+      // Clean URL
+      window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
 
