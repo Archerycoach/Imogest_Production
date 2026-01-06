@@ -1,115 +1,99 @@
-import type { NextApiRequest, NextApiResponse } from "next";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { NextApiRequest, NextApiResponse } from "next";
 import { createClient } from "@supabase/supabase-js";
-
-// Get credentials from database
-const getGoogleCredentials = async () => {
-  const { data, error } = await supabaseAdmin
-    .from("integration_settings")
-    .select("settings")
-    .eq("integration_name", "google_calendar")
-    .single();
-
-  if (error || !data) {
-    console.error("❌ Failed to fetch Google Calendar settings from database:", error);
-    return null;
-  }
-
-  const settings = data.settings as any;
-  
-  if (!settings?.clientId || !settings?.clientSecret) {
-    console.error("❌ Incomplete Google Calendar credentials in database");
-    return null;
-  }
-
-  console.log("✅ Google Calendar credentials loaded from database");
-  return {
-    clientId: settings.clientId,
-    clientSecret: settings.clientSecret,
-    redirectUri: settings.redirectUri, // Can be undefined, handled in handler
-  };
-};
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  console.log("\n🚀 Initiating Google OAuth flow");
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
 
   try {
-    // Get user from session using cookies (works in browser navigation)
+    console.log("🔐 Starting Google Calendar OAuth flow...");
+
+    // HYBRID AUTH: Extract token from Authorization header if present
+    const authHeader = req.headers.authorization;
+    const authToken = authHeader?.replace("Bearer ", "");
+
+    // Initialize Supabase client with proper auth configuration
+    const supabaseOptions: any = {
+      auth: { persistSession: false }
+    };
+
+    // If we have an auth token, include it in the headers
+    if (authToken) {
+      console.log("🔑 Using Authorization header token");
+      supabaseOptions.global = {
+        headers: {
+          Authorization: `Bearer ${authToken}`
+        }
+      };
+    } else {
+      console.log("🍪 Using cookie-based session");
+      supabaseOptions.global = {
+        headers: {
+          cookie: req.headers.cookie || ""
+        }
+      };
+    }
+
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        auth: {
-          persistSession: false
-        },
-        global: {
-          headers: {
-            cookie: req.headers.cookie || ""
-          }
-        }
-      }
+      supabaseOptions
     );
 
-    // Get user from session (reads from cookies automatically)
+    // Get user from session (uses token from headers if provided)
     const { data: { user }, error: userError } = await supabase.auth.getUser();
 
-    if (userError || !user) {
-      console.error("❌ Failed to get user from session:", userError);
-      return res.status(401).json({ error: "Not authenticated. Please log in first." });
-    }
-
-    console.log("👤 User authenticated:", user.id);
-
-    // Get credentials from database
-    const credentials = await getGoogleCredentials();
-    
-    if (!credentials) {
-      console.error("❌ Google Calendar não está configurado");
-      return res.status(400).json({ 
-        error: "Google Calendar não está configurado. Por favor configure as credenciais em /admin/integrations" 
+    if (!user || userError) {
+      console.error("❌ Authentication failed:", userError?.message);
+      return res.status(401).json({ 
+        error: "Not authenticated. Please log in first." 
       });
     }
 
-    // Generate redirectUri from request host if not in database
-    // Priority: 1. DB setting, 2. Origin header, 3. Host header
-    const protocol = req.headers["x-forwarded-proto"] || "https";
-    const host = req.headers.host;
-    const origin = req.headers.origin;
-    
-    const fallbackRedirectUri = origin 
-      ? `${origin}/api/google-calendar/callback`
-      : `${protocol}://${host}/api/google-calendar/callback`;
+    console.log("✅ User authenticated:", user.id);
 
-    const redirectUri = credentials.redirectUri || fallbackRedirectUri;
+    // Check for required environment variables
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const redirectUri = process.env.GOOGLE_REDIRECT_URI;
 
-    console.log("✅ Credentials loaded successfully");
-    console.log("🔗 Using redirect URI:", redirectUri);
+    if (!clientId || !redirectUri) {
+      console.error("❌ Missing required environment variables");
+      return res.status(500).json({ 
+        error: "Google Calendar integration not configured" 
+      });
+    }
 
-    // Create state parameter with user ID (for security and user context)
-    const state = Buffer.from(JSON.stringify({
-      userId: user.id,
-      timestamp: Date.now()
-    })).toString("base64");
+    console.log("✅ Environment variables found");
+    console.log("📍 Redirect URI:", redirectUri);
 
-    // Build authorization URL with state
+    // Build OAuth URL
+    const scopes = [
+      "https://www.googleapis.com/auth/calendar.readonly",
+      "https://www.googleapis.com/auth/calendar.events",
+    ].join(" ");
+
     const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-    authUrl.searchParams.append("client_id", credentials.clientId);
+    authUrl.searchParams.append("client_id", clientId);
     authUrl.searchParams.append("redirect_uri", redirectUri);
     authUrl.searchParams.append("response_type", "code");
-    authUrl.searchParams.append("scope", "https://www.googleapis.com/auth/calendar");
+    authUrl.searchParams.append("scope", scopes);
     authUrl.searchParams.append("access_type", "offline");
     authUrl.searchParams.append("prompt", "consent");
-    authUrl.searchParams.append("state", state);
+    authUrl.searchParams.append("state", user.id);
 
-    console.log("✅ Authorization URL built successfully");
-    console.log("📍 Redirecting to Google OAuth...");
+    console.log("🔗 Redirecting to Google OAuth:", authUrl.toString());
 
-    res.json({ url: authUrl.toString() });
-  } catch (error) {
-    console.error("\n❌ Error in Google OAuth init:", error);
-    res.status(500).json({ error: "Failed to initiate Google OAuth flow" });
+    // Redirect to Google OAuth
+    res.redirect(authUrl.toString());
+  } catch (error: any) {
+    console.error("❌ Google Calendar auth error:", error);
+    return res.status(500).json({ 
+      error: "Failed to initiate Google Calendar authentication",
+      details: error.message 
+    });
   }
 }
