@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { GoogleCalendarConnect } from "@/components/GoogleCalendarConnect";
 import {
   MessageCircle,
   Calendar,
@@ -40,7 +41,6 @@ import {
   IntegrationSettings,
   IntegrationConfig,
 } from "@/services/integrationsService";
-import { GoogleCalendarConnect } from "@/components/GoogleCalendarConnect";
 
 const ICONS: Record<string, any> = {
   MessageCircle,
@@ -61,6 +61,7 @@ export default function Integrations() {
   const [testing, setTesting] = useState<string | null>(null);
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
   const [formData, setFormData] = useState<Record<string, Record<string, string>>>({});
+  const [googleCalendarConnected, setGoogleCalendarConnected] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
 
   useEffect(() => {
@@ -93,6 +94,7 @@ export default function Integrations() {
   useEffect(() => {
     if (sessionReady) {
       loadIntegrations();
+      checkGoogleCalendarConnection();
     }
   }, [sessionReady]);
 
@@ -151,6 +153,36 @@ export default function Integrations() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const checkGoogleCalendarConnection = async () => {
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session?.user) {
+        console.warn("No session for Google Calendar check");
+        setGoogleCalendarConnected(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("user_integrations")
+        .select("is_active")
+        .eq("user_id", session.user.id)
+        .eq("integration_type", "google_calendar")
+        .maybeSingle();
+
+      if (error) {
+        console.error("Error checking Google Calendar:", error);
+        setGoogleCalendarConnected(false);
+        return;
+      }
+
+      setGoogleCalendarConnected(data?.is_active || false);
+    } catch (error) {
+      console.error("Error in checkGoogleCalendarConnection:", error);
+      setGoogleCalendarConnected(false);
     }
   };
 
@@ -340,7 +372,81 @@ export default function Integrations() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Special OAuth connection section for Google Calendar */}
+          {config.name === "google_calendar" && (
+            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 mb-4">
+              <h4 className="font-semibold mb-2 flex items-center gap-2">
+                <Calendar className="h-4 w-4" />
+                Conexão OAuth (Recomendado)
+              </h4>
+              <p className="text-sm text-gray-600 mb-3">
+                Conecte sua conta Google para sincronizar eventos automaticamente
+              </p>
+              <GoogleCalendarConnect
+                isConnected={googleCalendarConnected}
+                onConnect={() => {
+                  setGoogleCalendarConnected(true);
+                  checkGoogleCalendarConnection();
+                }}
+                onDisconnect={() => {
+                  setGoogleCalendarConnected(false);
+                  checkGoogleCalendarConnection();
+                }}
+              />
+            </div>
+          )}
+
+          {/* Configuration fields (shown for ALL integrations including Google Calendar) */}
           <div className="space-y-4">
+            {config.name === "google_calendar" && (
+              <div className="pb-2 border-b">
+                <h4 className="font-semibold text-sm text-gray-700">
+                  Configuração Manual (Fallback)
+                </h4>
+                <p className="text-xs text-gray-500 mt-1">
+                  Configure credenciais OAuth manualmente caso a conexão automática não funcione
+                </p>
+              </div>
+            )}
+
+            {/* Redirect URI for Google Calendar - Read-only field */}
+            {config.name === "google_calendar" && (
+              <div className="space-y-2">
+                <Label htmlFor="google-calendar-redirect-uri">
+                  Redirect URI
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="google-calendar-redirect-uri"
+                    type="text"
+                    value={
+                      formData[config.name]?.redirectUri || 
+                      `${typeof window !== 'undefined' ? window.location.origin : 'https://www.imogest.pt'}/api/google-calendar/callback`
+                    }
+                    onChange={(e) => handleInputChange(config.name, "redirectUri", e.target.value)}
+                    className="pr-20 bg-gray-50"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const redirectUri = `${typeof window !== 'undefined' ? window.location.origin : 'https://www.imogest.pt'}/api/google-calendar/callback`;
+                      navigator.clipboard.writeText(redirectUri);
+                      toast({
+                        title: "✅ Copiado!",
+                        description: "Redirect URI copiado para a área de transferência",
+                      });
+                    }}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    Copiar
+                  </button>
+                </div>
+                <p className="text-sm text-gray-500">
+                  Cole este URL nos Authorized Redirect URIs no Google Cloud Console
+                </p>
+              </div>
+            )}
+
             {config.fields.map((field) => {
               const fieldId = `${config.name}-${field.key}`;
               const isPassword = field.type === "password";
@@ -476,7 +582,7 @@ export default function Integrations() {
     ["whatsapp", "gmail"].includes(i.integration_name)
   );
   const toolsIntegrations = integrations.filter((i) =>
-    ["google_maps"].includes(i.integration_name)
+    ["google_calendar", "google_maps"].includes(i.integration_name)
   );
 
   return (
@@ -513,7 +619,6 @@ export default function Integrations() {
           </TabsList>
 
           <TabsContent value="tools" className="space-y-6">
-            <GoogleCalendarConnect />
             {toolsIntegrations.map((integration) => {
               const config = INTEGRATIONS[integration.integration_name];
               return config ? renderIntegrationCard(config, integration) : null;

@@ -93,8 +93,6 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
           router.push("/login");
         } else if (event === "SIGNED_IN" && session) {
           setIsAuthenticated(true);
-          // Don't force redirect - stay on current page
-          // This allows OAuth callbacks to work correctly
         }
       }
     );
