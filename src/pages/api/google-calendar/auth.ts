@@ -56,18 +56,40 @@ export default async function handler(
 
     console.log("✅ User authenticated:", user.id);
 
-    // Check for required environment variables
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    const redirectUri = process.env.GOOGLE_REDIRECT_URI;
+    // Get Google Calendar credentials from integration_settings
+    const { data: settings, error: settingsError } = await supabase
+      .from("integration_settings")
+      .select("settings, is_active")
+      .eq("integration_name", "google_calendar")
+      .single();
 
-    if (!clientId || !redirectUri) {
-      console.error("❌ Missing required environment variables");
+    if (settingsError || !settings) {
+      console.error("❌ Failed to fetch Google Calendar settings:", settingsError?.message);
       return res.status(500).json({ 
         error: "Google Calendar integration not configured" 
       });
     }
 
-    console.log("✅ Environment variables found");
+    if (!settings.is_active) {
+      console.error("❌ Google Calendar integration is not active");
+      return res.status(500).json({ 
+        error: "Google Calendar integration is not active" 
+      });
+    }
+
+    console.log("✅ Google Calendar integration is active");
+
+    // Extract OAuth credentials from settings
+    const { clientId, redirectUri } = settings.settings as any;
+
+    if (!clientId || !redirectUri) {
+      console.error("❌ Missing required OAuth credentials in settings");
+      return res.status(500).json({ 
+        error: "Google Calendar OAuth credentials not configured" 
+      });
+    }
+
+    console.log("✅ OAuth credentials loaded from database");
     console.log("📍 Redirect URI:", redirectUri);
 
     // Build OAuth URL

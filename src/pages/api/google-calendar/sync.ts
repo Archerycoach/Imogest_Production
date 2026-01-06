@@ -15,6 +15,24 @@ interface SyncStats {
   };
 }
 
+async function getGoogleCalendarCredentials(userId: string) {
+  const { data: credentials, error: credError } = await (supabaseAdmin as any)
+    .from("user_integrations")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("integration_type", "google_calendar")
+    .maybeSingle();
+
+  if (credError || !credentials || !credentials.is_active) {
+    console.error("❌ [sync] No Google credentials found or integration not active");
+    throw new Error("Google Calendar not connected");
+  }
+
+  console.log("✅ [sync] Google credentials retrieved and active");
+
+  return credentials;
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -43,19 +61,7 @@ export default async function handler(
     console.log("✅ [sync] User authenticated:", user.id);
 
     // Get Google credentials from user_integrations table
-    const { data: credentials, error: credError } = await (supabaseAdmin as any)
-      .from("user_integrations")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("integration_type", "google_calendar")
-      .maybeSingle();
-
-    if (credError || !credentials || !credentials.is_active) {
-      console.error("❌ [sync] No Google credentials found or integration not active");
-      return res.status(400).json({ error: "Google Calendar not connected" });
-    }
-
-    console.log("✅ [sync] Google credentials retrieved and active");
+    const credentials = await getGoogleCalendarCredentials(user.id);
 
     const stats: SyncStats = {
       google_to_app: {
@@ -79,12 +85,31 @@ export default async function handler(
     if (expiresAt <= now) {
       console.log("🔄 [sync] Access token expired, refreshing...");
       
+      // Get Google Calendar credentials from database
+      const { data: gcSettings, error: gcError } = await supabaseAdmin
+        .from("integration_settings")
+        .select("settings")
+        .eq("integration_name", "google_calendar")
+        .single();
+
+      if (gcError || !gcSettings) {
+        console.error("❌ [sync] Failed to fetch Google Calendar credentials");
+        throw new Error("Google Calendar credentials not found");
+      }
+
+      const { clientId, clientSecret } = gcSettings.settings as any;
+
+      if (!clientId || !clientSecret) {
+        console.error("❌ [sync] Incomplete Google Calendar credentials");
+        throw new Error("Incomplete Google Calendar credentials");
+      }
+
       const refreshResponse = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
-          client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!,
-          client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+          client_id: clientId,
+          client_secret: clientSecret,
           refresh_token: credentials.refresh_token,
           grant_type: "refresh_token",
         }),

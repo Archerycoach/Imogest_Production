@@ -2,8 +2,6 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 
 type SystemSetting = Database["public"]["Tables"]["system_settings"]["Row"];
-type SystemSettingInsert = Database["public"]["Tables"]["system_settings"]["Insert"];
-type SystemSettingUpdate = Database["public"]["Tables"]["system_settings"]["Update"];
 
 // Get all system settings
 export const getAllSettings = async (): Promise<SystemSetting[]> => {
@@ -135,25 +133,56 @@ export const updateSecuritySettings = async (settings: Record<string, any>) => {
   );
 };
 
-// Get Google Calendar configuration
+// Get Google Calendar configuration from integration_settings
 export const getGoogleCalendarConfig = async () => {
-  const setting = await getSetting("google_calendar_config");
-  return setting?.value || {
-    client_id: "",
-    client_secret: "",
-    redirect_uri: "",
+  const { data, error } = await supabase
+    .from("integration_settings")
+    .select("settings")
+    .eq("integration_name", "google_calendar")
+    .maybeSingle();
+
+  if (error) throw error;
+  
+  // Cast settings to any to access properties safely
+  const settings = data?.settings as any || {};
+  
+  return {
+    clientId: settings.clientId || "",
+    clientSecret: settings.clientSecret || "",
+    redirectUri: settings.redirectUri || "",
   };
 };
 
-// Update Google Calendar configuration
+// Update Google Calendar configuration in integration_settings
 export const updateGoogleCalendarConfig = async (config: {
-  client_id: string;
-  client_secret: string;
-  redirect_uri: string;
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
 }) => {
-  return updateSetting(
-    "google_calendar_config",
-    config,
-    "Google Calendar OAuth configuration"
-  );
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) throw new Error("User not authenticated");
+
+  // Check if integration exists first
+  const { data: existing } = await supabase
+    .from("integration_settings")
+    .select("id")
+    .eq("integration_name", "google_calendar")
+    .maybeSingle();
+
+  const settingData = {
+    integration_name: "google_calendar",
+    settings: config,
+    is_active: true,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data, error } = await supabase
+    .from("integration_settings")
+    .upsert(settingData, { onConflict: "integration_name" })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
 };

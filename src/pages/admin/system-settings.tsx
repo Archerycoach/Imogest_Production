@@ -58,9 +58,9 @@ export default function SystemSettings() {
 
   // Google Calendar configuration
   const [googleCalendar, setGoogleCalendar] = useState({
-    client_id: "",
-    client_secret: "",
-    redirect_uri: "",
+    clientId: "",
+    clientSecret: "",
+    redirectUri: "",
   });
 
   // WhatsApp configuration
@@ -242,7 +242,7 @@ export default function SystemSettings() {
     setSaving(true);
     try {
       // Validate fields
-      if (!googleCalendar.client_id || !googleCalendar.client_secret || !googleCalendar.redirect_uri) {
+      if (!googleCalendar.clientId || !googleCalendar.clientSecret || !googleCalendar.redirectUri) {
         toast({
           title: "Erro de Validação",
           description: "Todos os campos são obrigatórios",
@@ -253,7 +253,7 @@ export default function SystemSettings() {
       }
 
       // Validate Client ID format
-      if (!googleCalendar.client_id.includes(".apps.googleusercontent.com")) {
+      if (!googleCalendar.clientId.includes(".apps.googleusercontent.com")) {
         toast({
           title: "Erro de Validação",
           description: "Client ID deve terminar com .apps.googleusercontent.com",
@@ -264,7 +264,7 @@ export default function SystemSettings() {
       }
 
       // Validate Client Secret format
-      if (!googleCalendar.client_secret.startsWith("GOCSPX-")) {
+      if (!googleCalendar.clientSecret.startsWith("GOCSPX-")) {
         toast({
           title: "Erro de Validação",
           description: "Client Secret deve começar com GOCSPX-",
@@ -729,9 +729,9 @@ export default function SystemSettings() {
                         id="google-client-id"
                         type="text"
                         placeholder="123456789012-abc123def456.apps.googleusercontent.com"
-                        value={googleCalendar.client_id}
+                        value={googleCalendar.clientId}
                         onChange={(e) =>
-                          setGoogleCalendar({ ...googleCalendar, client_id: e.target.value })
+                          setGoogleCalendar({ ...googleCalendar, clientId: e.target.value })
                         }
                         className="font-mono text-sm"
                       />
@@ -750,9 +750,9 @@ export default function SystemSettings() {
                         id="google-client-secret"
                         type="password"
                         placeholder="GOCSPX-abcdefghijklmnopqrstuvwxyz"
-                        value={googleCalendar.client_secret}
+                        value={googleCalendar.clientSecret}
                         onChange={(e) =>
-                          setGoogleCalendar({ ...googleCalendar, client_secret: e.target.value })
+                          setGoogleCalendar({ ...googleCalendar, clientSecret: e.target.value })
                         }
                         className="font-mono text-sm"
                       />
@@ -771,9 +771,9 @@ export default function SystemSettings() {
                         id="google-redirect-uri"
                         type="text"
                         placeholder="https://seu-dominio.com/api/google-calendar/callback"
-                        value={googleCalendar.redirect_uri}
+                        value={googleCalendar.redirectUri}
                         onChange={(e) =>
-                          setGoogleCalendar({ ...googleCalendar, redirect_uri: e.target.value })
+                          setGoogleCalendar({ ...googleCalendar, redirectUri: e.target.value })
                         }
                         className="font-mono text-sm"
                       />
@@ -795,7 +795,7 @@ export default function SystemSettings() {
 
                     <div className="flex justify-between items-center pt-4">
                       <div className="text-sm text-slate-600">
-                        {googleCalendar.client_id && googleCalendar.client_secret && googleCalendar.redirect_uri ? (
+                        {googleCalendar.clientId && googleCalendar.clientSecret && googleCalendar.redirectUri ? (
                           <Badge className="bg-green-100 text-green-800">
                             ✅ Configuração Completa
                           </Badge>
