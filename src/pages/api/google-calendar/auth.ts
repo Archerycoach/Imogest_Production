@@ -37,31 +37,28 @@ export default async function handler(
   console.log("\n🚀 Initiating Google OAuth flow");
 
   try {
-    // Get user from session using regular Supabase client
+    // Get user from session using cookies (works in browser navigation)
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         auth: {
           persistSession: false
+        },
+        global: {
+          headers: {
+            cookie: req.headers.cookie || ""
+          }
         }
       }
     );
 
-    // Get token from Authorization header or cookie
-    const authHeader = req.headers.authorization;
-    const token = authHeader?.replace("Bearer ", "");
-    
-    if (!token) {
-      console.error("❌ No authorization token found");
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    // Get user from session (reads from cookies automatically)
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      console.error("❌ Failed to get user:", userError);
-      return res.status(401).json({ error: "Not authenticated" });
+      console.error("❌ Failed to get user from session:", userError);
+      return res.status(401).json({ error: "Not authenticated. Please log in first." });
     }
 
     console.log("👤 User authenticated:", user.id);
