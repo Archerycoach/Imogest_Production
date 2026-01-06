@@ -132,7 +132,7 @@ export const getLead = async (id: string): Promise<LeadWithDetails | null> => {
 };
 
 // Create new lead
-export const createLead = async (lead: Omit<Lead, "id" | "created_at" | "updated_at">): Promise<Lead> => {
+export const createLead = async (lead: LeadInsert): Promise<Lead> => {
   console.log("[leadsService] createLead called with:", lead);
   
   const { data, error } = await supabase

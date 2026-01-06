@@ -48,6 +48,13 @@ export type Database = {
             foreignKeyName: "activity_logs_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
+            referencedRelation: "agent_performance"
+            referencedColumns: ["agent_id"]
+          },
+          {
+            foreignKeyName: "activity_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -143,6 +150,13 @@ export type Database = {
             foreignKeyName: "calendar_events_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
+            referencedRelation: "agent_performance"
+            referencedColumns: ["agent_id"]
+          },
+          {
+            foreignKeyName: "calendar_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -204,6 +218,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "leads"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contacts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "agent_performance"
+            referencedColumns: ["agent_id"]
           },
           {
             foreignKeyName: "contacts_user_id_fkey"
@@ -273,6 +294,13 @@ export type Database = {
             foreignKeyName: "documents_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
+            referencedRelation: "agent_performance"
+            referencedColumns: ["agent_id"]
+          },
+          {
+            foreignKeyName: "documents_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -316,6 +344,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "image_uploads_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "agent_performance"
+            referencedColumns: ["agent_id"]
+          },
           {
             foreignKeyName: "image_uploads_user_id_fkey"
             columns: ["user_id"]
@@ -427,6 +462,13 @@ export type Database = {
             foreignKeyName: "interactions_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
+            referencedRelation: "agent_performance"
+            referencedColumns: ["agent_id"]
+          },
+          {
+            foreignKeyName: "interactions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -480,6 +522,13 @@ export type Database = {
             foreignKeyName: "lead_workflow_rules_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
+            referencedRelation: "agent_performance"
+            referencedColumns: ["agent_id"]
+          },
+          {
+            foreignKeyName: "lead_workflow_rules_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -499,8 +548,10 @@ export type Database = {
           custom_fields: Json | null
           desired_price: number | null
           email: string | null
+          estimated_value: number | null
           id: string
           last_contact_date: string | null
+          lead_score: number | null
           lead_type: string | null
           location_preference: string | null
           max_area: number | null
@@ -510,6 +561,7 @@ export type Database = {
           next_follow_up: string | null
           notes: string | null
           phone: string | null
+          probability: number | null
           property_area: number | null
           property_type: string | null
           score: number | null
@@ -533,8 +585,10 @@ export type Database = {
           custom_fields?: Json | null
           desired_price?: number | null
           email?: string | null
+          estimated_value?: number | null
           id?: string
           last_contact_date?: string | null
+          lead_score?: number | null
           lead_type?: string | null
           location_preference?: string | null
           max_area?: number | null
@@ -544,6 +598,7 @@ export type Database = {
           next_follow_up?: string | null
           notes?: string | null
           phone?: string | null
+          probability?: number | null
           property_area?: number | null
           property_type?: string | null
           score?: number | null
@@ -567,8 +622,10 @@ export type Database = {
           custom_fields?: Json | null
           desired_price?: number | null
           email?: string | null
+          estimated_value?: number | null
           id?: string
           last_contact_date?: string | null
+          lead_score?: number | null
           lead_type?: string | null
           location_preference?: string | null
           max_area?: number | null
@@ -578,6 +635,7 @@ export type Database = {
           next_follow_up?: string | null
           notes?: string | null
           phone?: string | null
+          probability?: number | null
           property_area?: number | null
           property_type?: string | null
           score?: number | null
@@ -593,6 +651,13 @@ export type Database = {
             foreignKeyName: "leads_assigned_to_fkey"
             columns: ["assigned_to"]
             isOneToOne: false
+            referencedRelation: "agent_performance"
+            referencedColumns: ["agent_id"]
+          },
+          {
+            foreignKeyName: "leads_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -602,6 +667,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "contacts"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "agent_performance"
+            referencedColumns: ["agent_id"]
           },
           {
             foreignKeyName: "leads_user_id_fkey"
@@ -653,6 +725,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "agent_performance"
+            referencedColumns: ["agent_id"]
+          },
           {
             foreignKeyName: "notifications_user_id_fkey"
             columns: ["user_id"]
@@ -720,6 +799,13 @@ export type Database = {
             foreignKeyName: "payment_history_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
+            referencedRelation: "agent_performance"
+            referencedColumns: ["agent_id"]
+          },
+          {
+            foreignKeyName: "payment_history_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -782,6 +868,13 @@ export type Database = {
             foreignKeyName: "profiles_team_lead_id_fkey"
             columns: ["team_lead_id"]
             isOneToOne: false
+            referencedRelation: "agent_performance"
+            referencedColumns: ["agent_id"]
+          },
+          {
+            foreignKeyName: "profiles_team_lead_id_fkey"
+            columns: ["team_lead_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -801,6 +894,7 @@ export type Database = {
           custom_fields: Json | null
           description: string | null
           district: string | null
+          energy_rating: string | null
           features: string[] | null
           floor: number | null
           id: string
@@ -821,6 +915,7 @@ export type Database = {
           status: string | null
           title: string
           total_floors: number | null
+          typology: string | null
           updated_at: string | null
           user_id: string
           video_url: string | null
@@ -841,6 +936,7 @@ export type Database = {
           custom_fields?: Json | null
           description?: string | null
           district?: string | null
+          energy_rating?: string | null
           features?: string[] | null
           floor?: number | null
           id?: string
@@ -861,6 +957,7 @@ export type Database = {
           status?: string | null
           title: string
           total_floors?: number | null
+          typology?: string | null
           updated_at?: string | null
           user_id: string
           video_url?: string | null
@@ -881,6 +978,7 @@ export type Database = {
           custom_fields?: Json | null
           description?: string | null
           district?: string | null
+          energy_rating?: string | null
           features?: string[] | null
           floor?: number | null
           id?: string
@@ -901,6 +999,7 @@ export type Database = {
           status?: string | null
           title?: string
           total_floors?: number | null
+          typology?: string | null
           updated_at?: string | null
           user_id?: string
           video_url?: string | null
@@ -909,6 +1008,13 @@ export type Database = {
           year_built?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "properties_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "agent_performance"
+            referencedColumns: ["agent_id"]
+          },
           {
             foreignKeyName: "properties_user_id_fkey"
             columns: ["user_id"]
@@ -1069,6 +1175,13 @@ export type Database = {
             foreignKeyName: "subscriptions_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
+            referencedRelation: "agent_performance"
+            referencedColumns: ["agent_id"]
+          },
+          {
+            foreignKeyName: "subscriptions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -1161,6 +1274,13 @@ export type Database = {
             foreignKeyName: "tasks_assigned_to_fkey"
             columns: ["assigned_to"]
             isOneToOne: false
+            referencedRelation: "agent_performance"
+            referencedColumns: ["agent_id"]
+          },
+          {
+            foreignKeyName: "tasks_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -1184,6 +1304,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "properties"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "agent_performance"
+            referencedColumns: ["agent_id"]
           },
           {
             foreignKeyName: "tasks_user_id_fkey"
@@ -1232,6 +1359,13 @@ export type Database = {
           variables?: string[] | null
         }
         Relationships: [
+          {
+            foreignKeyName: "templates_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "agent_performance"
+            referencedColumns: ["agent_id"]
+          },
           {
             foreignKeyName: "templates_user_id_fkey"
             columns: ["user_id"]
@@ -1295,6 +1429,13 @@ export type Database = {
             foreignKeyName: "user_integrations_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
+            referencedRelation: "agent_performance"
+            referencedColumns: ["agent_id"]
+          },
+          {
+            foreignKeyName: "user_integrations_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -1346,6 +1487,13 @@ export type Database = {
             foreignKeyName: "workflow_executions_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
+            referencedRelation: "agent_performance"
+            referencedColumns: ["agent_id"]
+          },
+          {
+            foreignKeyName: "workflow_executions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -1360,10 +1508,25 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      agent_performance: {
+        Row: {
+          agent_id: string | null
+          completed_tasks: number | null
+          full_name: string | null
+          interactions_30d: number | null
+          new_leads_30d: number | null
+          role: string | null
+          total_interactions: number | null
+          total_leads: number | null
+          total_tasks: number | null
+          won_leads: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       calculate_lead_score: { Args: { lead_id: string }; Returns: number }
+      cleanup_old_data: { Args: never; Returns: undefined }
       get_all_profiles_for_admin: {
         Args: never
         Returns: {
@@ -1377,6 +1540,60 @@ export type Database = {
         }[]
       }
       get_current_user_role: { Args: never; Returns: string }
+      get_lead_statistics: {
+        Args: { user_uuid: string }
+        Returns: {
+          active_leads: number
+          cold_leads: number
+          converted_leads: number
+          hot_leads: number
+          total_leads: number
+          warm_leads: number
+        }[]
+      }
+      get_pipeline_overview: {
+        Args: never
+        Returns: {
+          avg_score: number
+          count: number
+          lead_type: string
+          status: string
+          total_value: number
+        }[]
+      }
+      get_property_statistics: {
+        Args: { user_uuid: string }
+        Returns: {
+          available_properties: number
+          avg_price: number
+          reserved_properties: number
+          sold_properties: number
+          total_properties: number
+        }[]
+      }
+      get_task_statistics: {
+        Args: { user_uuid: string }
+        Returns: {
+          completed_tasks: number
+          in_progress_tasks: number
+          overdue_tasks: number
+          pending_tasks: number
+          total_tasks: number
+        }[]
+      }
+      is_team_member: { Args: { target_user_id: string }; Returns: boolean }
+      refresh_lead_statistics: {
+        Args: never
+        Returns: {
+          active_leads: number
+          avg_score: number
+          converted_leads: number
+          full_name: string
+          total_leads: number
+          total_value: number
+          user_id: string
+        }[]
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
     }

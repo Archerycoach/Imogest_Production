@@ -118,6 +118,9 @@ export function LeadFormContainer({ initialData, onSuccess, onCancel }: LeadForm
         temperature: "cold",
         user_id: user.id,
         archived_at: null,
+        lead_score: 0,
+        probability: 0,
+        estimated_value: 0,
       };
 
       if (initialData) {
