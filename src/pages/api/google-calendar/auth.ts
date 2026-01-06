@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from "next";
-import { createClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
 
 export default async function handler(
   req: NextApiRequest,
@@ -12,39 +12,26 @@ export default async function handler(
   try {
     console.log("🔐 Starting Google Calendar OAuth flow...");
 
-    // HYBRID AUTH: Extract token from Authorization header if present
-    const authHeader = req.headers.authorization;
-    const authToken = authHeader?.replace("Bearer ", "");
-
-    // Initialize Supabase client with proper auth configuration
-    const supabaseOptions: any = {
-      auth: { persistSession: false }
-    };
-
-    // If we have an auth token, include it in the headers
-    if (authToken) {
-      console.log("🔑 Using Authorization header token");
-      supabaseOptions.global = {
-        headers: {
-          Authorization: `Bearer ${authToken}`
-        }
-      };
-    } else {
-      console.log("🍪 Using cookie-based session");
-      supabaseOptions.global = {
-        headers: {
-          cookie: req.headers.cookie || ""
-        }
-      };
-    }
-
-    const supabase = createClient(
+    // Create Supabase client with SSR cookie support
+    const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      supabaseOptions
+      {
+        cookies: {
+          get(name: string) {
+            return req.cookies[name];
+          },
+          set(name: string, value: string, options: any) {
+            res.setHeader('Set-Cookie', `${name}=${value}; Path=/; ${options.httpOnly ? 'HttpOnly;' : ''} ${options.secure ? 'Secure;' : ''} SameSite=${options.sameSite || 'Lax'}`);
+          },
+          remove(name: string, options: any) {
+            res.setHeader('Set-Cookie', `${name}=; Path=/; Max-Age=0`);
+          },
+        },
+      }
     );
 
-    // Get user from session (uses token from headers if provided)
+    // Get authenticated user from session cookies
     const { data: { user }, error: userError } = await supabase.auth.getUser();
 
     if (!user || userError) {
