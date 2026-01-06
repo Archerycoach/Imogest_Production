@@ -37,7 +37,7 @@ export default async function handler(
     await storeTokens(session.user.id, tokens);
 
     // Redirect to settings with success message
-    return res.redirect("/admin/integrations?calendar_success=true");
+    return res.redirect("/settings?calendar_success=true");
   } catch (error) {
     console.error("Error in Google Calendar callback:", error);
     return res.redirect("/admin/integrations?calendar_error=token_exchange_failed");
