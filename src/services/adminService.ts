@@ -481,6 +481,27 @@ export const getTeamLeads = async (): Promise<Profile[]> => {
   return data || [];
 };
 
+// Get all team members (active users) for assignment
+export const getTeamMembers = async () => {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, full_name, email")
+    .eq("is_active", true)
+    .order("full_name", { ascending: true });
+
+  if (error) {
+    console.error("Error fetching team members:", error);
+    return [];
+  }
+
+  // Ensure non-null values for compatibility
+  return (data || []).map(member => ({
+    id: member.id,
+    full_name: member.full_name || "Sem nome",
+    email: member.email || "Sem email"
+  }));
+};
+
 // Assign agent to team lead
 export const assignAgentToTeamLead = async (agentId: string, teamLeadId: string | null) => {
   const { error } = await supabase

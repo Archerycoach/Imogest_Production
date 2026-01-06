@@ -2,14 +2,15 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/router";
 import { Button } from "@/components/ui/button";
 import { Plus, Upload, Download, Loader2 } from "lucide-react";
-import { LeadForm } from "@/components/leads/LeadForm";
-import { LeadsList } from "@/components/leads/LeadsList";
+import { LeadFormContainer } from "@/features/leads/components/form";
+import { LeadsListContainer } from "@/features/leads/components/LeadsListContainer";
 import {
   getAllLeads,
   deleteLead,
   type LeadWithContacts,
 } from "@/services/leadsService";
 import { getCurrentUser } from "@/services/authService";
+import { getTeamMembers } from "@/services/adminService";
 import { Layout } from "@/components/Layout";
 import {
   parseExcelFile,
@@ -34,6 +35,8 @@ export default function Leads() {
   const [showForm, setShowForm] = useState(false);
   const [editingLead, setEditingLead] = useState<LeadWithContacts | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [teamMembers, setTeamMembers] = useState<Array<{ id: string; full_name: string; email: string }>>([]);
+  const [canAssignLeads, setCanAssignLeads] = useState(false);
   
   // Import state
   const [showImportDialog, setShowImportDialog] = useState(false);
@@ -49,6 +52,16 @@ export default function Leads() {
         return;
       }
       setUser(currentUser);
+      
+      // Check if user can assign leads (admin or team_lead)
+      const role = currentUser.role;
+      setCanAssignLeads(role === "admin" || role === "team_lead");
+      
+      // Load team members for assignment dropdown
+      if (role === "admin" || role === "team_lead") {
+        const members = await getTeamMembers();
+        setTeamMembers(members);
+      }
     } catch (error) {
       console.error("Auth error:", error);
       router.push("/login");
@@ -257,7 +270,7 @@ export default function Leads() {
           </div>
 
           {showForm && (
-            <LeadForm
+            <LeadFormContainer
               initialData={editingLead || undefined}
               onSuccess={handleFormSuccess}
               onCancel={handleFormCancel}
@@ -265,12 +278,10 @@ export default function Leads() {
           )}
 
           {!showForm && (
-            <LeadsList
-              leads={leads}
+            <LeadsListContainer
               onEdit={handleEdit}
-              onDelete={handleDeleteLead}
-              isLoading={isLoading}
-              onRefresh={handleRefresh}
+              canAssignLeads={canAssignLeads}
+              teamMembers={teamMembers}
             />
           )}
         </div>

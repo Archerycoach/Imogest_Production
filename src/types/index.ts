@@ -130,6 +130,14 @@ export interface Task {
   createdAt: string;
 }
 
+export interface TaskStats {
+  total: number;
+  pending: number;
+  inProgress: number;
+  completed: number;
+  overdue: number;
+}
+
 // Calendar Event Types
 export interface CalendarEvent {
   id: string;
