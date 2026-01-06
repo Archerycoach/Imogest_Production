@@ -84,7 +84,6 @@ export function GoogleCalendarConnect({
         title: "Google Calendar conectado!",
         description: "Sua conta foi conectada com sucesso.",
       });
-      // Clean URL without reloading
       window.history.replaceState({}, "", window.location.pathname);
     }
 
@@ -124,26 +123,29 @@ export function GoogleCalendarConnect({
         description: errorMessage,
         variant: "destructive",
       });
-      // Clean URL without reloading
       window.history.replaceState({}, "", window.location.pathname);
     }
   };
 
   const handleConnect = async () => {
     try {
+      console.log("🔵 [1/6] Iniciando conexão Google Calendar...");
       setConnecting(true);
       setError(null);
       
       // Get current session
+      console.log("🔵 [2/6] Obtendo sessão do Supabase...");
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
       if (sessionError || !session) {
+        console.error("❌ Erro na sessão:", sessionError);
         setError("Sessão expirada. Por favor faça login novamente.");
         setConnecting(false);
         return;
       }
 
-      console.log("🔑 Initiating Google OAuth with auth token...");
+      console.log("✅ [2/6] Sessão obtida com sucesso!");
+      console.log("🔵 [3/6] Chamando /api/google-calendar/auth...");
 
       // Call the auth endpoint with authorization header
       const response = await fetch("/api/google-calendar/auth", {
@@ -154,23 +156,39 @@ export function GoogleCalendarConnect({
         },
       });
 
+      console.log("✅ [3/6] Response recebida:", {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+      });
+
       if (!response.ok) {
+        console.error("❌ Response não OK!");
         const errorData = await response.json();
+        console.error("❌ Erro do servidor:", errorData);
         throw new Error(errorData.error || "Erro ao iniciar OAuth");
       }
 
+      console.log("🔵 [4/6] Parsing JSON response...");
       const data = await response.json();
+      console.log("✅ [4/6] JSON parsed com sucesso:", data);
       
       if (!data.url) {
+        console.error("❌ URL não recebida na resposta!");
         throw new Error("URL de autorização não recebida");
       }
 
-      console.log("✅ Redirecting to Google OAuth...");
+      console.log("✅ [5/6] URL do Google OAuth recebida!");
+      console.log("🔵 [6/6] Redirecionando para Google...");
+      console.log("🔗 URL:", data.url);
       
       // Redirect to Google OAuth
       window.location.href = data.url;
+      
+      console.log("✅ [6/6] Redirect iniciado! (aguardando navegador...)");
     } catch (err) {
-      console.error("Error connecting:", err);
+      console.error("❌ ERRO FATAL no handleConnect:", err);
+      console.error("❌ Stack trace:", err instanceof Error ? err.stack : "N/A");
       setError(err instanceof Error ? err.message : "Erro ao conectar. Tente novamente.");
       setConnecting(false);
     }
@@ -289,18 +307,10 @@ export function GoogleCalendarConnect({
 
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
               <p className="text-xs text-blue-800 font-medium mb-2">
-                ℹ️ Nota sobre configuração:
+                ℹ️ Debug Mode Ativado - Verifique o console (F12)
               </p>
               <p className="text-xs text-blue-700">
-                As credenciais OAuth devem estar configuradas corretamente na base de dados (tabela integration_settings).
-                <br />
-                <a 
-                  href="/GOOGLE_CALENDAR_SETUP.md" 
-                  target="_blank" 
-                  className="underline font-medium"
-                >
-                  Ver guia completo de configuração →
-                </a>
+                Os logs detalhados vão aparecer no console do browser durante a conexão.
               </p>
             </div>
 
