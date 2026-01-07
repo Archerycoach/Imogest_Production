@@ -140,6 +140,7 @@ export function GoogleCalendarConnect({
       const { data: { session } } = await supabase.auth.getSession();
 
       if (!session) {
+        console.error("❌ No session found");
         toast({
           title: "Erro",
           description: "Por favor faça login primeiro.",
@@ -149,16 +150,31 @@ export function GoogleCalendarConnect({
         return;
       }
 
-      console.log("✅ Session found, redirecting to auth endpoint...");
-      console.log("Token length:", session.access_token?.length);
+      console.log("✅ Session found");
+      console.log("📋 Session details:", {
+        hasAccessToken: !!session.access_token,
+        tokenLength: session.access_token?.length || 0,
+        tokenPreview: session.access_token?.substring(0, 50) + "...",
+        expiresAt: session.expires_at,
+        user: session.user?.email
+      });
 
       if (!session.access_token) {
-        throw new Error("No access token available");
+        console.error("❌ No access token in session");
+        toast({
+          title: "Erro",
+          description: "Token de autenticação não encontrado. Por favor faça login novamente.",
+          variant: "destructive",
+        });
+        setConnecting(false);
+        return;
       }
 
-      // Navigate directly to auth endpoint with token in query param
-      // This is necessary because we can't set headers on a full page navigation/redirect
-      window.location.href = `/api/google-calendar/auth?token=${session.access_token}`;
+      const authUrl = `/api/google-calendar/auth?token=${session.access_token}`;
+      console.log("🚀 Redirecting to:", authUrl.substring(0, 100) + "...");
+
+      // Navigate to auth endpoint with token
+      window.location.href = authUrl;
       
     } catch (error) {
       console.error("❌ Connect error:", error);
