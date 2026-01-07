@@ -148,22 +148,10 @@ export function GoogleCalendarConnect({
         return;
       }
 
-      const response = await fetch("/api/google-calendar/auth", {
-        method: "GET",
-        headers: {
-          "Authorization": `Bearer ${session.access_token}`,
-        },
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to initiate OAuth");
-      }
-
-      const { authUrl } = await response.json();
-      
-      console.log("✅ Redirecting to Google OAuth...");
-      window.location.href = authUrl;
+      // Navigate directly to auth endpoint with token in URL parameter
+      // The API will handle the redirect to Google
+      console.log("✅ Redirecting to auth endpoint...");
+      window.location.href = `/api/google-calendar/auth?token=${session.access_token}`;
 
     } catch (error: any) {
       console.error("Error connecting:", error);

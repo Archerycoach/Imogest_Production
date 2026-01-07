@@ -1,18 +1,61 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Loader2, Mail, Check, X } from "lucide-react";
+import { Loader2, Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
 interface GmailConnectProps {
-  isConnected: boolean;
-  onConnect: () => void;
-  onDisconnect: () => void;
+  isConnected?: boolean;
+  onConnect?: () => void;
+  onDisconnect?: () => void;
 }
 
-export function GmailConnect({ isConnected, onConnect, onDisconnect }: GmailConnectProps) {
+export function GmailConnect({ 
+  isConnected: externalIsConnected, 
+  onConnect: externalOnConnect, 
+  onDisconnect: externalOnDisconnect 
+}: GmailConnectProps = {}) {
   const [loading, setLoading] = useState(false);
+  const [internalIsConnected, setInternalIsConnected] = useState(false);
+  const [checkingStatus, setCheckingStatus] = useState(true);
   const { toast } = useToast();
+
+  // Use external prop if provided, otherwise use internal state
+  const isConnected = externalIsConnected ?? internalIsConnected;
+
+  useEffect(() => {
+    if (externalIsConnected === undefined) {
+      checkConnection();
+    } else {
+      setCheckingStatus(false);
+    }
+  }, [externalIsConnected]);
+
+  const checkConnection = async () => {
+    try {
+      setCheckingStatus(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        setInternalIsConnected(false);
+        return;
+      }
+
+      const response = await fetch("/api/integrations/test-gmail-connection", {
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+      });
+
+      const data = await response.json();
+      setInternalIsConnected(data.isConnected || false);
+    } catch (error) {
+      console.error("Error checking Gmail connection:", error);
+      setInternalIsConnected(false);
+    } finally {
+      setCheckingStatus(false);
+    }
+  };
 
   const handleConnect = async () => {
     try {
@@ -28,7 +71,6 @@ export function GmailConnect({ isConnected, onConnect, onDisconnect }: GmailConn
         return;
       }
 
-      // Call API to get auth URL
       const response = await fetch("/api/gmail/auth", {
         method: "POST",
         headers: {
@@ -41,6 +83,11 @@ export function GmailConnect({ isConnected, onConnect, onDisconnect }: GmailConn
 
       if (!response.ok) {
         throw new Error(data.error || "Failed to start OAuth flow");
+      }
+
+      // Call external callback if provided
+      if (externalOnConnect) {
+        externalOnConnect();
       }
 
       // Redirect to Google OAuth
@@ -77,7 +124,12 @@ export function GmailConnect({ isConnected, onConnect, onDisconnect }: GmailConn
         description: "A sua conta Gmail foi desconectada com sucesso.",
       });
 
-      onDisconnect();
+      setInternalIsConnected(false);
+
+      // Call external callback if provided
+      if (externalOnDisconnect) {
+        externalOnDisconnect();
+      }
     } catch (error: any) {
       toast({
         title: "Erro ao desconectar",
@@ -88,6 +140,15 @@ export function GmailConnect({ isConnected, onConnect, onDisconnect }: GmailConn
       setLoading(false);
     }
   };
+
+  if (checkingStatus) {
+    return (
+      <div className="flex items-center gap-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+        <Loader2 className="h-5 w-5 animate-spin text-gray-500" />
+        <p className="text-sm text-gray-600">A verificar conexão...</p>
+      </div>
+    );
+  }
 
   if (isConnected) {
     return (

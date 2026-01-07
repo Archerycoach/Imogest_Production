@@ -1,54 +1,67 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
-    console.log("🔑 Initiating Google OAuth with auth token...");
-
-    // Get user from Authorization header (same pattern as send-email.ts)
+    // Get user from Authorization header or query parameter
     const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      console.error("❌ Missing authorization header");
-      return res.status(401).json({ error: "Missing authorization header" });
+    const tokenFromQuery = req.query.token as string;
+    
+    const token = authHeader 
+      ? authHeader.replace("Bearer ", "")
+      : tokenFromQuery;
+
+    if (!token) {
+      return res.status(401).json({ error: "Missing authorization token" });
     }
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
 
-    if (authError || !user) {
-      console.error("❌ Authentication failed:", authError);
-      return res.status(401).json({ error: "Not authenticated. Please log in first." });
+    if (userError || !user) {
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
     console.log("✅ User authenticated:", user.id);
 
-    // Get Google OAuth credentials from database
-    const { data: settings, error: settingsError } = await (supabaseAdmin as any)
+    // Get Google OAuth credentials from integration_settings
+    const { data: settings, error } = await supabaseAdmin
       .from("integration_settings")
       .select("settings, is_active")
       .eq("integration_name", "google_calendar")
       .eq("is_active", true)
       .single();
 
-    if (settingsError || !settings?.settings?.clientId || !settings?.settings?.clientSecret) {
-      console.error("❌ Google Calendar not configured");
-      return res.status(400).json({
-        error: "Google Calendar integration not configured. Please configure it in admin settings.",
+    if (error || !settings) {
+      console.error("❌ Google Calendar credentials not found:", error);
+      return res.status(400).json({ 
+        error: "Google Calendar integration not configured. Please configure it in admin settings." 
       });
     }
 
-    const { clientId, clientSecret, redirectUri } = settings.settings;
+    const { clientId, clientSecret, redirectUri } = settings.settings as any;
+
+    if (!clientId || !clientSecret || !redirectUri) {
+      console.error("❌ Missing OAuth credentials");
+      return res.status(400).json({ 
+        error: "Missing OAuth credentials. Please check integration settings." 
+      });
+    }
+
+    console.log("✅ OAuth credentials loaded");
 
     // Build Google OAuth URL
     const params = new URLSearchParams({
       client_id: clientId,
       redirect_uri: redirectUri,
       response_type: "code",
-      scope: "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar",
+      scope: "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events",
       access_type: "offline",
       prompt: "consent",
       state: user.id, // Pass user ID in state
@@ -56,11 +69,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 
-    console.log("✅ OAuth URL generated, redirecting...");
-    return res.status(200).json({ authUrl });
+    console.log("✅ Redirecting to Google OAuth...");
+
+    // Server-side redirect instead of returning JSON
+    return res.redirect(302, authUrl);
 
   } catch (error: any) {
-    console.error("❌ Error in Google OAuth init:", error);
-    res.status(500).json({ error: "Failed to initiate Google OAuth flow" });
+    console.error("❌ Error in auth handler:", error);
+    return res.status(500).json({ 
+      error: error instanceof Error ? error.message : "Internal server error" 
+    });
   }
 }

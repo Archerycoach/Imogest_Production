@@ -7,8 +7,10 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Globe, MessageSquare, Calendar, CreditCard, Check, AlertCircle } from "lucide-react";
+import { CreditCard, Globe } from "lucide-react";
 import { getPaymentSettings, updatePaymentSettings } from "@/services/adminService";
+import { GmailConnect } from "@/components/GmailConnect";
+import { GoogleCalendarConnect } from "@/components/GoogleCalendarConnect";
 
 export default function IntegrationsPage() {
   const { toast } = useToast();
@@ -77,11 +79,34 @@ export default function IntegrationsPage() {
           <p className="text-muted-foreground">Gerir conexões com serviços externos</p>
         </div>
 
-        <Tabs defaultValue="payments">
+        <Tabs defaultValue="communication">
           <TabsList>
+            <TabsTrigger value="communication">Comunicação</TabsTrigger>
             <TabsTrigger value="payments">Pagamentos</TabsTrigger>
             <TabsTrigger value="portals">Portais Imobiliários</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="communication" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Google Calendar</CardTitle>
+                <CardDescription>Sincronizar eventos do CRM com o Google Calendar</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <GoogleCalendarConnect />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Gmail</CardTitle>
+                <CardDescription>Enviar emails através da sua conta Gmail</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <GmailConnect />
+              </CardContent>
+            </Card>
+          </TabsContent>
 
           <TabsContent value="payments" className="space-y-6">
             <Card>
@@ -151,6 +176,13 @@ export default function IntegrationsPage() {
 
           <TabsContent value="portals">
             <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Globe className="h-5 w-5" />
+                  <CardTitle>Portais Imobiliários</CardTitle>
+                </div>
+                <CardDescription>Sincronização com portais de imóveis</CardDescription>
+              </CardHeader>
               <CardContent className="py-8 text-center text-muted-foreground">
                 Funcionalidade de portais em desenvolvimento.
               </CardContent>
