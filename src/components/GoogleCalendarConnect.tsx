@@ -148,9 +148,21 @@ export function GoogleCalendarConnect({
         return;
       }
 
+      if (!session.access_token) {
+        console.error("❌ Session exists but access_token is missing:", session);
+        toast({
+          title: "❌ Erro de autenticação",
+          description: "Token de acesso não encontrado. Por favor, faça logout e login novamente.",
+          variant: "destructive",
+        });
+        setConnecting(false);
+        return;
+      }
+
       // Navigate directly to auth endpoint with token in URL parameter
       // The API will handle the redirect to Google
       console.log("✅ Redirecting to auth endpoint...");
+      console.log("Token length:", session.access_token.length);
       window.location.href = `/api/google-calendar/auth?token=${session.access_token}`;
 
     } catch (error: any) {

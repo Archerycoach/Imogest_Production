@@ -14,17 +14,23 @@ export default async function handler(
     const authHeader = req.headers.authorization;
     const tokenFromQuery = req.query.token as string;
     
+    console.log("🔍 Auth endpoint called");
+    console.log("Authorization header:", authHeader ? "present" : "missing");
+    console.log("Token from query:", tokenFromQuery ? `present (${tokenFromQuery.substring(0, 20)}...)` : "missing");
+    
     const token = authHeader 
       ? authHeader.replace("Bearer ", "")
       : tokenFromQuery;
 
     if (!token) {
+      console.error("❌ No token found in request");
       return res.status(401).json({ error: "Missing authorization token" });
     }
 
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
 
     if (userError || !user) {
+      console.error("❌ Token validation failed:", userError);
       return res.status(401).json({ error: "Unauthorized" });
     }
 
