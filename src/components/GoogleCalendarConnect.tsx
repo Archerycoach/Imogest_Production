@@ -133,25 +133,13 @@ export function GoogleCalendarConnect({
     try {
       setConnecting(true);
       setError(null);
-      
-      // Get current session
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
-      if (sessionError || !session) {
-        setError("Sessão expirada. Por favor faça login novamente.");
-        setConnecting(false);
-        return;
-      }
 
-      console.log("🔑 Initiating Google OAuth with auth token...");
+      console.log("🔑 Initiating Google OAuth...");
 
-      // Call the auth endpoint with authorization header
+      // Call the auth endpoint - SSR cookies handle authentication
       const response = await fetch("/api/google-calendar/auth", {
         method: "GET",
-        headers: {
-          "Authorization": `Bearer ${session.access_token}`,
-          "Content-Type": "application/json",
-        },
+        credentials: "include", // Important: include cookies
       });
 
       if (!response.ok) {

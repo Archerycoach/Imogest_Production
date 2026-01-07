@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 interface SyncStats {
@@ -15,6 +16,32 @@ interface SyncStats {
   };
 }
 
+// Get Google credentials from integration_settings
+const getGoogleCredentials = async () => {
+  const { data, error } = await supabaseAdmin
+    .from("integration_settings")
+    .select("settings")
+    .eq("integration_name", "google_calendar")
+    .single();
+
+  if (error || !data) {
+    console.error("❌ Failed to fetch Google Calendar settings:", error);
+    return null;
+  }
+
+  const settings = data.settings as any;
+  
+  if (!settings?.clientId || !settings?.clientSecret) {
+    console.error("❌ Incomplete Google Calendar credentials");
+    return null;
+  }
+
+  return {
+    clientId: settings.clientId,
+    clientSecret: settings.clientSecret,
+  };
+};
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -26,24 +53,37 @@ export default async function handler(
   try {
     console.log("🔄 [sync] Starting bidirectional Google Calendar sync...");
 
-    // Get user from authorization header
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
+    // Create Supabase client with SSR support for API routes
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return req.cookies[name];
+          },
+          set(name: string, value: string, options: CookieOptions) {
+            res.setHeader("Set-Cookie", `${name}=${value}; Path=/; ${options.maxAge ? `Max-Age=${options.maxAge};` : ""} HttpOnly; SameSite=Lax`);
+          },
+          remove(name: string, options: CookieOptions) {
+            res.setHeader("Set-Cookie", `${name}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`);
+          },
+        },
+      }
+    );
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    // Get user from session
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
 
     if (authError || !user) {
       console.error("❌ [sync] Auth error:", authError);
-      return res.status(401).json({ error: "Invalid token" });
+      return res.status(401).json({ error: "Not authenticated. Please log in first." });
     }
 
     console.log("✅ [sync] User authenticated:", user.id);
 
     // Get Google credentials from user_integrations table
-    const { data: credentials, error: credError } = await (supabaseAdmin as any)
+    const { data: credentials, error: credError } = await supabaseAdmin
       .from("user_integrations")
       .select("*")
       .eq("user_id", user.id)
@@ -79,12 +119,17 @@ export default async function handler(
     if (expiresAt <= now) {
       console.log("🔄 [sync] Access token expired, refreshing...");
       
+      const googleCreds = await getGoogleCredentials();
+      if (!googleCreds) {
+        return res.status(500).json({ error: "Failed to load Google credentials" });
+      }
+
       const refreshResponse = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
-          client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!,
-          client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+          client_id: googleCreds.clientId,
+          client_secret: googleCreds.clientSecret,
           refresh_token: credentials.refresh_token,
           grant_type: "refresh_token",
         }),
@@ -98,7 +143,7 @@ export default async function handler(
       accessToken = refreshData.access_token;
 
       // Update credentials in user_integrations table
-      await (supabaseAdmin as any)
+      await supabaseAdmin
         .from("user_integrations")
         .update({
           access_token: accessToken,

@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { createClient } from "@supabase/supabase-js";
 
 // Get credentials from database
 const getGoogleCredentials = async () => {
@@ -26,7 +26,7 @@ const getGoogleCredentials = async () => {
   return {
     clientId: settings.clientId,
     clientSecret: settings.clientSecret,
-    redirectUri: settings.redirectUri, // Can be undefined, handled in handler
+    redirectUri: settings.redirectUri,
   };
 };
 
@@ -37,23 +37,26 @@ export default async function handler(
   console.log("\n🚀 Initiating Google OAuth flow");
 
   try {
-    // Get user from session using cookies (works in browser navigation)
-    const supabase = createClient(
+    // Create Supabase client with SSR support for API routes
+    const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
-        auth: {
-          persistSession: false
+        cookies: {
+          get(name: string) {
+            return req.cookies[name];
+          },
+          set(name: string, value: string, options: CookieOptions) {
+            res.setHeader("Set-Cookie", `${name}=${value}; Path=/; ${options.maxAge ? `Max-Age=${options.maxAge};` : ""} HttpOnly; SameSite=Lax`);
+          },
+          remove(name: string, options: CookieOptions) {
+            res.setHeader("Set-Cookie", `${name}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`);
+          },
         },
-        global: {
-          headers: {
-            cookie: req.headers.cookie || ""
-          }
-        }
       }
     );
 
-    // Get user from session (reads from cookies automatically)
+    // Get user from session
     const { data: { user }, error: userError } = await supabase.auth.getUser();
 
     if (userError || !user) {
@@ -74,7 +77,6 @@ export default async function handler(
     }
 
     // Generate redirectUri from request host if not in database
-    // Priority: 1. DB setting, 2. Origin header, 3. Host header
     const protocol = req.headers["x-forwarded-proto"] || "https";
     const host = req.headers.host;
     const origin = req.headers.origin;

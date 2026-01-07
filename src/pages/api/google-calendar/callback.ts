@@ -16,7 +16,7 @@ const getGoogleCredentials = async () => {
 
   const settings = data.settings as any;
   
-  if (!settings?.clientId || !settings?.clientSecret || !settings?.redirectUri) {
+  if (!settings?.clientId || !settings?.clientSecret) {
     console.error("❌ Incomplete Google Calendar credentials in database");
     return null;
   }
@@ -76,10 +76,21 @@ export default async function handler(
       return res.redirect("/integrations?error=no_credentials");
     }
 
+    // Generate redirectUri if not in database
+    const protocol = req.headers["x-forwarded-proto"] || "https";
+    const host = req.headers.host;
+    const origin = req.headers.origin;
+    
+    const fallbackRedirectUri = origin 
+      ? `${origin}/api/google-calendar/callback`
+      : `${protocol}://${host}/api/google-calendar/callback`;
+
+    const redirectUri = credentials.redirectUri || fallbackRedirectUri;
+
     console.log("\n🔄 Attempting token exchange with Google:");
     console.log("  - Client ID:", credentials.clientId.substring(0, 20) + "...");
     console.log("  - Client Secret:", credentials.clientSecret ? "✅ Present" : "❌ Missing");
-    console.log("  - Redirect URI:", credentials.redirectUri);
+    console.log("  - Redirect URI:", redirectUri);
     console.log("  - Code length:", code.length);
 
     // Exchange code for tokens
@@ -92,7 +103,7 @@ export default async function handler(
         code,
         client_id: credentials.clientId,
         client_secret: credentials.clientSecret,
-        redirect_uri: credentials.redirectUri,
+        redirect_uri: redirectUri,
         grant_type: "authorization_code",
       }),
     });
