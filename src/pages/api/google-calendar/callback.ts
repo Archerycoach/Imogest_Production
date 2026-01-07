@@ -1,31 +1,16 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import axios from "axios";
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse
-) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
-    const { code, state: userId, error } = req.query;
+    const { code, state: userId } = req.query;
 
-    if (error) {
-      console.error("OAuth error:", error);
-      return res.redirect("/integrations?error=oauth_error");
-    }
-
-    if (!code || typeof code !== "string") {
-      console.error("No authorization code received");
-      return res.redirect("/integrations?error=no_code");
-    }
-
-    if (!userId || typeof userId !== "string") {
-      console.error("No user ID in state");
-      return res.redirect("/integrations?error=no_user");
+    if (!code || !userId || typeof code !== "string" || typeof userId !== "string") {
+      return res.redirect("/integrations?error=invalid_callback");
     }
 
     console.log("📨 Received OAuth callback for user:", userId);
@@ -34,60 +19,62 @@ export default async function handler(
     const { data: settings, error: settingsError } = await (supabaseAdmin as any)
       .from("integration_settings")
       .select("*")
-      .eq("user_id", userId)
+      .eq("integration_name", "google_calendar")
       .single();
 
     if (settingsError || !settings?.google_client_id || !settings?.google_client_secret) {
-      console.error("Failed to get OAuth credentials:", settingsError);
-      return res.redirect("/integrations?error=missing_credentials");
+      console.error("❌ Failed to get settings:", settingsError);
+      return res.redirect("/integrations?error=config_missing");
     }
 
-    // Exchange code for tokens
-    const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/google-calendar/callback`;
+    const { google_client_id, google_client_secret, google_redirect_uri } = settings;
 
-    const tokenResponse = await axios.post("https://oauth2.googleapis.com/token", {
-      code,
-      client_id: settings.google_client_id,
-      client_secret: settings.google_client_secret,
-      redirect_uri: redirectUri,
-      grant_type: "authorization_code",
+    // Exchange code for tokens
+    const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code,
+        client_id: google_client_id,
+        client_secret: google_client_secret,
+        redirect_uri: google_redirect_uri,
+        grant_type: "authorization_code",
+      }),
     });
 
-    const { access_token, refresh_token, expires_in } = tokenResponse.data;
-
-    if (!access_token || !refresh_token) {
-      console.error("Failed to get tokens from Google");
+    if (!tokenResponse.ok) {
+      console.error("❌ Token exchange failed:", await tokenResponse.text());
       return res.redirect("/integrations?error=token_exchange_failed");
     }
 
-    console.log("🎉 Successfully obtained tokens");
+    const tokens = await tokenResponse.json();
+    const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
 
-    // Calculate token expiry
-    const expiresAt = new Date(Date.now() + expires_in * 1000).toISOString();
+    console.log("✅ Tokens received, saving to database...");
 
-    // Store tokens in database
+    // Save or update user integration
     const { error: updateError } = await (supabaseAdmin as any)
-      .from("integration_settings")
-      .update({
-        google_calendar_access_token: access_token,
-        google_calendar_refresh_token: refresh_token,
-        google_calendar_token_expiry: expiresAt,
-        google_calendar_connected: true,
-        updated_at: new Date().toISOString(),
+      .from("user_integrations")
+      .upsert({
+        user_id: userId,
+        integration_type: "google_calendar",
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        token_expiry: expiresAt.toISOString(),
+        is_active: true,
       })
       .eq("user_id", userId);
 
     if (updateError) {
-      console.error("Failed to store tokens:", updateError);
-      return res.redirect("/integrations?error=store_tokens_failed");
+      console.error("❌ Failed to save tokens:", updateError);
+      return res.redirect("/integrations?error=save_failed");
     }
 
-    console.log("✅ Google Calendar connected successfully");
-
-    // Redirect back to integrations page with success
+    console.log("✅ Google Calendar connected successfully!");
     return res.redirect("/integrations?success=google_calendar_connected");
+
   } catch (error) {
-    console.error("Error in Google Calendar callback:");
+    console.error("❌ Error in Google OAuth callback:");
     console.error(error);
     res.redirect("/integrations?error=callback_failed");
   }

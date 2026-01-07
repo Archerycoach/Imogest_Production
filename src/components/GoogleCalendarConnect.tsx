@@ -132,34 +132,44 @@ export function GoogleCalendarConnect({
   const handleConnect = async () => {
     try {
       setConnecting(true);
-      setError(null);
-
       console.log("🔑 Initiating Google OAuth...");
 
-      // Call the auth endpoint - SSR cookies handle authentication
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        toast({
+          title: "❌ Erro",
+          description: "Sessão expirada. Por favor, faça login novamente.",
+          variant: "destructive",
+        });
+        setConnecting(false);
+        return;
+      }
+
       const response = await fetch("/api/google-calendar/auth", {
         method: "GET",
-        credentials: "include", // Important: include cookies
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+        },
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Erro ao iniciar OAuth");
+        const error = await response.json();
+        throw new Error(error.error || "Failed to initiate OAuth");
       }
 
-      const data = await response.json();
+      const { authUrl } = await response.json();
       
-      if (!data.url) {
-        throw new Error("URL de autorização não recebida");
-      }
-
       console.log("✅ Redirecting to Google OAuth...");
-      
-      // Redirect to Google OAuth
-      window.location.href = data.url;
-    } catch (err) {
-      console.error("Error connecting:", err);
-      setError(err instanceof Error ? err.message : "Erro ao conectar. Tente novamente.");
+      window.location.href = authUrl;
+
+    } catch (error: any) {
+      console.error("Error connecting:", error);
+      toast({
+        title: "❌ Erro ao conectar",
+        description: error.message || "Falha ao conectar. Tente novamente.",
+        variant: "destructive",
+      });
       setConnecting(false);
     }
   };
