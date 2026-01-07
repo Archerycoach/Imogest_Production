@@ -10,31 +10,23 @@ export default async function handler(
   }
 
   try {
-    // Get user from Authorization header or query parameter
-    const authHeader = req.headers.authorization;
-    const tokenFromQuery = req.query.token as string;
-    
-    console.log("🔍 Auth endpoint called");
-    console.log("Authorization header:", authHeader ? "present" : "missing");
-    console.log("Token from query:", tokenFromQuery ? `present (${tokenFromQuery.substring(0, 20)}...)` : "missing");
-    
-    const token = authHeader 
-      ? authHeader.replace("Bearer ", "")
-      : tokenFromQuery;
+    // 1. Get token from query parameter (passed by frontend redirect)
+    const token = req.query.token as string;
 
     if (!token) {
-      console.error("❌ No token found in request");
-      return res.status(401).json({ error: "Missing authorization token" });
+      console.error("❌ Missing token in query params");
+      return res.status(401).json({ error: "Missing authorization token. Please try logging in again." });
     }
 
+    // 2. Validate token using Admin client (works for any valid JWT)
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
 
     if (userError || !user) {
-      console.error("❌ Token validation failed:", userError);
-      return res.status(401).json({ error: "Unauthorized" });
+      console.error("❌ Invalid token:", userError);
+      return res.status(401).json({ error: "Invalid or expired token. Please refresh the page and try again." });
     }
 
-    console.log("✅ User authenticated:", user.id);
+    console.log("✅ User authenticated via token:", user.id);
 
     // Get Google OAuth credentials from integration_settings
     const { data: settings, error } = await supabaseAdmin
@@ -77,7 +69,7 @@ export default async function handler(
 
     console.log("✅ Redirecting to Google OAuth...");
 
-    // Server-side redirect instead of returning JSON
+    // Server-side redirect to Google
     return res.redirect(302, authUrl);
 
   } catch (error: any) {
