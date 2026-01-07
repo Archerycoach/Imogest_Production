@@ -4,6 +4,30 @@ import { CacheManager } from "@/lib/cacheInvalidation";
 
 // --- Core Auth Functions ---
 
+/**
+ * Validates current session and refreshes if needed
+ * Returns null if session is invalid or expired
+ */
+export const validateAndRefreshSession = async (): Promise<Session | null> => {
+  try {
+    // Try to refresh session
+    const { data: { session }, error } = await supabase.auth.refreshSession();
+    
+    if (error || !session) {
+      console.error("Session validation failed:", error);
+      // Clear invalid session
+      await supabase.auth.signOut();
+      return null;
+    }
+    
+    return session;
+  } catch (error) {
+    console.error("Unexpected error validating session:", error);
+    await supabase.auth.signOut();
+    return null;
+  }
+};
+
 export const getSession = async (): Promise<Session | null> => {
   try {
     const { data: { session }, error } = await supabase.auth.getSession();

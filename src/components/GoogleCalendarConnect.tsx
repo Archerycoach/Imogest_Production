@@ -134,14 +134,15 @@ export function GoogleCalendarConnect({
   const handleConnect = async () => {
     try {
       setConnecting(true);
-      console.log("🔑 Initiating Google OAuth...");
+      console.log("🔗 Connecting to Google Calendar...");
 
       const { data: { session } } = await supabase.auth.getSession();
-      
+      console.log("✅ Session found:", !!session);
+
       if (!session) {
         toast({
-          title: "❌ Erro",
-          description: "Sessão expirada. Por favor, faça login novamente.",
+          title: "Erro",
+          description: "Sessão não encontrada. Por favor, faça login novamente.",
           variant: "destructive",
         });
         setConnecting(false);
@@ -149,27 +150,46 @@ export function GoogleCalendarConnect({
       }
 
       if (!session.access_token) {
-        console.error("❌ Session exists but access_token is missing:", session);
         toast({
-          title: "❌ Erro de autenticação",
-          description: "Token de acesso não encontrado. Por favor, faça logout e login novamente.",
+          title: "Erro",
+          description: "Token de acesso não encontrado. Por favor, faça login novamente.",
           variant: "destructive",
         });
         setConnecting(false);
         return;
       }
 
-      // Navigate directly to auth endpoint with token in URL parameter
-      // The API will handle the redirect to Google
-      console.log("✅ Redirecting to auth endpoint...");
-      console.log("Token length:", session.access_token.length);
-      window.location.href = `/api/google-calendar/auth?token=${session.access_token}`;
+      console.log("✅ Access token found:", session.access_token.length, "characters");
+      
+      // TEMPORARY DEBUG: Test token passing
+      console.log("🧪 Testing token passing...");
+      const debugUrl = `/api/google-calendar/debug-auth?token=${encodeURIComponent(session.access_token)}`;
+      console.log("Debug URL:", debugUrl);
+      
+      const debugResponse = await fetch(debugUrl);
+      const debugData = await debugResponse.json();
+      console.log("🧪 Debug response:", debugData);
+      
+      if (!debugData.success) {
+        toast({
+          title: "Erro de Debug",
+          description: `Token validation failed: ${debugData.error || debugData.message}`,
+          variant: "destructive",
+        });
+        setConnecting(false);
+        return;
+      }
 
-    } catch (error: any) {
-      console.error("Error connecting:", error);
+      console.log("✅ Token validation successful! Redirecting to auth endpoint...");
+      console.log("Token length:", session.access_token.length);
+
+      // Actual auth redirect
+      window.location.href = `/api/google-calendar/auth?token=${encodeURIComponent(session.access_token)}`;
+    } catch (error) {
+      console.error("❌ Connect error:", error);
       toast({
-        title: "❌ Erro ao conectar",
-        description: error.message || "Falha ao conectar. Tente novamente.",
+        title: "Erro ao conectar",
+        description: "Não foi possível conectar ao Google Calendar. Tente novamente.",
         variant: "destructive",
       });
       setConnecting(false);
