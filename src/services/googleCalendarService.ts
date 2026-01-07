@@ -4,52 +4,105 @@ import type { Database } from "@/integrations/supabase/types";
 type CalendarEvent = Database["public"]["Tables"]["calendar_events"]["Row"];
 type CalendarEventInsert = Database["public"]["Tables"]["calendar_events"]["Insert"];
 
-// Google Calendar integration uses user_integrations table
+// Check if Google Calendar is connected for current user
+export const isGoogleCalendarConnected = async (): Promise<boolean> => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) return false;
 
+    const response = await fetch("/api/google-calendar/status", {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${session.access_token}`,
+      },
+    });
+
+    if (!response.ok) {
+      console.error("Error checking Google Calendar connection");
+      return false;
+    }
+
+    const { isConnected } = await response.json();
+    return isConnected;
+  } catch (error) {
+    console.error("Error in isGoogleCalendarConnected:", error);
+    return false;
+  }
+};
+
+// Trigger sync via API
+export const syncGoogleCalendarEvents = async () => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      console.error("No session found");
+      return false;
+    }
+
+    const response = await fetch("/api/google-calendar/sync", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${session.access_token}`,
+      },
+    });
+
+    if (!response.ok) {
+      console.error("Sync failed:", await response.text());
+      return false;
+    }
+
+    const result = await response.json();
+    console.log("✅ Sync completed:", result);
+    return true;
+  } catch (error) {
+    console.error("Error in syncGoogleCalendarEvents:", error);
+    return false;
+  }
+};
+
+// Disconnect Google Calendar
+export const disconnectGoogleCalendar = async () => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (!session) {
+      console.error("No session found");
+      return false;
+    }
+
+    const response = await fetch("/api/google-calendar/disconnect", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${session.access_token}`,
+      },
+    });
+
+    if (!response.ok) {
+      console.error("Disconnect failed");
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Error disconnecting Google Calendar:", error);
+    return false;
+  }
+};
+
+// Legacy functions kept for compatibility (now just log warnings)
 export const storeGoogleCredentials = async (
   accessToken: string,
   refreshToken: string,
   expiresAt: string
 ) => {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
-
-  // Format date for PostgreSQL
-  const expiryDate = new Date(expiresAt).toISOString();
-
-  const { error } = await (supabase as any)
-    .from("user_integrations")
-    .upsert({
-      user_id: user.id,
-      integration_type: "google_calendar",
-      access_token: accessToken,
-      refresh_token: refreshToken,
-      token_expiry: expiryDate,
-      updated_at: new Date().toISOString()
-    }, {
-      onConflict: "user_id,integration_type"
-    });
-
-  if (error) throw error;
+  console.warn("storeGoogleCredentials is deprecated - OAuth flow handles this automatically");
 };
 
 export const getGoogleCredentials = async () => {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  const { data, error } = await (supabase as any)
-    .from("user_integrations")
-    .select("access_token, refresh_token, token_expiry")
-    .eq("user_id", user.id)
-    .eq("integration_type", "google_calendar")
-    .maybeSingle();
-
-  if (error) {
-    console.error("Error fetching Google credentials:", error);
-    return null;
-  }
-
-  return data;
+  console.warn("getGoogleCredentials is deprecated - use API routes instead");
+  return null;
 };
 
 export const saveGoogleCredentials = async (
@@ -57,52 +110,29 @@ export const saveGoogleCredentials = async (
   refreshToken: string,
   expiryDate: Date
 ) => {
-  return storeGoogleCredentials(
-    accessToken,
-    refreshToken,
-    expiryDate.toISOString()
-  );
+  console.warn("saveGoogleCredentials is deprecated - OAuth flow handles this automatically");
 };
 
 export const removeGoogleCredentials = async () => {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
-
-  const { error } = await (supabase as any)
-    .from("user_integrations")
-    .delete()
-    .eq("user_id", user.id)
-    .eq("integration_type", "google_calendar");
-
-  if (error) throw error;
+  return disconnectGoogleCalendar();
 };
 
 export const checkGoogleCalendarConnection = async () => {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return false;
-
-  const { data } = await (supabase as any)
-    .from("user_integrations")
-    .select("is_active")
-    .eq("user_id", user.id)
-    .eq("integration_type", "google_calendar")
-    .maybeSingle();
-
-  return !!data?.is_active;
+  return isGoogleCalendarConnected();
 };
 
 export const syncCalendarEvent = async (event: any) => {
-  console.log("Calendar sync temporarily disabled due to schema changes");
+  console.log("syncCalendarEvent - use syncGoogleCalendarEvents instead");
   return null;
 };
 
 export const listGoogleEvents = async (start: Date, end: Date) => {
-   // Placeholder for actual implementation if needed later
-   return [];
+  console.log("listGoogleEvents - not implemented");
+  return [];
 };
 
 export const syncEventToGoogle = async (event: any) => {
-  console.log("Syncing event to Google Calendar:", event.title);
+  console.log("syncEventToGoogle - use sync API instead");
   return true;
 };
 
@@ -110,17 +140,17 @@ export const updateGoogleEvent = async (
   googleEventId: string,
   event: Partial<CalendarEvent>
 ): Promise<boolean> => {
-  console.warn("Google Calendar sync disabled");
+  console.warn("updateGoogleEvent - not implemented");
   return false;
 };
 
 export const deleteGoogleEvent = async (googleEventId: string): Promise<boolean> => {
-  console.warn("Google Calendar sync disabled");
+  console.warn("deleteGoogleEvent - not implemented");
   return false;
 };
 
 export const importGoogleCalendarEvents = async (): Promise<CalendarEvent[]> => {
-  console.warn("Google Calendar sync disabled");
+  console.warn("importGoogleCalendarEvents - use sync API instead");
   return [];
 };
 
@@ -198,63 +228,7 @@ export const createGoogleCalendarEvent = async (event: {
   });
 };
 
-export const disconnectGoogleCalendar = async () => {
-  return true;
-};
-
-export const syncGoogleCalendarEvents = async () => {
-   console.log("Syncing calendar events...");
-   return true;
-};
-
-// Check if Google Calendar is connected for current user
-export const isGoogleCalendarConnected = async (): Promise<boolean> => {
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) return false;
-
-    const { data, error } = await (supabase as any)
-      .from("user_integrations")
-      .select("is_active")
-      .eq("user_id", user.id)
-      .eq("integration_type", "google_calendar")
-      .maybeSingle();
-
-    if (error) {
-      console.error("Error checking Google Calendar connection:", error);
-      return false;
-    }
-
-    return !!data?.is_active;
-  } catch (error) {
-    console.error("Error in isGoogleCalendarConnected:", error);
-    return false;
-  }
-};
-
-// Get Google Calendar access token
 export const getGoogleCalendarToken = async (): Promise<string | null> => {
-  try {
-    const { data: { user } } = await supabase.auth.getUser();
-    
-    if (!user) return null;
-
-    const { data, error } = await (supabase as any)
-      .from("user_integrations")
-      .select("access_token")
-      .eq("user_id", user.id)
-      .eq("integration_type", "google_calendar")
-      .maybeSingle();
-
-    if (error) {
-      console.error("Error getting Google Calendar token:", error);
-      return null;
-    }
-
-    return data?.access_token || null;
-  } catch (error) {
-    console.error("Error in getGoogleCalendarToken:", error);
-    return null;
-  }
+  console.warn("getGoogleCalendarToken - use API routes instead");
+  return null;
 };

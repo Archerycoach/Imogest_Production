@@ -40,27 +40,29 @@ export function GoogleCalendarConnect({
   const checkConnection = async () => {
     try {
       setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session } } = await supabase.auth.getSession();
       
-      if (!user) {
+      if (!session) {
         setLoading(false);
         return;
       }
 
-      const { data, error } = await supabase
-        .from("user_integrations")
-        .select("is_active")
-        .eq("user_id", user.id)
-        .eq("integration_type", "google_calendar")
-        .maybeSingle();
+      const response = await fetch("/api/google-calendar/status", {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+      });
 
-      if (error) {
-        console.error("Error checking connection:", error);
+      if (!response.ok) {
+        console.error("Error checking connection status");
         setLoading(false);
         return;
       }
 
-      if (data?.is_active) {
+      const { isConnected } = await response.json();
+
+      if (isConnected) {
         setConnected(true);
         if (onConnect) onConnect();
       }
@@ -178,22 +180,23 @@ export function GoogleCalendarConnect({
     try {
       setLoading(true);
       
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
         setError("Sessão expirada. Por favor faça login novamente.");
         setLoading(false);
         return;
       }
 
-      // Deactivate the integration
-      const { error: updateError } = await supabase
-        .from("user_integrations")
-        .update({ is_active: false })
-        .eq("user_id", user.id)
-        .eq("integration_type", "google_calendar");
+      // Call disconnect API
+      const response = await fetch("/api/google-calendar/disconnect", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+      });
 
-      if (updateError) {
-        throw updateError;
+      if (!response.ok) {
+        throw new Error("Failed to disconnect");
       }
 
       setConnected(false);

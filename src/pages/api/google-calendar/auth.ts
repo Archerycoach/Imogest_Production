@@ -29,24 +29,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Get Google OAuth credentials from database
     const { data: settings, error: settingsError } = await (supabaseAdmin as any)
       .from("integration_settings")
-      .select("*")
+      .select("settings, is_active")
       .eq("integration_name", "google_calendar")
       .eq("is_active", true)
       .single();
 
-    if (settingsError || !settings?.google_client_id || !settings?.google_client_secret) {
+    if (settingsError || !settings?.settings?.clientId || !settings?.settings?.clientSecret) {
       console.error("❌ Google Calendar not configured");
       return res.status(400).json({
         error: "Google Calendar integration not configured. Please configure it in admin settings.",
       });
     }
 
-    const { google_client_id, google_redirect_uri } = settings;
+    const { clientId, clientSecret, redirectUri } = settings.settings;
 
     // Build Google OAuth URL
     const params = new URLSearchParams({
-      client_id: google_client_id,
-      redirect_uri: google_redirect_uri,
+      client_id: clientId,
+      redirect_uri: redirectUri,
       response_type: "code",
       scope: "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar",
       access_type: "offline",

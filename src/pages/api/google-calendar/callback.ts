@@ -18,16 +18,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Get Google OAuth credentials
     const { data: settings, error: settingsError } = await (supabaseAdmin as any)
       .from("integration_settings")
-      .select("*")
+      .select("settings, is_active")
       .eq("integration_name", "google_calendar")
+      .eq("is_active", true)
       .single();
 
-    if (settingsError || !settings?.google_client_id || !settings?.google_client_secret) {
-      console.error("❌ Failed to get settings:", settingsError);
-      return res.redirect("/integrations?error=config_missing");
+    if (settingsError || !settings?.settings?.clientId || !settings?.settings?.clientSecret) {
+      console.error("❌ Google Calendar credentials not found:", settingsError);
+      return res.redirect("/integrations?error=no_credentials");
     }
 
-    const { google_client_id, google_client_secret, google_redirect_uri } = settings;
+    const { clientId, clientSecret, redirectUri } = settings.settings;
 
     // Exchange code for tokens
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
@@ -35,9 +36,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         code,
-        client_id: google_client_id,
-        client_secret: google_client_secret,
-        redirect_uri: google_redirect_uri,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri,
         grant_type: "authorization_code",
       }),
     });

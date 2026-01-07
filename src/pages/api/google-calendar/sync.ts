@@ -84,8 +84,9 @@ async function getValidAccessToken(integration: any): Promise<string | null> {
   // Get OAuth credentials from settings
   const { data: settings, error } = await (supabaseAdmin as any)
     .from("integration_settings")
-    .select("*")
+    .select("settings, is_active")
     .eq("integration_name", "google_calendar")
+    .eq("is_active", true)
     .single();
 
   if (error || !settings) {
@@ -93,13 +94,15 @@ async function getValidAccessToken(integration: any): Promise<string | null> {
     return null;
   }
 
+  const { clientId, clientSecret } = settings.settings;
+
   // Refresh the token
   const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      client_id: settings.google_client_id,
-      client_secret: settings.google_client_secret,
+      client_id: clientId,
+      client_secret: clientSecret,
       refresh_token: integration.refresh_token,
       grant_type: "refresh_token",
     }),
