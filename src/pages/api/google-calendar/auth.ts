@@ -1,113 +1,98 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { supabase } from "@/integrations/supabase/client";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { google } from "googleapis";
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  console.log("🔍 === /api/google-calendar/auth called ===");
-  console.log("Method:", req.method);
-  console.log("Cookies:", Object.keys(req.cookies));
-
-  if (req.method !== "GET") {
-    console.error("❌ Invalid method:", req.method);
-    return res.status(405).json({ error: "Method not allowed" });
-  }
-
   try {
-    // Get session from cookies (Supabase automatically sets cookies on login)
-    const supabaseAccessToken = req.cookies['sb-access-token'];
-    const supabaseRefreshToken = req.cookies['sb-refresh-token'];
-
-    console.log("🍪 Cookies check:", {
-      hasAccessToken: !!supabaseAccessToken,
-      hasRefreshToken: !!supabaseRefreshToken,
-      accessTokenLength: supabaseAccessToken?.length || 0
+    console.log("🔍 === /api/google-calendar/auth called ===");
+    console.log("Method:", req.method);
+    console.log("Headers:", {
+      origin: req.headers.origin,
+      referer: req.headers.referer,
+      cookie: req.headers.cookie ? "present" : "missing",
     });
 
-    if (!supabaseAccessToken) {
-      console.error("❌ No session cookie found");
+    // Get session from Supabase cookies (automatic)
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    console.log("🔐 Session check:", {
+      hasSession: !!session,
+      hasUser: !!session?.user,
+      userId: session?.user?.id,
+      error: sessionError?.message,
+    });
+
+    if (sessionError || !session?.user) {
+      console.error("❌ No valid session found:", sessionError?.message || "Session is null");
       return res.status(401).json({ 
         error: "Unauthorized. Please login first.",
-        debug: { reason: "no_session_cookie" }
-      });
-    }
-
-    // Validate the session token
-    console.log("🔐 Validating session token...");
-    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(supabaseAccessToken);
-
-    if (userError || !user) {
-      console.error("❌ Session validation failed:", userError?.message);
-      return res.status(401).json({ 
-        error: "Invalid session. Please login again.",
-        debug: { 
-          reason: "invalid_session",
-          error: userError?.message 
+        debug: {
+          reason: sessionError ? "session_error" : "no_session_cookie"
         }
       });
     }
 
-    console.log("✅ User authenticated:", {
-      userId: user.id,
-      email: user.email
-    });
+    const userId = session.user.id;
+    console.log("✅ Valid session for user:", userId);
 
-    // Get Google OAuth credentials from integration_settings
-    console.log("📋 Fetching Google OAuth credentials...");
-    const { data: settings, error } = await supabaseAdmin
+    // Get OAuth credentials from database (integration_settings)
+    console.log("🔍 Fetching OAuth credentials for google_calendar");
+    const { data: settingsData, error: credError } = await supabaseAdmin
       .from("integration_settings")
-      .select("settings, is_active")
+      .select("settings")
       .eq("integration_name", "google_calendar")
-      .eq("is_active", true)
       .single();
 
-    if (error || !settings) {
-      console.error("❌ Google Calendar credentials not found:", error);
+    if (credError || !settingsData?.settings) {
+      console.error("❌ OAuth credentials not found:", credError?.message);
       return res.status(400).json({ 
-        error: "Google Calendar integration not configured. Please configure it in admin settings." 
+        error: "Google Calendar credentials not configured. Please contact support." 
       });
     }
 
-    const { clientId, clientSecret, redirectUri } = settings.settings as any;
+    // Parse settings safely
+    const settings = settingsData.settings as Record<string, any>;
+    const clientId = settings.clientId || settings.client_id;
+    const clientSecret = settings.clientSecret || settings.client_secret;
 
-    if (!clientId || !clientSecret || !redirectUri) {
-      console.error("❌ Missing OAuth credentials");
+    if (!clientId || !clientSecret) {
+      console.error("❌ Incomplete OAuth credentials in settings");
       return res.status(400).json({ 
-        error: "Missing OAuth credentials. Please check integration settings." 
+        error: "Invalid Google Calendar configuration." 
       });
     }
 
-    console.log("✅ OAuth credentials loaded:", {
-      hasClientId: !!clientId,
-      hasClientSecret: !!clientSecret,
-      redirectUri
-    });
+    console.log("✅ OAuth credentials found");
 
-    // Build Google OAuth URL
-    const params = new URLSearchParams({
-      client_id: clientId,
-      redirect_uri: redirectUri,
-      response_type: "code",
-      scope: "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events",
+    // Generate OAuth URL
+    const oauth2Client = new google.auth.OAuth2(
+      clientId,
+      clientSecret,
+      `${process.env.NEXT_PUBLIC_APP_URL}/api/google-calendar/callback`
+    );
+
+    const authUrl = oauth2Client.generateAuthUrl({
       access_type: "offline",
+      scope: [
+        "https://www.googleapis.com/auth/calendar",
+        "https://www.googleapis.com/auth/calendar.events",
+      ],
+      state: userId,
       prompt: "consent",
-      state: user.id,
     });
 
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+    console.log("✅ Auth URL generated successfully");
+    console.log("🔗 Returning authUrl to frontend for redirect");
 
-    console.log("✅ Redirecting to Google OAuth...");
-    console.log("Auth URL:", authUrl.substring(0, 150) + "...");
-
-    return res.redirect(302, authUrl);
-
-  } catch (error: any) {
-    console.error("❌ Unexpected error:", {
-      message: error.message,
-      stack: error.stack
-    });
+    // Return the auth URL as JSON instead of redirecting
+    return res.status(200).json({ authUrl });
+    
+  } catch (error) {
+    console.error("❌ Error in /api/google-calendar/auth:", error);
     return res.status(500).json({ 
       error: error instanceof Error ? error.message : "Internal server error" 
     });

@@ -133,12 +133,46 @@ export function GoogleCalendarConnect({
     try {
       setConnecting(true);
       console.log("🔗 Connecting to Google Calendar...");
-      console.log("📋 Using cookie-based authentication (no token in URL)");
+      console.log("📋 Using cookie-based authentication with credentials: 'include'");
 
-      // Simply redirect to the auth endpoint
-      // The browser will automatically send session cookies
-      console.log("🚀 Redirecting to: /api/google-calendar/auth");
-      window.location.href = "/api/google-calendar/auth";
+      // Make API call with credentials to ensure cookies are sent
+      const response = await fetch("/api/google-calendar/auth", {
+        method: "GET",
+        credentials: "include", // CRITICAL: Ensures cookies are sent
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      console.log("📊 Response status:", response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error("❌ Auth endpoint error:", errorData);
+        
+        if (response.status === 401) {
+          toast({
+            title: "Sessão expirada",
+            description: "Por favor, faça login novamente.",
+            variant: "destructive",
+          });
+          // Redirect to login after a short delay
+          setTimeout(() => {
+            window.location.href = "/login";
+          }, 2000);
+          return;
+        }
+        
+        throw new Error(errorData.error || "Failed to connect");
+      }
+
+      // Get the auth URL from the response
+      const { authUrl } = await response.json();
+      console.log("✅ Auth URL received, redirecting to Google...");
+      console.log("🔗 Redirect URL:", authUrl);
+
+      // Now redirect to Google OAuth
+      window.location.href = authUrl;
       
     } catch (error) {
       console.error("❌ Connect error:", error);
