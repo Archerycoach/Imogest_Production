@@ -136,44 +136,82 @@ export function GoogleCalendarConnect({
       setConnecting(true);
       console.log("🔗 Connecting to Google Calendar...");
 
-      // Check if user is logged in
-      const { data: { session } } = await supabase.auth.getSession();
+      // Step 1: Get current session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-      if (!session) {
-        console.error("❌ No session found");
-        toast({
-          title: "Erro",
-          description: "Por favor faça login primeiro.",
-          variant: "destructive",
-        });
-        setConnecting(false);
-        return;
-      }
-
-      console.log("✅ Session found");
-      console.log("📋 Session details:", {
-        hasAccessToken: !!session.access_token,
-        tokenLength: session.access_token?.length || 0,
-        tokenPreview: session.access_token?.substring(0, 50) + "...",
-        expiresAt: session.expires_at,
-        user: session.user?.email
+      console.log("📋 Initial session check:", {
+        exists: !!session,
+        hasAccessToken: !!session?.access_token,
+        tokenType: typeof session?.access_token,
+        tokenLength: session?.access_token?.length || 0,
+        sessionError: sessionError?.message
       });
 
-      if (!session.access_token) {
-        console.error("❌ No access token in session");
-        toast({
-          title: "Erro",
-          description: "Token de autenticação não encontrado. Por favor faça login novamente.",
-          variant: "destructive",
+      // Step 2: If no session or no access token, try to refresh
+      if (!session || !session.access_token) {
+        console.log("⚠️ No valid session found, attempting refresh...");
+        
+        const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession();
+        
+        console.log("🔄 Refresh attempt result:", {
+          success: !!refreshedSession,
+          hasAccessToken: !!refreshedSession?.access_token,
+          refreshError: refreshError?.message
         });
-        setConnecting(false);
+
+        if (!refreshedSession || !refreshedSession.access_token) {
+          console.error("❌ Session refresh failed");
+          toast({
+            title: "Sessão expirada",
+            description: "Por favor faça login novamente para continuar.",
+            variant: "destructive",
+          });
+          setConnecting(false);
+          
+          // Redirect to login
+          window.location.href = "/login";
+          return;
+        }
+
+        // Use refreshed session
+        console.log("✅ Session refreshed successfully");
+        const authUrl = `/api/google-calendar/auth?token=${refreshedSession.access_token}`;
+        console.log("🚀 Redirecting to:", authUrl.substring(0, 100) + "...");
+        window.location.href = authUrl;
         return;
       }
 
-      const authUrl = `/api/google-calendar/auth?token=${session.access_token}`;
-      console.log("🚀 Redirecting to:", authUrl.substring(0, 100) + "...");
+      // Step 3: Validate token format
+      const token = session.access_token;
+      if (token === "undefined" || token === "null" || token.length < 20) {
+        console.error("❌ Invalid token format:", {
+          value: token,
+          length: token.length,
+          isUndefinedString: token === "undefined",
+          isNullString: token === "null"
+        });
+        
+        toast({
+          title: "Erro de autenticação",
+          description: "Token inválido. Por favor faça login novamente.",
+          variant: "destructive",
+        });
+        setConnecting(false);
+        window.location.href = "/login";
+        return;
+      }
 
-      // Navigate to auth endpoint with token
+      // Step 4: All good, redirect to auth
+      console.log("✅ Valid session found, redirecting to auth endpoint...");
+      console.log("📊 Token details:", {
+        length: token.length,
+        preview: token.substring(0, 50) + "...",
+        expiresAt: session.expires_at
+      });
+
+      const authUrl = `/api/google-calendar/auth?token=${token}`;
+      console.log("🚀 Full auth URL:", authUrl.substring(0, 100) + "...");
+      
       window.location.href = authUrl;
       
     } catch (error) {
