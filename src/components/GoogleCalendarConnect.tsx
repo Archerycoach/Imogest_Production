@@ -167,12 +167,26 @@ export function GoogleCalendarConnect({
 
       console.log("[GoogleCalendar] Session valid, starting OAuth flow...");
 
-      // Start OAuth flow
+      // Get session token for authorization
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.access_token) {
+        setSessionError("Failed to get access token. Please log in again.");
+        toast({
+          title: "Authentication Error",
+          description: "Failed to get access token. Please log in again.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Start OAuth flow with authorization header
       const response = await fetch("/api/google-calendar/auth", {
         method: "GET",
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
         },
       });
 
