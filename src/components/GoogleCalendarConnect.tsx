@@ -1,11 +1,13 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { AlertCircle, CheckCircle2, Calendar, Loader2 } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { supabase } from "@/integrations/supabase/client";
+import { CalendarIcon, CheckCircle, XCircle, Loader2, RefreshCw, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { SessionManager } from "@/lib/sessionManager";
+import { useSessionRefresh } from "@/hooks/useSessionRefresh";
+import { useRouter } from "next/router";
+import { supabase } from "@/integrations/supabase/client";
 
 interface GoogleCalendarConnectProps {
   isConnected?: boolean;
@@ -18,16 +20,21 @@ export function GoogleCalendarConnect({
   onConnect, 
   onDisconnect 
 }: GoogleCalendarConnectProps = {}) {
-  const [connected, setConnected] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [connecting, setConnecting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
+  const router = useRouter();
+  const [isConnected, setIsConnected] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingStatus, setIsCheckingStatus] = useState(true);
+  const [isValidatingSession, setIsValidatingSession] = useState(false);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+
+  // Enable automatic session refresh
+  useSessionRefresh();
 
   useEffect(() => {
     if (propConnected !== undefined) {
-      setConnected(propConnected);
-      setLoading(false);
+      setIsConnected(propConnected);
+      setIsLoading(false);
     } else {
       checkConnection();
     }
@@ -39,11 +46,11 @@ export function GoogleCalendarConnect({
 
   const checkConnection = async () => {
     try {
-      setLoading(true);
+      setIsLoading(true);
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session) {
-        setLoading(false);
+        setIsLoading(false);
         return;
       }
 
@@ -56,21 +63,21 @@ export function GoogleCalendarConnect({
 
       if (!response.ok) {
         console.error("Error checking connection status");
-        setLoading(false);
+        setIsLoading(false);
         return;
       }
 
       const { isConnected } = await response.json();
 
       if (isConnected) {
-        setConnected(true);
+        setIsConnected(true);
         if (onConnect) onConnect();
       }
       
-      setLoading(false);
+      setIsLoading(false);
     } catch (error) {
       console.error("Error in checkConnection:", error);
-      setLoading(false);
+      setIsLoading(false);
     }
   };
 
@@ -80,7 +87,7 @@ export function GoogleCalendarConnect({
     const callbackError = params.get("error");
 
     if (success === "google_calendar_connected") {
-      setConnected(true);
+      setIsConnected(true);
       if (onConnect) onConnect();
       toast({
         title: "Google Calendar conectado!",
@@ -119,7 +126,7 @@ export function GoogleCalendarConnect({
           break;
       }
       
-      setError(errorMessage);
+      setSessionError(errorMessage);
       toast({
         title: "Erro de conexão",
         description: errorMessage,
@@ -130,69 +137,98 @@ export function GoogleCalendarConnect({
   };
 
   const handleConnect = async () => {
-    try {
-      setConnecting(true);
-      console.log("🔗 Connecting to Google Calendar...");
-      console.log("📋 Using cookie-based authentication with credentials: 'include'");
+    if (isLoading) return;
 
-      // Make API call with credentials to ensure cookies are sent
+    try {
+      setIsLoading(true);
+      setSessionError(null);
+      setIsValidatingSession(true);
+
+      // CRITICAL: Validate session BEFORE starting OAuth flow
+      console.log("[GoogleCalendar] Validating session before OAuth...");
+      const sessionValid = await SessionManager.ensureValidSession();
+
+      setIsValidatingSession(false);
+
+      if (!sessionValid) {
+        setSessionError("Your session has expired. Please log in again.");
+        toast({
+          title: "Session Expired",
+          description: "Please log in again to connect Google Calendar.",
+          variant: "destructive",
+        });
+        
+        // Redirect to login after a short delay
+        setTimeout(() => {
+          SessionManager.handleSessionExpired(router);
+        }, 2000);
+        return;
+      }
+
+      console.log("[GoogleCalendar] Session valid, starting OAuth flow...");
+
+      // Start OAuth flow
       const response = await fetch("/api/google-calendar/auth", {
         method: "GET",
-        credentials: "include", // CRITICAL: Ensures cookies are sent
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },
       });
 
-      console.log("📊 Response status:", response.status);
-
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error("❌ Auth endpoint error:", errorData);
-        
-        if (response.status === 401) {
+        console.error("[GoogleCalendar] Auth error:", errorData);
+
+        // Check if it's a session error
+        if (response.status === 401 || SessionManager.isSessionError(errorData.error)) {
+          setSessionError("Your session has expired. Please log in again.");
           toast({
-            title: "Sessão expirada",
-            description: "Por favor, faça login novamente.",
+            title: "Session Expired",
+            description: "Please log in again to connect Google Calendar.",
             variant: "destructive",
           });
-          // Redirect to login after a short delay
+          
           setTimeout(() => {
-            window.location.href = "/login";
+            SessionManager.handleSessionExpired(router);
           }, 2000);
           return;
         }
-        
-        throw new Error(errorData.error || "Failed to connect");
+
+        throw new Error(errorData.error || `HTTP ${response.status}: Failed to start authorization`);
       }
 
-      // Get the auth URL from the response
-      const { authUrl } = await response.json();
-      console.log("✅ Auth URL received, redirecting to Google...");
-      console.log("🔗 Redirect URL:", authUrl);
+      const data = await response.json();
 
-      // Now redirect to Google OAuth
-      window.location.href = authUrl;
-      
+      if (!data.authUrl) {
+        throw new Error("No authorization URL received from server");
+      }
+
+      console.log("[GoogleCalendar] Redirecting to Google OAuth...");
+      window.location.href = data.authUrl;
     } catch (error) {
-      console.error("❌ Connect error:", error);
+      console.error("[GoogleCalendar] Connection error:", error);
+      
+      setSessionError(null);
       toast({
-        title: "Erro ao conectar",
-        description: "Não foi possível conectar ao Google Calendar. Tente novamente.",
+        title: "Connection Failed",
+        description: error instanceof Error ? error.message : "Failed to connect Google Calendar. Please try again.",
         variant: "destructive",
       });
-      setConnecting(false);
+    } finally {
+      setIsLoading(false);
+      setIsValidatingSession(false);
     }
   };
 
   const handleDisconnect = async () => {
     try {
-      setLoading(true);
+      setIsLoading(true);
       
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        setError("Sessão expirada. Por favor faça login novamente.");
-        setLoading(false);
+        setSessionError("Sessão expirada. Por favor faça login novamente.");
+        setIsLoading(false);
         return;
       }
 
@@ -207,29 +243,29 @@ export function GoogleCalendarConnect({
         throw new Error("Failed to disconnect");
       }
 
-      setConnected(false);
+      setIsConnected(false);
       if (onDisconnect) onDisconnect();
-      setError(null);
+      setSessionError(null);
       
       toast({
         title: "Google Calendar desconectado",
         description: "Sua conta foi desconectada com sucesso.",
       });
       
-      setLoading(false);
+      setIsLoading(false);
     } catch (err) {
       console.error("Error disconnecting:", err);
-      setError("Erro ao desconectar. Tente novamente.");
-      setLoading(false);
+      setSessionError("Erro ao desconectar. Tente novamente.");
+      setIsLoading(false);
     }
   };
 
-  if (loading && propConnected === undefined) {
+  if (isLoading && propConnected === undefined) {
     return (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Calendar className="h-5 w-5" />
+            <CalendarIcon className="h-5 w-5" />
             Google Calendar
           </CardTitle>
         </CardHeader>
@@ -247,75 +283,84 @@ export function GoogleCalendarConnect({
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Calendar className="h-5 w-5" />
+          <CalendarIcon className="h-5 w-5" />
           Google Calendar
         </CardTitle>
         <CardDescription>
-          Sincronize sua agenda com o Google Calendar
+          {isConnected
+            ? "Your Google Calendar is connected and syncing"
+            : "Connect your Google Calendar to sync events and appointments"}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {error && (
+        {sessionError && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription>{sessionError}</AlertDescription>
           </Alert>
         )}
 
-        {connected ? (
-          <div className="space-y-4">
-            <Badge className="bg-emerald-100 text-emerald-700">
-              <CheckCircle2 className="h-3 w-3 mr-1" />
-              Conectado e sincronizado
-            </Badge>
-            <div className="text-sm text-gray-600">
-              <p>✓ Eventos do CRM sincronizam automaticamente</p>
-              <p>✓ Eventos do Google podem ser importados</p>
-              <p>✓ Alertas de aniversário sincronizados</p>
-            </div>
-            <Button 
-              variant="destructive" 
-              onClick={handleDisconnect}
-              disabled={loading}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  A desconectar...
-                </>
-              ) : (
-                "Desconectar Google Calendar"
-              )}
-            </Button>
+        {isCheckingStatus ? (
+          <div className="flex items-center justify-center py-4">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            <span className="ml-2 text-sm text-muted-foreground">Checking connection status...</span>
           </div>
         ) : (
-          <div className="space-y-4">
-            <p className="text-sm text-gray-600">
-              Conecte sua conta Google para sincronizar eventos automaticamente entre o CRM e o Google Calendar.
-            </p>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <p className="text-xs text-blue-800 font-medium mb-2">
-                ℹ️ Autenticação via cookies:
-              </p>
-              <p className="text-xs text-blue-700">
-                O sistema usa cookies de sessão seguros (HTTP-only) para autenticar.
-                Certifique-se de que está logado antes de conectar.
-              </p>
-            </div>
-            <Button 
-              onClick={handleConnect} 
-              className="w-full"
-              disabled={connecting}
-            >
-              {connecting ? (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {isConnected ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  A conectar...
+                  <CheckCircle className="h-5 w-5 text-green-600" />
+                  <span className="text-sm font-medium">Connected</span>
                 </>
               ) : (
-                "Conectar Google Calendar"
+                <>
+                  <XCircle className="h-5 w-5 text-muted-foreground" />
+                  <span className="text-sm font-medium text-muted-foreground">Not connected</span>
+                </>
               )}
-            </Button>
+            </div>
+
+            {isConnected ? (
+              <Button
+                onClick={handleDisconnect}
+                variant="outline"
+                size="sm"
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Disconnecting...
+                  </>
+                ) : (
+                  "Disconnect"
+                )}
+              </Button>
+            ) : (
+              <Button
+                onClick={handleConnect}
+                size="sm"
+                disabled={isLoading || isValidatingSession}
+              >
+                {isValidatingSession ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Validating session...
+                  </>
+                ) : isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Connecting...
+                  </>
+                ) : (
+                  <>
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    Connect Calendar
+                  </>
+                )}
+              </Button>
+            )}
           </div>
         )}
       </CardContent>
