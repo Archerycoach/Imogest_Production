@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import { supabase } from "@/integrations/supabase/client";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export default async function handler(
@@ -7,12 +8,7 @@ export default async function handler(
 ) {
   console.log("🔍 === /api/google-calendar/auth called ===");
   console.log("Method:", req.method);
-  console.log("Query params:", JSON.stringify(req.query, null, 2));
-  console.log("Headers:", {
-    origin: req.headers.origin,
-    referer: req.headers.referer,
-    userAgent: req.headers["user-agent"]?.substring(0, 50)
-  });
+  console.log("Cookies:", Object.keys(req.cookies));
 
   if (req.method !== "GET") {
     console.error("❌ Invalid method:", req.method);
@@ -20,51 +16,36 @@ export default async function handler(
   }
 
   try {
-    // 1. Get token from query parameter
-    const token = req.query.token as string;
+    // Get session from cookies (Supabase automatically sets cookies on login)
+    const supabaseAccessToken = req.cookies['sb-access-token'];
+    const supabaseRefreshToken = req.cookies['sb-refresh-token'];
 
-    console.log("🔑 Token received:", {
-      exists: !!token,
-      type: typeof token,
-      length: token?.length || 0,
-      preview: token ? token.substring(0, 50) + "..." : "null",
-      isUndefinedString: token === "undefined",
-      isNullString: token === "null"
+    console.log("🍪 Cookies check:", {
+      hasAccessToken: !!supabaseAccessToken,
+      hasRefreshToken: !!supabaseRefreshToken,
+      accessTokenLength: supabaseAccessToken?.length || 0
     });
 
-    if (!token || token === "undefined" || token === "null") {
-      console.error("❌ Missing or invalid token");
+    if (!supabaseAccessToken) {
+      console.error("❌ No session cookie found");
       return res.status(401).json({ 
-        error: "Missing authorization token. Please try logging in again.",
-        debug: {
-          tokenReceived: token,
-          tokenType: typeof token
-        }
+        error: "Unauthorized. Please login first.",
+        debug: { reason: "no_session_cookie" }
       });
     }
 
-    // 2. Validate token using Admin client
-    console.log("🔐 Validating token with Supabase Admin...");
-    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
+    // Validate the session token
+    console.log("🔐 Validating session token...");
+    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(supabaseAccessToken);
 
-    if (userError) {
-      console.error("❌ Token validation failed:", {
-        error: userError.message,
-        status: userError.status,
-        name: userError.name
-      });
+    if (userError || !user) {
+      console.error("❌ Session validation failed:", userError?.message);
       return res.status(401).json({ 
-        error: "Invalid or expired token. Please refresh the page and try again.",
-        debug: {
-          supabaseError: userError.message
+        error: "Invalid session. Please login again.",
+        debug: { 
+          reason: "invalid_session",
+          error: userError?.message 
         }
-      });
-    }
-
-    if (!user) {
-      console.error("❌ No user returned from token validation");
-      return res.status(401).json({ 
-        error: "Invalid or expired token. Please refresh the page and try again." 
       });
     }
 

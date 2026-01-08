@@ -86,7 +86,6 @@ export function GoogleCalendarConnect({
         title: "Google Calendar conectado!",
         description: "Sua conta foi conectada com sucesso.",
       });
-      // Clean URL without reloading
       window.history.replaceState({}, "", window.location.pathname);
     }
 
@@ -126,7 +125,6 @@ export function GoogleCalendarConnect({
         description: errorMessage,
         variant: "destructive",
       });
-      // Clean URL without reloading
       window.history.replaceState({}, "", window.location.pathname);
     }
   };
@@ -135,84 +133,12 @@ export function GoogleCalendarConnect({
     try {
       setConnecting(true);
       console.log("🔗 Connecting to Google Calendar...");
+      console.log("📋 Using cookie-based authentication (no token in URL)");
 
-      // Step 1: Get current session
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
-      console.log("📋 Initial session check:", {
-        exists: !!session,
-        hasAccessToken: !!session?.access_token,
-        tokenType: typeof session?.access_token,
-        tokenLength: session?.access_token?.length || 0,
-        sessionError: sessionError?.message
-      });
-
-      // Step 2: If no session or no access token, try to refresh
-      if (!session || !session.access_token) {
-        console.log("⚠️ No valid session found, attempting refresh...");
-        
-        const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession();
-        
-        console.log("🔄 Refresh attempt result:", {
-          success: !!refreshedSession,
-          hasAccessToken: !!refreshedSession?.access_token,
-          refreshError: refreshError?.message
-        });
-
-        if (!refreshedSession || !refreshedSession.access_token) {
-          console.error("❌ Session refresh failed");
-          toast({
-            title: "Sessão expirada",
-            description: "Por favor faça login novamente para continuar.",
-            variant: "destructive",
-          });
-          setConnecting(false);
-          
-          // Redirect to login
-          window.location.href = "/login";
-          return;
-        }
-
-        // Use refreshed session
-        console.log("✅ Session refreshed successfully");
-        const authUrl = `/api/google-calendar/auth?token=${refreshedSession.access_token}`;
-        console.log("🚀 Redirecting to:", authUrl.substring(0, 100) + "...");
-        window.location.href = authUrl;
-        return;
-      }
-
-      // Step 3: Validate token format
-      const token = session.access_token;
-      if (token === "undefined" || token === "null" || token.length < 20) {
-        console.error("❌ Invalid token format:", {
-          value: token,
-          length: token.length,
-          isUndefinedString: token === "undefined",
-          isNullString: token === "null"
-        });
-        
-        toast({
-          title: "Erro de autenticação",
-          description: "Token inválido. Por favor faça login novamente.",
-          variant: "destructive",
-        });
-        setConnecting(false);
-        window.location.href = "/login";
-        return;
-      }
-
-      // Step 4: All good, redirect to auth
-      console.log("✅ Valid session found, redirecting to auth endpoint...");
-      console.log("📊 Token details:", {
-        length: token.length,
-        preview: token.substring(0, 50) + "...",
-        expiresAt: session.expires_at
-      });
-
-      const authUrl = `/api/google-calendar/auth?token=${token}`;
-      console.log("🚀 Full auth URL:", authUrl.substring(0, 100) + "...");
-      
-      window.location.href = authUrl;
+      // Simply redirect to the auth endpoint
+      // The browser will automatically send session cookies
+      console.log("🚀 Redirecting to: /api/google-calendar/auth");
+      window.location.href = "/api/google-calendar/auth";
       
     } catch (error) {
       console.error("❌ Connect error:", error);
@@ -236,7 +162,6 @@ export function GoogleCalendarConnect({
         return;
       }
 
-      // Call disconnect API
       const response = await fetch("/api/google-calendar/disconnect", {
         method: "POST",
         headers: {
@@ -336,18 +261,11 @@ export function GoogleCalendarConnect({
             </p>
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
               <p className="text-xs text-blue-800 font-medium mb-2">
-                ℹ️ Nota sobre configuração:
+                ℹ️ Autenticação via cookies:
               </p>
               <p className="text-xs text-blue-700">
-                As credenciais OAuth devem estar configuradas corretamente na base de dados (tabela integration_settings).
-                <br />
-                <a 
-                  href="/GOOGLE_CALENDAR_SETUP.md" 
-                  target="_blank" 
-                  className="underline font-medium"
-                >
-                  Ver guia completo de configuração →
-                </a>
+                O sistema usa cookies de sessão seguros (HTTP-only) para autenticar.
+                Certifique-se de que está logado antes de conectar.
               </p>
             </div>
             <Button 
