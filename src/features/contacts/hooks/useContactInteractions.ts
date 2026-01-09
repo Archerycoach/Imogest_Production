@@ -15,10 +15,11 @@ export function useContactInteractions() {
   const createContactInteraction = async (
     contactId: string,
     interactionData: {
-      type: "call" | "email" | "whatsapp" | "meeting" | "note" | "sms" | "video_call";
+      type: "call" | "email" | "whatsapp" | "meeting" | "note" | "sms" | "video_call" | "visit";
       subject: string;
       content: string;
       outcome: string;
+      interaction_date?: string;
     }
   ) => {
     try {
@@ -28,6 +29,7 @@ export function useContactInteractions() {
         subject: interactionData.subject || null,
         content: interactionData.content || null,
         outcome: interactionData.outcome || null,
+        interaction_date: interactionData.interaction_date || undefined,
         lead_id: null,
         contact_id: contactId,
         property_id: null,

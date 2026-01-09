@@ -108,14 +108,6 @@ export default function AdminDashboard() {
       bgColor: "bg-green-50",
     },
     {
-      title: "Integrações",
-      description: "Configurar integrações externas",
-      icon: Database,
-      href: "/admin/integrations",
-      color: "text-purple-600",
-      bgColor: "bg-purple-50",
-    },
-    {
       title: "Workflows",
       description: "Automatizações e processos",
       icon: Workflow,

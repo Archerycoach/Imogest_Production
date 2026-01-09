@@ -1,30 +1,14 @@
 import Stripe from "stripe";
-import { supabase } from "@/integrations/supabase/client";
 
-// Get Stripe credentials from database
-const getStripeCredentials = async () => {
-  const { data, error } = await supabase
-    .from("integration_settings")
-    .select("settings")
-    .eq("integration_name", "stripe")
-    .single();
-
-  if (error || !data) {
-    console.error("Failed to fetch Stripe credentials:", error);
+// Initialize Stripe with environment variable
+const getStripeClient = () => {
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  
+  if (!secretKey) {
+    console.warn("STRIPE_SECRET_KEY not configured");
     return null;
   }
 
-  const settings = data.settings as any;
-  
-  return {
-    secretKey: settings?.secret_key || "",
-    publishableKey: settings?.publishable_key || "",
-    webhookSecret: settings?.webhook_secret || "",
-  };
-};
-
-// Initialize Stripe (will be called with credentials from database)
-const initStripe = (secretKey: string) => {
   return new Stripe(secretKey, {
     apiVersion: "2025-02-24.acacia",
     typescript: true,
@@ -32,9 +16,8 @@ const initStripe = (secretKey: string) => {
 };
 
 // Get publishable key for client-side
-export const getStripePublishableKey = async () => {
-  const credentials = await getStripeCredentials();
-  return credentials?.publishableKey || "";
+export const getStripePublishableKey = () => {
+  return process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || "";
 };
 
 // Create a Stripe checkout session for subscription
@@ -52,13 +35,11 @@ export const createStripeCheckoutSession = async ({
   interval: "month" | "year";
 }) => {
   try {
-    const credentials = await getStripeCredentials();
+    const stripe = getStripeClient();
     
-    if (!credentials || !credentials.secretKey) {
-      throw new Error("Stripe não está configurado. Por favor configure as credenciais em /admin/integrations");
+    if (!stripe) {
+      throw new Error("Stripe não está configurado. Configure STRIPE_SECRET_KEY no .env");
     }
-
-    const stripe = initStripe(credentials.secretKey);
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
@@ -112,13 +93,11 @@ export const createStripeCustomer = async ({
   userId: string;
 }) => {
   try {
-    const credentials = await getStripeCredentials();
+    const stripe = getStripeClient();
     
-    if (!credentials || !credentials.secretKey) {
+    if (!stripe) {
       throw new Error("Stripe não está configurado");
     }
-
-    const stripe = initStripe(credentials.secretKey);
 
     const customer = await stripe.customers.create({
       email,
@@ -140,16 +119,15 @@ export const verifyStripeWebhook = async (
   payload: string | Buffer,
   signature: string
 ): Promise<Stripe.Event> => {
-  const credentials = await getStripeCredentials();
+  const stripe = getStripeClient();
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   
-  if (!credentials || !credentials.webhookSecret) {
-    throw new Error("STRIPE_WEBHOOK_SECRET não configurado");
+  if (!stripe || !webhookSecret) {
+    throw new Error("Stripe webhook não configurado");
   }
 
-  const stripe = initStripe(credentials.secretKey);
-
   try {
-    return stripe.webhooks.constructEvent(payload, signature, credentials.webhookSecret);
+    return stripe.webhooks.constructEvent(payload, signature, webhookSecret);
   } catch (error: any) {
     console.error("Error verifying Stripe webhook:", error);
     throw new Error(`Webhook inválido: ${error.message}`);

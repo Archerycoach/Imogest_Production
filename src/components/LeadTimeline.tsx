@@ -45,6 +45,7 @@ export function LeadTimeline({ leadId }: LeadTimelineProps) {
       case 'email': return <Mail className="h-4 w-4" />;
       case 'whatsapp': return <MessageSquare className="h-4 w-4" />;
       case 'meeting': return <Calendar className="h-4 w-4" />;
+      case 'visit': return <Eye className="h-4 w-4" />;
       case 'note': return <FileText className="h-4 w-4" />;
       case 'status_change': return <CheckCircle className="h-4 w-4" />;
       case 'document': return <FileText className="h-4 w-4" />;
@@ -59,6 +60,7 @@ export function LeadTimeline({ leadId }: LeadTimelineProps) {
       case 'email': return 'bg-blue-100 text-blue-600';
       case 'whatsapp': return 'bg-green-100 text-green-700';
       case 'meeting': return 'bg-purple-100 text-purple-600';
+      case 'visit': return 'bg-teal-100 text-teal-600';
       case 'note': return 'bg-yellow-100 text-yellow-600';
       case 'status_change': return 'bg-indigo-100 text-indigo-600';
       case 'document': return 'bg-gray-100 text-gray-600';

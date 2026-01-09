@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { CurrencyInput } from "@/components/CurrencyInput";
 import {
   Select,
   SelectContent,
@@ -315,12 +316,10 @@ export function LeadForm({ initialData, onSuccess, onCancel }: LeadFormProps) {
 
                 <div className="space-y-2">
                   <Label htmlFor="budget">Orçamento Máximo (€)</Label>
-                  <Input
+                  <CurrencyInput
                     id="budget"
-                    type="number"
-                    min="0"
                     value={formData.budget}
-                    onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
+                    onValueChange={(value) => setFormData({ ...formData, budget: value.toString() })}
                     placeholder="Ex: 250000"
                   />
                 </div>
@@ -413,12 +412,10 @@ export function LeadForm({ initialData, onSuccess, onCancel }: LeadFormProps) {
 
               <div className="space-y-2">
                 <Label htmlFor="desired_price">Preço Pretendido (€)</Label>
-                <Input
+                <CurrencyInput
                   id="desired_price"
-                  type="number"
-                  min="0"
                   value={formData.desired_price}
-                  onChange={(e) => setFormData({ ...formData, desired_price: e.target.value })}
+                  onValueChange={(value) => setFormData({ ...formData, desired_price: value.toString() })}
                   placeholder="Ex: 350000"
                 />
               </div>

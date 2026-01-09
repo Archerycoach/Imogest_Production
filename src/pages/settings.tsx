@@ -5,15 +5,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
-import { ArrowLeft, User, Lock, Building2, Bell, Calendar, Upload, Loader2, Save, Mail, Key } from "lucide-react";
-import { getUserProfile, updateUserProfile, uploadAvatar } from "@/services/profileService";
+import { ArrowLeft, User, Lock, Building2, Bell, Save, Loader2 } from "lucide-react";
+import { getUserProfile, updateUserProfile } from "@/services/profileService";
 import { updatePassword, getSession, signOut } from "@/services/authService";
-import { GoogleCalendarConnect } from "@/components/GoogleCalendarConnect";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { GmailConnect } from "@/components/GmailConnect";
 
 export default function Settings() {
   const router = useRouter();
@@ -25,10 +22,6 @@ export default function Settings() {
     push: false,
     marketing: false,
   });
-  
-  // Integration States
-  const [googleCalendarConnected, setGoogleCalendarConnected] = useState(false);
-  const [gmailConnected, setGmailConnected] = useState(false);
   
   // Auth check
   const [authChecking, setAuthChecking] = useState(true);
@@ -44,104 +37,13 @@ export default function Settings() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   
-  // Avatar
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [avatarPreview, setAvatarPreview] = useState<string>("");
-  
   // Notifications
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [pushNotifications, setPushNotifications] = useState(true);
 
   useEffect(() => {
     checkAuthentication();
-    checkIntegrations();
   }, []);
-
-  // Handle Gmail OAuth Callback
-  useEffect(() => {
-    const handleGmailCallback = async () => {
-      const { gmail_code, error } = router.query;
-
-      if (error) {
-        toast({
-          title: "Erro na conexão Gmail",
-          description: decodeURIComponent(error as string),
-          variant: "destructive",
-        });
-        // Remove params
-        router.replace("/settings", undefined, { shallow: true });
-        return;
-      }
-
-      if (gmail_code) {
-        try {
-          setLoading(true);
-          const { data: { session } } = await supabase.auth.getSession();
-          if (!session) return;
-
-          const response = await fetch("/api/gmail/exchange", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${session.access_token}`,
-            },
-            body: JSON.stringify({ code: gmail_code }),
-          });
-
-          if (!response.ok) {
-            const data = await response.json();
-            throw new Error(data.error || "Failed to exchange code");
-          }
-
-          toast({
-            title: "Gmail conectado!",
-            description: "Sua conta foi vinculada com sucesso.",
-          });
-          
-          setGmailConnected(true);
-        } catch (err: any) {
-          toast({
-            title: "Erro ao conectar Gmail",
-            description: err.message,
-            variant: "destructive",
-          });
-        } finally {
-          setLoading(false);
-          // Remove query params
-          router.replace("/settings", undefined, { shallow: true });
-        }
-      }
-    };
-
-    if (router.isReady) {
-      handleGmailCallback();
-    }
-  }, [router.isReady, router.query]);
-
-  const checkIntegrations = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
-
-    // Check Google Calendar
-    const { data: calData } = await supabase
-      .from("user_integrations")
-      .select("is_active")
-      .eq("user_id", session.user.id)
-      .eq("integration_type", "google_calendar")
-      .maybeSingle();
-      
-    setGoogleCalendarConnected(calData?.is_active || false);
-
-    // Check Gmail
-    const { data: gmailData } = await supabase
-      .from("user_integrations")
-      .select("is_active")
-      .eq("user_id", session.user.id)
-      .eq("integration_type", "gmail")
-      .maybeSingle();
-
-    setGmailConnected(gmailData?.is_active || false);
-  };
 
   const checkAuthentication = async () => {
     try {
@@ -189,7 +91,6 @@ export default function Settings() {
         setEmail(data.email || "");
         setPhone(data.phone || "");
         setReplyEmail(data.reply_email || "");
-        setAvatarPreview(data.avatar_url || "");
       }
     } catch (error) {
       console.error("Error loading profile:", error);
@@ -202,16 +103,6 @@ export default function Settings() {
     
     setLoading(true);
     try {
-      console.log("[Settings] Updating profile with:", {
-        full_name: profile.full_name,
-        email: profile.email,
-        phone: profile.phone,
-        reply_email: profile.reply_email,
-        email_daily_tasks: profile.email_daily_tasks,
-        email_daily_events: profile.email_daily_events,
-        email_new_lead_assigned: profile.email_new_lead_assigned,
-      });
-
       await updateUserProfile(profile.id, {
         full_name: profile.full_name,
         email: profile.email,
@@ -283,27 +174,6 @@ export default function Settings() {
     }
   };
 
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setAvatarFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setAvatarPreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const getInitials = (name: string) => {
-    return name
-      .split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .substring(0, 2);
-  };
-
   // Show loading while checking authentication
   if (authChecking) {
     return (
@@ -335,7 +205,7 @@ export default function Settings() {
         </div>
 
         <Tabs defaultValue="profile" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="profile">
               <User className="h-4 w-4 mr-2" />
               Perfil
@@ -347,10 +217,6 @@ export default function Settings() {
             <TabsTrigger value="company">
               <Building2 className="h-4 w-4 mr-2" />
               Empresa
-            </TabsTrigger>
-            <TabsTrigger value="integrations">
-              <Key className="h-4 w-4 mr-2" />
-              Integrações
             </TabsTrigger>
             <TabsTrigger value="notifications">
               <Bell className="h-4 w-4 mr-2" />
@@ -506,42 +372,6 @@ export default function Settings() {
                     </Button>
                   </div>
                 </form>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="integrations" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Contas Conectadas</CardTitle>
-                <CardDescription>
-                  Gerencie suas conexões com serviços externos.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                
-                <div className="space-y-4">
-                  <h3 className="font-medium flex items-center gap-2">
-                    <Mail className="h-4 w-4" /> Email
-                  </h3>
-                  <GmailConnect 
-                    isConnected={gmailConnected} 
-                    onConnect={() => setGmailConnected(true)}
-                    onDisconnect={() => setGmailConnected(false)}
-                  />
-                </div>
-
-                <div className="space-y-4 pt-4 border-t">
-                  <h3 className="font-medium flex items-center gap-2">
-                    <Calendar className="h-4 w-4" /> Calendário
-                  </h3>
-                  <GoogleCalendarConnect
-                    isConnected={googleCalendarConnected}
-                    onConnect={() => setGoogleCalendarConnected(true)}
-                    onDisconnect={() => setGoogleCalendarConnected(false)}
-                  />
-                </div>
-
               </CardContent>
             </Card>
           </TabsContent>

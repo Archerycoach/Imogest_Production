@@ -21,6 +21,8 @@ export interface LeadWithDetails extends Lead {
     email: string;
   } | null;
   interactions?: Interaction[];
+  is_development?: boolean | null;
+  development_name?: string | null;
 }
 
 export type LeadWithContacts = LeadWithDetails;

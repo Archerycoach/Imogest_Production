@@ -226,6 +226,12 @@ export function LeadCard({
                 <span>{lead.location_preference}</span>
               </div>
             )}
+            {lead.is_development && lead.development_name && (
+              <div className="flex items-center gap-2 text-sm">
+                <Home className="h-4 w-4 text-blue-600" />
+                <span className="font-semibold">🏢 {lead.development_name}</span>
+              </div>
+            )}
             <div className="flex items-center gap-4 flex-wrap">
               {lead.bedrooms && (
                 <div className="flex items-center gap-1.5 text-sm">

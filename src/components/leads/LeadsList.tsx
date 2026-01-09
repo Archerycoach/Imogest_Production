@@ -481,6 +481,8 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onRefresh }: Lea
       case "meeting":
       case "video_call":
         return <Calendar className="h-4 w-4" />;
+      case "visit":
+        return <Eye className="h-4 w-4" />;
       case "note":
         return <FileText className="h-4 w-4" />;
       default:
@@ -502,6 +504,8 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onRefresh }: Lea
         return "Reunião";
       case "video_call":
         return "Videochamada";
+      case "visit":
+        return "Visita";
       case "note":
         return "Nota";
       default:
@@ -523,6 +527,8 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onRefresh }: Lea
         return "text-indigo-600 bg-indigo-50";
       case "video_call":
         return "text-pink-600 bg-pink-50";
+      case "visit":
+        return "text-teal-600 bg-teal-50";
       case "note":
         return "text-gray-600 bg-gray-50";
       default:
@@ -733,6 +739,12 @@ export function LeadsList({ leads, onEdit, onDelete, isLoading, onRefresh }: Lea
                         <div className="flex items-center gap-2 text-sm">
                           <MapPin className="h-4 w-4 text-blue-600" />
                           <span>{lead.location_preference}</span>
+                        </div>
+                      )}
+                      {lead.is_development && lead.development_name && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Home className="h-4 w-4 text-blue-600" />
+                          <span className="font-semibold">🏢 {lead.development_name}</span>
                         </div>
                       )}
                       <div className="flex items-center gap-4 flex-wrap">

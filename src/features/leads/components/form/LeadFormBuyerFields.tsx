@@ -1,6 +1,7 @@
 import React from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/CurrencyInput";
 import {
   Select,
   SelectContent,
@@ -17,6 +18,8 @@ interface LeadFormBuyerFieldsProps {
     budget: string;
     location_preference: string;
     needs_financing: boolean;
+    is_development?: boolean;
+    development_name?: string;
   };
   onChange: (field: string, value: any) => void;
 }
@@ -76,14 +79,12 @@ export function LeadFormBuyerFields({ formData, onChange }: LeadFormBuyerFieldsP
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="budget">Orçamento Máximo (€)</Label>
-          <Input
+          <Label htmlFor="budget">Orçamento Máximo</Label>
+          <CurrencyInput
             id="budget"
-            type="number"
-            min="0"
             value={formData.budget}
-            onChange={(e) => onChange("budget", e.target.value)}
-            placeholder="Ex: 250000"
+            onValueChange={(value) => onChange("budget", value.toString())}
+            placeholder="Ex: 250.000"
           />
         </div>
       </div>
@@ -112,6 +113,34 @@ export function LeadFormBuyerFields({ formData, onChange }: LeadFormBuyerFieldsP
           </Label>
           <p className="text-xs text-gray-500">Marque se o comprador precisa de financiamento</p>
         </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="is_development" className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="is_development"
+              checked={formData.is_development || false}
+              onChange={(e) => onChange("is_development", e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300"
+            />
+            Empreendimento
+          </Label>
+          <p className="text-xs text-gray-500">Marque se procura imóvel em empreendimento específico</p>
+        </div>
+
+        {formData.is_development && (
+          <div className="space-y-2">
+            <Label htmlFor="development_name">Nome do Empreendimento</Label>
+            <Input
+              id="development_name"
+              value={formData.development_name || ""}
+              onChange={(e) => onChange("development_name", e.target.value)}
+              placeholder="Ex: Empreendimento Vista Mar"
+            />
+          </div>
+        )}
       </div>
     </div>
   );

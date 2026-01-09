@@ -66,6 +66,8 @@ export interface Lead {
   updated_at: string;
   tags?: string[];
   lastInteraction?: string; // Keep for UI/Storage compatibility
+  is_development?: boolean;
+  development_name?: string;
 }
 
 // Property Types
@@ -99,7 +101,7 @@ export interface Property {
 }
 
 // Interaction Types
-export type InteractionType = "call" | "email" | "whatsapp" | "meeting" | "note" | "task";
+export type InteractionType = "call" | "email" | "whatsapp" | "meeting" | "visit" | "note" | "task";
 
 export interface Interaction {
   id: string;

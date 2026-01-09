@@ -52,10 +52,11 @@ export function LeadCard({ lead, onClick, onDelete, onConvertSuccess }: LeadCard
   const [converting, setConverting] = useState(false);
   const [creatingInteraction, setCreatingInteraction] = useState(false);
   const [interactionForm, setInteractionForm] = useState({
-    type: "call" as "call" | "email" | "whatsapp" | "meeting" | "note" | "sms" | "video_call",
+    type: "call" as "call" | "email" | "whatsapp" | "meeting" | "note" | "sms" | "video_call" | "visit",
     subject: "",
     content: "",
     outcome: "",
+    interaction_date: "",
   });
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
@@ -225,6 +226,7 @@ export function LeadCard({ lead, onClick, onDelete, onConvertSuccess }: LeadCard
       subject: "",
       content: "",
       outcome: "",
+      interaction_date: "",
     });
     setInteractionDialogOpen(true);
   };
@@ -240,6 +242,7 @@ export function LeadCard({ lead, onClick, onDelete, onConvertSuccess }: LeadCard
         lead_id: lead.id,
         contact_id: null,
         property_id: null,
+        interaction_date: interactionForm.interaction_date ? new Date(interactionForm.interaction_date).toISOString() : undefined,
       });
 
       toast({
@@ -534,9 +537,22 @@ export function LeadCard({ lead, onClick, onDelete, onConvertSuccess }: LeadCard
                   <SelectItem value="sms">SMS</SelectItem>
                   <SelectItem value="meeting">Reunião</SelectItem>
                   <SelectItem value="video_call">Videochamada</SelectItem>
+                  <SelectItem value="visit">Visita</SelectItem>
                   <SelectItem value="note">Nota</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="interaction_date">Data e Hora da Interação</Label>
+              <Input
+                id="interaction_date"
+                type="datetime-local"
+                value={interactionForm.interaction_date || ""}
+                onChange={(e) =>
+                  setInteractionForm({ ...interactionForm, interaction_date: e.target.value })
+                }
+              />
             </div>
 
             <div>

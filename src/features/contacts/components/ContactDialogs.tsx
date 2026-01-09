@@ -63,10 +63,11 @@ interface ContactDialogsProps {
   onInteractionDialogOpenChange: (open: boolean) => void;
   selectedContact: any;
   interactionForm: {
-    type: "call" | "email" | "whatsapp" | "meeting" | "note" | "sms" | "video_call";
+    type: "call" | "email" | "whatsapp" | "meeting" | "note" | "sms" | "video_call" | "visit";
     subject: string;
     content: string;
     outcome: string;
+    interaction_date?: string;
   };
   onInteractionFormChange: (form: any) => void;
   onCreateInteraction: () => void;
@@ -387,6 +388,18 @@ export function ContactDialogs({
                   <SelectItem value="note">Nota</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="interaction_date">Data e Hora da Interação</Label>
+              <Input
+                id="interaction_date"
+                type="datetime-local"
+                value={interactionForm.interaction_date || ""}
+                onChange={(e) =>
+                  onInteractionFormChange({ ...interactionForm, interaction_date: e.target.value })
+                }
+              />
             </div>
 
             <div>

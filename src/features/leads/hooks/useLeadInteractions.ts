@@ -9,6 +9,7 @@ interface InteractionForm {
   type: string;
   notes: string;
   outcome: string;
+  date?: string;
 }
 
 /**
@@ -21,9 +22,10 @@ export function useLeadInteractions() {
   const [isLoading, setIsLoading] = useState(false);
   const [interactionDialogOpen, setInteractionDialogOpen] = useState(false);
   const [interactionForm, setInteractionForm] = useState<InteractionForm>({
-    type: "phone_call",
+    type: "call",
     notes: "",
     outcome: "",
+    date: "",
   });
 
   const loadInteractions = useCallback(async (leadId: string) => {
@@ -57,6 +59,7 @@ export function useLeadInteractions() {
         lead_id: leadId,
         contact_id: null,
         property_id: null,
+        interaction_date: interactionForm.date ? new Date(interactionForm.date).toISOString() : undefined,
       });
 
       toast({
@@ -66,9 +69,10 @@ export function useLeadInteractions() {
 
       // Reset form
       setInteractionForm({
-        type: "phone_call",
+        type: "call",
         notes: "",
         outcome: "",
+        date: "",
       });
 
       setInteractionDialogOpen(false);
@@ -88,9 +92,10 @@ export function useLeadInteractions() {
 
   const resetForm = useCallback(() => {
     setInteractionForm({
-      type: "phone_call",
+      type: "call",
       notes: "",
       outcome: "",
+      date: "",
     });
   }, []);
 

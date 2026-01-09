@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { CurrencyInput } from "@/components/CurrencyInput";
 
 interface LeadFormBasicFieldsProps {
   formData: {

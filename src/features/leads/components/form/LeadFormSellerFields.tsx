@@ -1,6 +1,7 @@
 import React from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { CurrencyInput } from "@/components/CurrencyInput";
 
 interface LeadFormSellerFieldsProps {
   formData: {
@@ -71,14 +72,12 @@ export function LeadFormSellerFields({ formData, onChange }: LeadFormSellerField
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="desired_price">Preço Pretendido (€)</Label>
-        <Input
+        <Label htmlFor="desired_price">Preço Pretendido</Label>
+        <CurrencyInput
           id="desired_price"
-          type="number"
-          min="0"
           value={formData.desired_price}
-          onChange={(e) => onChange("desired_price", e.target.value)}
-          placeholder="Ex: 350000"
+          onValueChange={(value) => onChange("desired_price", value.toString())}
+          placeholder="Ex: 350.000"
         />
       </div>
     </div>

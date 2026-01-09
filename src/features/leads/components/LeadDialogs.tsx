@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { LeadWithContacts } from "@/services/leadsService";
+import { LeadDetailsDialog } from "@/components/leads/LeadDetailsDialog";
 
 interface LeadDialogsProps {
   // Task Dialog
@@ -41,6 +42,7 @@ interface LeadDialogsProps {
     type: string;
     notes: string;
     outcome: string;
+    date?: string;
   };
   setInteractionForm: (form: any) => void;
   onCreateInteraction: () => void;
@@ -219,9 +221,19 @@ export function LeadDialogs({
                   <SelectItem value="meeting">Reunião</SelectItem>
                   <SelectItem value="whatsapp">WhatsApp</SelectItem>
                   <SelectItem value="sms">SMS</SelectItem>
+                  <SelectItem value="visit">Visita</SelectItem>
                   <SelectItem value="other">Outro</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div>
+              <Label htmlFor="interaction-date">Data e Hora da Interação</Label>
+              <Input
+                id="interaction-date"
+                type="datetime-local"
+                value={interactionForm.date || ""}
+                onChange={(e) => setInteractionForm({ ...interactionForm, date: e.target.value })}
+              />
             </div>
             <div>
               <Label htmlFor="interaction-notes">Notas</Label>
@@ -282,43 +294,12 @@ export function LeadDialogs({
         </DialogContent>
       </Dialog>
 
-      {/* Details Dialog */}
-      <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Detalhes do Lead</DialogTitle>
-          </DialogHeader>
-          {selectedLead && (
-            <div className="space-y-4">
-              <div>
-                <h3 className="font-semibold text-lg">{selectedLead.name}</h3>
-                <p className="text-sm text-gray-500">{selectedLead.email}</p>
-                <p className="text-sm text-gray-500">{selectedLead.phone}</p>
-              </div>
-              <div>
-                <Label>Tipo</Label>
-                <p className="capitalize">{selectedLead.lead_type}</p>
-              </div>
-              <div>
-                <Label>Status</Label>
-                <p className="capitalize">{selectedLead.status}</p>
-              </div>
-              {selectedLead.source && (
-                <div>
-                  <Label>Origem</Label>
-                  <p>{selectedLead.source}</p>
-                </div>
-              )}
-              {selectedLead.notes && (
-                <div>
-                  <Label>Notas</Label>
-                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedLead.notes}</p>
-                </div>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Details Dialog - NEW DETAILED VERSION */}
+      <LeadDetailsDialog
+        open={detailsDialogOpen}
+        onOpenChange={setDetailsDialogOpen}
+        lead={selectedLead}
+      />
     </>
   );
 }

@@ -101,7 +101,6 @@ export function Navigation() {
   const adminItems: NavItem[] = isUserAdmin ? [
     { icon: Shield, label: "Admin", path: "/admin/dashboard", section: "admin" },
     { icon: Users, label: "Utilizadores", path: "/admin/users", section: "admin" },
-    { icon: Plug, label: "Integrações", path: "/admin/integrations", section: "admin" },
     { icon: CreditCard, label: "Subscrições", path: "/admin/subscriptions", section: "admin" },
     { icon: Settings, label: "Pagamentos", path: "/admin/payment-settings", section: "admin" },
     { icon: Palette, label: "Personalização", path: "/admin/system-settings", section: "admin" },
@@ -112,7 +111,6 @@ export function Navigation() {
     { href: "/admin/dashboard", label: "Dashboard" },
     { href: "/admin/users", label: "Utilizadores" },
     { href: "/admin/subscriptions", label: "Subscrições" },
-    { href: "/admin/integrations", label: "Integrações" },
     { href: "/admin/payment-settings", label: "Pagamentos" },
     { href: "/admin/security", label: "Segurança" },
     { href: "/admin/system-settings", label: "Sistema" },

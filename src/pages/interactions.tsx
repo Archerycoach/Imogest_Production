@@ -8,14 +8,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Phone, Mail, MessageSquare, Calendar, FileText, User, Video, Edit, Trash2 } from "lucide-react";
+import { Plus, Search, Phone, Mail, MessageSquare, Calendar, FileText, User, Video, Edit, Trash2, Eye } from "lucide-react";
 import { getInteractions, createInteraction, deleteInteraction, type InteractionWithDetails } from "@/services/interactionsService";
 import { getLeads, type LeadWithContacts } from "@/services/leadsService";
 import { getContacts } from "@/services/contactsService";
 import { useToast } from "@/hooks/use-toast";
 import { InteractionEditDialog } from "@/components/InteractionEditDialog";
 
-type InteractionType = "call" | "email" | "whatsapp" | "meeting" | "note" | "sms" | "video_call";
+type InteractionType = "call" | "email" | "whatsapp" | "meeting" | "note" | "sms" | "video_call" | "visit";
 
 export default function Interactions() {
   const [interactions, setInteractions] = useState<InteractionWithDetails[]>([]);
@@ -36,6 +36,7 @@ export default function Interactions() {
     subject: "",
     content: "",
     outcome: "",
+    interaction_date: "",
   });
   const { toast } = useToast();
 
@@ -78,6 +79,7 @@ export default function Interactions() {
         lead_id: formData.entityType === "lead" ? formData.leadId || null : null,
         contact_id: formData.entityType === "contact" ? formData.contactId || null : null,
         property_id: null,
+        interaction_date: formData.interaction_date ? new Date(formData.interaction_date).toISOString() : undefined,
       });
 
       toast({
@@ -107,6 +109,7 @@ export default function Interactions() {
       subject: "",
       content: "",
       outcome: "",
+      interaction_date: "",
     });
   };
 
@@ -165,6 +168,8 @@ export default function Interactions() {
         return MessageSquare;
       case "meeting":
         return Calendar;
+      case "visit":
+        return Eye;
       case "note":
         return FileText;
       case "sms":
@@ -186,6 +191,8 @@ export default function Interactions() {
         return "bg-emerald-100 text-emerald-700";
       case "meeting":
         return "bg-orange-100 text-orange-700";
+      case "visit":
+        return "bg-teal-100 text-teal-700";
       case "note":
         return "bg-slate-100 text-slate-700";
       case "sms":
@@ -207,6 +214,8 @@ export default function Interactions() {
         return "WhatsApp";
       case "meeting":
         return "Reunião";
+      case "visit":
+        return "Visita";
       case "note":
         return "Nota";
       case "sms":
@@ -328,9 +337,20 @@ export default function Interactions() {
                         <SelectItem value="sms">SMS</SelectItem>
                         <SelectItem value="meeting">Reunião</SelectItem>
                         <SelectItem value="video_call">Videochamada</SelectItem>
+                        <SelectItem value="visit">Visita</SelectItem>
                         <SelectItem value="note">Nota</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="interaction_date">Data e Hora da Interação</Label>
+                    <Input
+                      id="interaction_date"
+                      type="datetime-local"
+                      value={formData.interaction_date || ""}
+                      onChange={(e) => setFormData({ ...formData, interaction_date: e.target.value })}
+                    />
                   </div>
 
                   <div>
@@ -403,6 +423,7 @@ export default function Interactions() {
                   <SelectItem value="sms">SMS</SelectItem>
                   <SelectItem value="meeting">Reunião</SelectItem>
                   <SelectItem value="video_call">Videochamada</SelectItem>
+                  <SelectItem value="visit">Visita</SelectItem>
                   <SelectItem value="note">Nota</SelectItem>
                 </SelectContent>
               </Select>

@@ -69,10 +69,11 @@ export function ContactsContainer() {
   });
 
   const [interactionForm, setInteractionForm] = useState({
-    type: "call" as "call" | "email" | "whatsapp" | "meeting" | "note" | "sms" | "video_call",
+    type: "call" as "call" | "email" | "whatsapp" | "meeting" | "note" | "sms" | "video_call" | "visit",
     subject: "",
     content: "",
     outcome: "",
+    interaction_date: "",
   });
 
   // Import state
@@ -146,6 +147,7 @@ export function ContactsContainer() {
       subject: "",
       content: "",
       outcome: "",
+      interaction_date: "",
     });
     setDetailsDialogOpen(false);
     setInteractionDialogOpen(true);
@@ -153,7 +155,10 @@ export function ContactsContainer() {
 
   const handleCreateInteraction = async () => {
     if (!selectedContact) return;
-    await createContactInteraction(selectedContact.id, interactionForm);
+    await createContactInteraction(selectedContact.id, {
+      ...interactionForm,
+      interaction_date: interactionForm.interaction_date ? new Date(interactionForm.interaction_date).toISOString() : undefined
+    });
     setInteractionDialogOpen(false);
     if (detailsDialogOpen) {
       await loadContactInteractions(selectedContact.id);
@@ -323,6 +328,7 @@ export function ContactsContainer() {
               subject: "",
               content: "",
               outcome: "",
+              interaction_date: "",
             });
             setInteractionDialogOpen(true);
           }}
