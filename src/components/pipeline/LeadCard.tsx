@@ -37,6 +37,7 @@ import { createInteraction } from "@/services/interactionsService";
 import { useToast } from "@/hooks/use-toast";
 import { QuickTaskDialog } from "@/components/QuickTaskDialog";
 import { QuickEventDialog } from "@/components/QuickEventDialog";
+import { LeadNotesDialog } from "@/components/leads/LeadNotesDialog";
 
 interface LeadCardProps {
   lead: LeadWithContacts;
@@ -298,6 +299,13 @@ export function LeadCard({ lead, onClick, onDelete, onConvertSuccess }: LeadCard
     setEventDialogOpen(true);
   };
 
+  const handleEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onClick) {
+      onClick();
+    }
+  };
+
   const formatDate = (dateString: string) => {
     if (!dateString) return "-";
     const date = new Date(dateString);
@@ -328,16 +336,24 @@ export function LeadCard({ lead, onClick, onDelete, onConvertSuccess }: LeadCard
           isDragging ? "opacity-50" : ""
         }`}
       >
-        {/* Delete Button - Top Right */}
-        <button
-          onClick={handleDelete}
-          className="absolute top-4 right-4 text-red-500 hover:text-red-700 transition-colors"
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
+        {/* Header with Edit and Delete Buttons - Top Right */}
+        <div className="absolute top-4 right-4 flex gap-2">
+          <button
+            onClick={handleEdit}
+            className="text-blue-500 hover:text-blue-700 transition-colors"
+          >
+            <Edit className="h-4 w-4" />
+          </button>
+          <button
+            onClick={handleDelete}
+            className="text-red-500 hover:text-red-700 transition-colors"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
 
         {/* Lead Name */}
-        <h3 className="text-lg font-semibold text-gray-900 mb-3 pr-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-3 pr-16">
           {lead.name}
         </h3>
 
@@ -405,7 +421,7 @@ export function LeadCard({ lead, onClick, onDelete, onConvertSuccess }: LeadCard
             </Button>
           </div>
 
-          {/* Interaction, Convert and Edit Buttons */}
+          {/* Task, Event and Interaction Buttons */}
           <div className="grid grid-cols-3 gap-2">
             <Button
               variant="outline"
@@ -435,7 +451,7 @@ export function LeadCard({ lead, onClick, onDelete, onConvertSuccess }: LeadCard
             </Button>
           </div>
 
-          {/* Convert and Edit Buttons */}
+          {/* Convert and Notes Buttons */}
           <div className="grid grid-cols-2 gap-2">
             <Button
               variant="outline"
@@ -445,13 +461,7 @@ export function LeadCard({ lead, onClick, onDelete, onConvertSuccess }: LeadCard
             >
               <UserCheck className="h-4 w-4" />
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onClick}
-            >
-              <Edit className="h-4 w-4" />
-            </Button>
+            <LeadNotesDialog leadId={lead.id} leadName={lead.name} />
           </div>
         </div>
       </Card>

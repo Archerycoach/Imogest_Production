@@ -22,8 +22,26 @@ import {
   Bath,
   Ruler,
   Banknote,
+  StickyNote,
+  Save,
+  X,
+  Building2,
+  Bed,
+  MoreVertical,
 } from "lucide-react";
 import type { LeadWithContacts } from "@/services/leadsService";
+import { Textarea } from "@/components/ui/textarea";
+import { useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { LeadNotesDialog } from "@/components/leads/LeadNotesDialog";
 
 interface LeadCardProps {
   lead: LeadWithContacts;
@@ -41,6 +59,7 @@ interface LeadCardProps {
   onEmail: (lead: LeadWithContacts) => void;
   onSMS: (lead: LeadWithContacts) => void;
   onWhatsApp: (lead: LeadWithContacts) => void;
+  onRefresh?: () => void;
 }
 
 const getStatusColor = (status: string) => {
@@ -134,9 +153,51 @@ export function LeadCard({
   onEmail,
   onSMS,
   onWhatsApp,
+  onRefresh,
 }: LeadCardProps) {
   const isBuyer = lead.lead_type === "buyer" || lead.lead_type === "both";
   const isSeller = lead.lead_type === "seller" || lead.lead_type === "both";
+  const [showNoteField, setShowNoteField] = useState(false);
+  const [noteValue, setNoteValue] = useState(lead.notes || "");
+  const [savingNote, setSavingNote] = useState(false);
+  const { toast } = useToast();
+
+  const handleSaveNote = async () => {
+    setSavingNote(true);
+    try {
+      const { error } = await supabase
+        .from("leads")
+        .update({ notes: noteValue || null })
+        .eq("id", lead.id);
+
+      if (error) throw error;
+
+      toast({
+        title: "Nota guardada!",
+        description: "A nota foi atualizada com sucesso.",
+      });
+
+      setShowNoteField(false);
+      
+      if (onRefresh) {
+        await onRefresh();
+      }
+    } catch (error: any) {
+      console.error("Error saving note:", error);
+      toast({
+        title: "Erro ao guardar nota",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
+  const handleCancelNote = () => {
+    setNoteValue(lead.notes || "");
+    setShowNoteField(false);
+  };
 
   return (
     <Card className="relative p-6 hover:shadow-lg transition-shadow">
@@ -308,104 +369,89 @@ export function LeadCard({
       </div>
 
       <div className="space-y-2">
+        {/* Action Buttons Row */}
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onEmail(lead)}
-            className="flex-1"
-            type="button"
-          >
-            <Mail className="h-4 w-4 mr-1" />
-            <span className="text-xs">Email</span>
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onSMS(lead)}
-            className="flex-1"
-            type="button"
-          >
-            <MessageSquare className="h-4 w-4 mr-1" />
-            <span className="text-xs">SMS</span>
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onWhatsApp(lead)}
-            className="flex-1"
-            type="button"
-          >
-            <MessageCircle className="h-4 w-4 mr-1" />
-            <span className="text-xs">WhatsApp</span>
-          </Button>
-        </div>
+          {/* Comunicação Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="flex-1">
+                <MessageCircle className="h-4 w-4 mr-1" />
+                <span className="text-xs">Comunicação</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem onClick={() => onEmail(lead)}>
+                <Mail className="h-4 w-4 mr-2" />
+                Email
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onSMS(lead)}>
+                <MessageSquare className="h-4 w-4 mr-2" />
+                SMS
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onWhatsApp(lead)}>
+                <MessageCircle className="h-4 w-4 mr-2" />
+                WhatsApp
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onViewDetails(lead)}
-            className="flex-1"
-            title="Ver Detalhes"
-            type="button"
-          >
-            <Eye className="h-4 w-4 mr-1" />
-            <span className="text-xs">Ver</span>
-          </Button>
+          {/* Calendário Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="flex-1">
+                <Calendar className="h-4 w-4 mr-1" />
+                <span className="text-xs">+ Calendário</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem onClick={() => onTask(lead)}>
+                <CalendarDays className="h-4 w-4 mr-2" />
+                Tarefa
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onEvent(lead)}>
+                <Calendar className="h-4 w-4 mr-2" />
+                Evento
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onInteraction(lead)}>
+                <FileText className="h-4 w-4 mr-2" />
+                Interação
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
-          {canAssignLeads && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onAssign(lead)}
-              className="flex-1"
-              title="Atribuir Agente"
-              type="button"
-            >
-              <Users className="h-4 w-4 mr-1" />
-              <span className="text-xs">Atribuir</span>
-            </Button>
+          {/* Notas Button */}
+          {!showArchived && (
+            <LeadNotesDialog leadId={lead.id} leadName={lead.name} />
           )}
         </div>
 
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onTask(lead)}
-            className="flex-1 border-blue-200 text-blue-700 hover:bg-blue-50"
-            title="Nova Tarefa"
-            type="button"
-          >
-            <CalendarDays className="h-4 w-4 mr-1" />
-            <span className="text-xs">Tarefa</span>
-          </Button>
+        {/* View Details Button */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onViewDetails(lead)}
+          className="w-full"
+          title="Ver Detalhes"
+          type="button"
+        >
+          <Eye className="h-4 w-4 mr-1" />
+          <span className="text-xs">Ver Detalhes</span>
+        </Button>
 
+        {/* Assign Agent Button (if applicable) */}
+        {canAssignLeads && (
           <Button
             variant="outline"
             size="sm"
-            onClick={() => onEvent(lead)}
-            className="flex-1 border-purple-200 text-purple-700 hover:bg-purple-50"
-            title="Novo Evento"
+            onClick={() => onAssign(lead)}
+            className="w-full"
+            title="Atribuir Agente"
             type="button"
           >
-            <Calendar className="h-4 w-4 mr-1" />
-            <span className="text-xs">Evento</span>
+            <Users className="h-4 w-4 mr-1" />
+            <span className="text-xs">Atribuir Agente</span>
           </Button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onInteraction(lead)}
-            className="flex-1 border-orange-200 text-orange-700 hover:bg-orange-50"
-            title="Nova Interação"
-            type="button"
-          >
-            <FileText className="h-4 w-4 mr-1" />
-            <span className="text-xs">Interação</span>
-          </Button>
-        </div>
+        )}
       </div>
     </Card>
   );
