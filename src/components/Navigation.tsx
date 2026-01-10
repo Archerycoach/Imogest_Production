@@ -228,6 +228,34 @@ export function Navigation() {
         </nav>
       </ScrollArea>
 
+      {/* Admin Links */}
+      {isUserAdmin && (
+        <>
+          <Link
+            href="/admin/dashboard"
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+              router.pathname === "/admin/dashboard"
+                ? "bg-primary text-primary-foreground"
+                : "hover:bg-accent"
+            }`}
+          >
+            <LayoutDashboard className="h-4 w-4" />
+            <span className="text-sm font-medium">Admin Dashboard</span>
+          </Link>
+          <Link
+            href="/admin/integrations"
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+              router.pathname === "/admin/integrations"
+                ? "bg-primary text-primary-foreground"
+                : "hover:bg-accent"
+            }`}
+          >
+            <Plug className="h-4 w-4" />
+            <span className="text-sm font-medium">Integrações</span>
+          </Link>
+        </>
+      )}
+
       <div className="border-t p-3">
         <Button
           variant="ghost"

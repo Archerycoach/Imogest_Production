@@ -198,8 +198,8 @@ export function CalendarGrid({
                       <p className="text-sm font-medium text-gray-900 mb-1">
                         {interaction.lead?.name || interaction.contact?.name || "Sem nome"}
                       </p>
-                      {interaction.description && (
-                        <p className="text-sm text-gray-600 line-clamp-2">{interaction.description}</p>
+                      {interaction.content && (
+                        <p className="text-sm text-gray-600 line-clamp-2">{interaction.content}</p>
                       )}
                     </div>
                   </div>

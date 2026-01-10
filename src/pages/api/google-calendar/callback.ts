@@ -1,5 +1,11 @@
-import type { NextApiRequest, NextApiResponse } from "next";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { NextApiRequest, NextApiResponse } from "next";
+import { createClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
+
+const supabaseAdmin = createClient<Database>(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
+);
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") {
@@ -9,74 +15,98 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const { code, state: userId } = req.query;
 
-    if (!code || !userId || typeof code !== "string" || typeof userId !== "string") {
-      return res.redirect("/integrations?error=invalid_callback");
+    if (!code || !userId || typeof userId !== "string") {
+      return res.redirect(302, "/admin/integrations?error=invalid_params");
     }
 
-    console.log("📨 Received OAuth callback for user:", userId);
-
-    // Get Google OAuth credentials
-    const { data: settings, error: settingsError } = await (supabaseAdmin as any)
+    // Get OAuth settings from database
+    const { data: settingsRecord, error: settingsError } = await supabaseAdmin
       .from("integration_settings")
-      .select("settings, is_active")
+      .select("*")
       .eq("integration_name", "google_calendar")
-      .eq("is_active", true)
       .single();
 
-    if (settingsError || !settings?.settings?.clientId || !settings?.settings?.clientSecret) {
-      console.error("❌ Google Calendar credentials not found:", settingsError);
-      return res.redirect("/integrations?error=no_credentials");
+    if (settingsError || !settingsRecord) {
+      console.error("OAuth settings not configured:", settingsError);
+      return res.redirect(302, "/admin/integrations?error=not_configured");
     }
 
-    const { clientId, clientSecret, redirectUri } = settings.settings;
+    const settings = settingsRecord.settings as any;
+
+    if (!settings?.client_id || !settings?.client_secret) {
+      console.error("OAuth credentials missing in settings");
+      return res.redirect(302, "/admin/integrations?error=not_configured");
+    }
+
+    if (!settingsRecord.is_active) {
+      return res.redirect(302, "/admin/integrations?error=disabled");
+    }
 
     // Exchange code for tokens
+    const redirectUrl = `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/api/google-calendar/callback`;
+    
     const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
       body: new URLSearchParams({
-        code,
-        client_id: clientId,
-        client_secret: clientSecret,
-        redirect_uri: redirectUri,
+        code: code as string,
+        client_id: settings.client_id,
+        client_secret: settings.client_secret,
+        redirect_uri: redirectUrl,
         grant_type: "authorization_code",
       }),
     });
 
     if (!tokenResponse.ok) {
-      console.error("❌ Token exchange failed:", await tokenResponse.text());
-      return res.redirect("/integrations?error=token_exchange_failed");
+      const error = await tokenResponse.text();
+      console.error("Token exchange failed:", error);
+      return res.redirect(302, "/admin/integrations?error=token_exchange");
     }
 
     const tokens = await tokenResponse.json();
-    const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
 
-    console.log("✅ Tokens received, saving to database...");
+    // Get user info
+    const userInfoResponse = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+      headers: {
+        Authorization: `Bearer ${tokens.access_token}`,
+      },
+    });
 
-    // Save or update user integration
-    const { error: updateError } = await (supabaseAdmin as any)
-      .from("user_integrations")
-      .upsert({
-        user_id: userId,
-        integration_type: "google_calendar",
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
-        token_expiry: expiresAt.toISOString(),
-        is_active: true,
-      })
-      .eq("user_id", userId);
-
-    if (updateError) {
-      console.error("❌ Failed to save tokens:", updateError);
-      return res.redirect("/integrations?error=save_failed");
+    if (!userInfoResponse.ok) {
+      return res.redirect(302, "/admin/integrations?error=user_info");
     }
 
-    console.log("✅ Google Calendar connected successfully!");
-    return res.redirect("/integrations?success=google_calendar_connected");
+    const userInfo = await userInfoResponse.json();
+    const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
 
+    // Save or update integration in database
+    const { error: upsertError } = await supabaseAdmin
+      .from("google_calendar_integrations" as any)
+      .upsert({
+        user_id: userId,
+        google_email: userInfo.email,
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        expires_at: expiresAt.toISOString(),
+        sync_events: true,
+        sync_tasks: true,
+        sync_notes: false,
+        sync_direction: "both",
+        auto_sync: true,
+      }, {
+        onConflict: "user_id",
+      });
+
+    if (upsertError) {
+      console.error("Error saving integration:", upsertError);
+      return res.redirect(302, "/admin/integrations?error=save_failed");
+    }
+
+    res.redirect(302, "/admin/integrations?success=true");
   } catch (error) {
-    console.error("❌ Error in Google OAuth callback:");
-    console.error(error);
-    res.redirect("/integrations?error=callback_failed");
+    console.error("Error in Google Calendar callback:", error);
+    res.redirect(302, "/admin/integrations?error=true");
   }
 }
