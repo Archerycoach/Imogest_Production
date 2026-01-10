@@ -1,130 +1,156 @@
 import { NextApiRequest, NextApiResponse } from "next";
 import { createClient } from "@supabase/supabase-js";
-import type { Database } from "@/integrations/supabase/types";
 
-const supabaseAdmin = createClient<Database>(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
-);
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    // Verify admin access
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      return res.status(401).json({ error: "Unauthorized" });
+    console.log("[Settings API] Request method:", req.method);
+
+    // Create Supabase admin client
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+
+    // Get session from cookies (Next.js handles this automatically)
+    const token = req.cookies["sb-access-token"] || req.cookies["sb-localhost-auth-token"];
+    
+    if (!token) {
+      console.error("[Settings API] No session token in cookies");
+      return res.status(401).json({ error: "Unauthorized", details: "No session token" });
     }
 
-    const token = authHeader.replace("Bearer ", "");
+    // Verify the token and get user
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
 
     if (userError || !user) {
-      return res.status(401).json({ error: "Unauthorized" });
+      console.error("[Settings API] Invalid session:", userError?.message);
+      return res.status(401).json({ error: "Unauthorized", details: "Invalid session" });
     }
 
+    console.log("[Settings API] User authenticated:", user.id);
+
     // Check if user is admin
-    const { data: profile } = await supabaseAdmin
+    const { data: profile, error: profileError } = await supabaseAdmin
       .from("profiles")
       .select("role")
       .eq("id", user.id)
       .single();
 
-    if (profile?.role !== "admin") {
-      return res.status(403).json({ error: "Forbidden - Admin access required" });
+    if (profileError || !profile || profile.role !== "admin") {
+      console.error("[Settings API] User is not admin:", { userId: user.id, role: profile?.role });
+      return res.status(403).json({ error: "Forbidden", details: "Admin access required" });
     }
 
+    console.log("[Settings API] Admin access confirmed");
+
     if (req.method === "GET") {
-      // Get Google Calendar settings
+      console.log("[Settings API] Fetching settings from database");
+      
       const { data, error } = await supabaseAdmin
-        .from("integration_settings")
+        .from("integration_settings" as any)
         .select("*")
-        .eq("integration_name", "google_calendar")
+        .eq("service_name", "google_calendar")
         .maybeSingle();
 
       if (error) {
-        throw error;
+        console.error("[Settings API] Database error:", error);
+        return res.status(500).json({ error: "Database error", details: error.message });
       }
 
-      // Transform for frontend
-      if (data) {
-        const settings = data.settings as any;
+      console.log("[Settings API] Settings found:", !!data);
+
+      // If no settings exist, return default values
+      if (!data) {
         return res.status(200).json({
-          id: data.id,
-          service_name: data.integration_name,
-          enabled: data.is_active,
-          client_id: settings?.client_id || "",
-          client_secret: settings?.client_secret || "",
+          service_name: "google_calendar",
+          enabled: false,
+          client_id: "",
+          client_secret: "",
+          redirect_uri: "",
+          scopes: "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events",
         });
       }
 
-      return res.status(200).json(null);
+      const settings = data as any;
+
+      // Return settings
+      return res.status(200).json({
+        service_name: settings.service_name,
+        enabled: settings.enabled || false,
+        client_id: settings.client_id || "",
+        client_secret: settings.client_secret || "",
+        redirect_uri: settings.redirect_uri || "",
+        scopes: settings.scopes || "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events",
+      });
     }
 
     if (req.method === "PUT") {
-      // Update Google Calendar settings
-      const { client_id, client_secret, enabled } = req.body;
+      const { client_id, client_secret, redirect_uri, scopes, enabled } = req.body;
 
-      // Check if exists
+      console.log("[Settings API] Updating settings");
+
+      // Check if settings already exist
       const { data: existing } = await supabaseAdmin
-        .from("integration_settings")
+        .from("integration_settings" as any)
         .select("id")
-        .eq("integration_name", "google_calendar")
+        .eq("service_name", "google_calendar")
         .maybeSingle();
 
-      let result;
-
       if (existing) {
-        const { data, error } = await supabaseAdmin
-          .from("integration_settings")
+        // Update existing settings
+        const { error } = await supabaseAdmin
+          .from("integration_settings" as any)
           .update({
-            is_active: enabled,
-            settings: {
-              client_id,
-              client_secret,
-              scopes: ["https://www.googleapis.com/auth/calendar", "https://www.googleapis.com/auth/calendar.events"],
-              redirect_uri: "/api/google-calendar/callback"
-            },
+            client_id: client_id || null,
+            client_secret: client_secret || null,
+            redirect_uri: redirect_uri || null,
+            scopes: scopes || null,
+            enabled: enabled || false,
             updated_at: new Date().toISOString(),
           })
-          .eq("integration_name", "google_calendar")
-          .select()
-          .single();
-        
-        if (error) throw error;
-        result = data;
+          .eq("service_name", "google_calendar");
+
+        if (error) {
+          console.error("[Settings API] Update error:", error);
+          return res.status(500).json({ error: "Failed to update settings", details: error.message });
+        }
+
+        console.log("[Settings API] Settings updated successfully");
+        return res.status(200).json({ success: true, message: "Settings updated successfully" });
       } else {
-        const { data, error } = await supabaseAdmin
-          .from("integration_settings")
+        // Create new settings
+        const { error } = await supabaseAdmin
+          .from("integration_settings" as any)
           .insert({
-            integration_name: "google_calendar",
-            is_active: enabled,
-            settings: {
-              client_id,
-              client_secret,
-              scopes: ["https://www.googleapis.com/auth/calendar", "https://www.googleapis.com/auth/calendar.events"],
-              redirect_uri: "/api/google-calendar/callback"
-            }
-          })
-          .select()
-          .single();
+            service_name: "google_calendar",
+            client_id: client_id || null,
+            client_secret: client_secret || null,
+            redirect_uri: redirect_uri || null,
+            scopes: scopes || null,
+            enabled: enabled || false,
+          });
 
-        if (error) throw error;
-        result = data;
+        if (error) {
+          console.error("[Settings API] Insert error:", error);
+          return res.status(500).json({ error: "Failed to create settings", details: error.message });
+        }
+
+        console.log("[Settings API] Settings created successfully");
+        return res.status(201).json({ success: true, message: "Settings created successfully" });
       }
-
-      const settings = result.settings as any;
-      return res.status(200).json({
-        id: result.id,
-        service_name: result.integration_name,
-        enabled: result.is_active,
-        client_id: settings?.client_id || "",
-        client_secret: settings?.client_secret || "",
-      });
     }
 
     return res.status(405).json({ error: "Method not allowed" });
   } catch (error) {
-    console.error("Error in Google Calendar settings API:", error);
-    return res.status(500).json({ error: "Internal server error" });
+    console.error("[Settings API] Unexpected error:", error);
+    return res.status(500).json({ 
+      error: "Internal server error", 
+      details: error instanceof Error ? error.message : "Unknown error" 
+    });
   }
 }

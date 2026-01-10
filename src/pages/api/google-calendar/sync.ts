@@ -60,41 +60,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (isExpired && integration.refresh_token) {
       // Get OAuth settings from database
-      const { data: settingsRecord, error: settingsError } = await supabaseAdmin
-        .from("integration_settings")
+      const { data: integrationSettings } = await supabaseAdmin
+        .from("integration_settings" as any)
         .select("*")
-        .eq("integration_name", "google_calendar")
+        .eq("service_name", "google_calendar")
         .single();
 
-      if (settingsError || !settingsRecord) {
-        return res.status(500).json({ error: "OAuth settings not configured" });
+      if (!integrationSettings) {
+        return res.status(500).json({ error: "OAuth settings not found" });
       }
 
-      const settings = settingsRecord.settings as any;
-
-      if (!settings?.client_id || !settings?.client_secret) {
-        return res.status(500).json({ error: "OAuth credentials not configured" });
-      }
+      const settings = integrationSettings as any;
+      const { client_id, client_secret } = settings;
 
       // Refresh the access token
-      const refreshResponse = await fetch("https://oauth2.googleapis.com/token", {
+      const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
-          client_id: settings.client_id,
-          client_secret: settings.client_secret,
+          client_id: client_id!,
+          client_secret: client_secret!,
           refresh_token: integration.refresh_token,
           grant_type: "refresh_token",
         }),
       });
 
-      if (!refreshResponse.ok) {
+      if (!tokenResponse.ok) {
         throw new Error("Failed to refresh access token");
       }
 
-      const tokens = await refreshResponse.json();
+      const tokens = await tokenResponse.json();
       accessToken = tokens.access_token;
 
       // Update tokens in database

@@ -94,29 +94,35 @@ export default function IntegrationsPage() {
 
   const loadSettings = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) return;
+      console.log("[Integrations] Loading settings...");
 
-      const response = await fetch("/api/google-calendar/settings", {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
-      });
+      const response = await fetch("/api/google-calendar/settings");
 
-      if (!response.ok) throw new Error("Failed to load settings");
+      console.log("[Integrations] Settings API response status:", response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("Settings API error:", errorData);
+        throw new Error(errorData.error || "Failed to load settings");
+      }
 
       const data = await response.json();
-      setSettings(data);
-      setConfigForm({
-        clientId: data.client_id || "",
-        clientSecret: data.client_secret || "",
-        enabled: data.enabled || false,
-      });
+      console.log("Settings loaded:", data);
+      
+      // Handle null or empty settings
+      if (data) {
+        setSettings(data);
+        setConfigForm({
+          clientId: data.client_id || "",
+          clientSecret: data.client_secret || "",
+          enabled: data.enabled || false,
+        });
+      }
     } catch (error) {
       console.error("Error loading settings:", error);
       toast({
         title: "Erro",
-        description: "Erro ao carregar configurações",
+        description: error instanceof Error ? error.message : "Erro ao carregar configurações",
         variant: "destructive",
       });
     }
@@ -169,14 +175,10 @@ export default function IntegrationsPage() {
         return;
       }
 
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) return;
-
       const response = await fetch("/api/google-calendar/settings", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
           client_id: configForm.clientId,
@@ -322,14 +324,9 @@ export default function IntegrationsPage() {
   const handleManualSync = async () => {
     try {
       setSyncing(true);
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) return;
 
       const response = await fetch("/api/google-calendar/sync", {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
       });
 
       if (!response.ok) throw new Error("Sync failed");

@@ -20,26 +20,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // Get OAuth settings from database
-    const { data: settingsRecord, error: settingsError } = await supabaseAdmin
-      .from("integration_settings")
+    const { data: integrationSettings, error: settingsError } = await supabaseAdmin
+      .from("integration_settings" as any)
       .select("*")
-      .eq("integration_name", "google_calendar")
+      .eq("service_name", "google_calendar")
       .single();
 
-    if (settingsError || !settingsRecord) {
-      console.error("OAuth settings not configured:", settingsError);
-      return res.redirect(302, "/admin/integrations?error=not_configured");
+    if (settingsError || !integrationSettings) {
+      console.error("Failed to get integration settings:", settingsError);
+      return res.redirect(302, "/admin/integrations?error=config_not_found");
     }
 
-    const settings = settingsRecord.settings as any;
+    const settings = integrationSettings as any;
+    const { client_id, client_secret } = settings;
 
-    if (!settings?.client_id || !settings?.client_secret) {
-      console.error("OAuth credentials missing in settings");
-      return res.redirect(302, "/admin/integrations?error=not_configured");
-    }
-
-    if (!settingsRecord.is_active) {
-      return res.redirect(302, "/admin/integrations?error=disabled");
+    if (!client_id || !client_secret) {
+      console.error("Missing OAuth credentials in database");
+      return res.redirect(302, "/admin/integrations?error=missing_credentials");
     }
 
     // Exchange code for tokens
@@ -52,8 +49,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       },
       body: new URLSearchParams({
         code: code as string,
-        client_id: settings.client_id,
-        client_secret: settings.client_secret,
+        client_id: client_id,
+        client_secret: client_secret,
         redirect_uri: redirectUrl,
         grant_type: "authorization_code",
       }),
