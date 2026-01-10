@@ -33,18 +33,19 @@ export function useGoogleCalendarSync() {
 
       const { data, error } = await supabase
         .from("google_calendar_integrations" as any)
-        .select("id, expires_at")
+        .select("*")
         .eq("user_id", user.id)
-        .maybeSingle();
+        .single();
 
-      if (error) {
-        console.error("Error checking connection:", error);
+      if (error || !data) {
         setIsConnected(false);
         return;
       }
 
       // Check if token is still valid
-      const isValid = data && data.expires_at && new Date(data.expires_at) > new Date();
+      const integration = data as any;
+      const expiresAt = integration.expires_at;
+      const isValid = expiresAt && new Date(expiresAt) > new Date();
       setIsConnected(!!isValid);
     } catch (error) {
       console.error("Error checking Google Calendar connection:", error);
