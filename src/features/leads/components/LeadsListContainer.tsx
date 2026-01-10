@@ -248,11 +248,12 @@ export function LeadsListContainer({
               showArchived={showArchived}
               canAssignLeads={canAssignLeads}
               onEdit={onEdit}
-              onDelete={handleDelete}
-              onRestore={handleRestore}
+              onDelete={(lead) => handleDelete(lead.id)}
+              onRestore={(lead) => handleRestore(lead.id)}
               onConvert={handleConvert}
               onViewDetails={handleViewDetails}
               onAssign={handleAssign}
+              onAssignSuccess={refetch}
               onTask={handleTask}
               onEvent={handleEvent}
               onInteraction={handleInteraction}

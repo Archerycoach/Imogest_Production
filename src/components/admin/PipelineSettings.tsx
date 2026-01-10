@@ -5,12 +5,114 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Trash2, Save } from "lucide-react";
+import { Loader2, Plus, Trash2, Save, GripVertical } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 interface PipelineStage {
   id: string;
   name: string;
   color: string;
+}
+
+interface SortableStageItemProps {
+  stage: PipelineStage;
+  index: number;
+  onUpdate: (index: number, field: keyof PipelineStage, value: string) => void;
+  onRemove: (index: number) => void;
+}
+
+function SortableStageItem({ stage, index, onUpdate, onRemove }: SortableStageItemProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: stage.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex items-center gap-3 p-3 border rounded-lg bg-slate-50/50"
+    >
+      <div
+        {...attributes}
+        {...listeners}
+        className="cursor-grab active:cursor-grabbing touch-none"
+      >
+        <GripVertical className="h-5 w-5 text-slate-400" />
+      </div>
+      
+      <div className="flex-1">
+        <Label className="text-xs text-slate-600 mb-1">Nome do Estágio</Label>
+        <Input 
+          value={stage.name} 
+          onChange={(e) => onUpdate(index, "name", e.target.value)}
+          className="bg-white"
+        />
+      </div>
+      
+      <div className="w-32">
+        <Label className="text-xs text-slate-600 mb-1">ID</Label>
+        <Input 
+          value={stage.id} 
+          onChange={(e) => onUpdate(index, "id", e.target.value)}
+          className="font-mono text-xs bg-white"
+        />
+      </div>
+      
+      <div className="w-32">
+        <Label className="text-xs text-slate-600 mb-1">Cor (Hex)</Label>
+        <div className="flex gap-2">
+          <Input 
+            type="color"
+            value={stage.color} 
+            onChange={(e) => onUpdate(index, "color", e.target.value)}
+            className="w-12 h-10 p-1 cursor-pointer"
+          />
+          <Input 
+            value={stage.color} 
+            onChange={(e) => onUpdate(index, "color", e.target.value)}
+            className="flex-1 font-mono text-xs bg-white"
+            placeholder="#3B82F6"
+          />
+        </div>
+      </div>
+      
+      <Button 
+        variant="ghost" 
+        size="icon"
+        onClick={() => onRemove(index)}
+        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+      >
+        <Trash2 className="h-4 w-4" />
+      </Button>
+    </div>
+  );
 }
 
 export function PipelineSettings() {
@@ -19,6 +121,27 @@ export function PipelineSettings() {
   const [sellerStages, setSellerStages] = useState<PipelineStage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = (event: DragEndEvent, type: "buyer" | "seller") => {
+    const { active, over } = event;
+
+    if (!over || active.id === over.id) return;
+
+    const stages = type === "buyer" ? buyerStages : sellerStages;
+    const setStages = type === "buyer" ? setBuyerStages : setSellerStages;
+
+    const oldIndex = stages.findIndex((s) => s.id === active.id);
+    const newIndex = stages.findIndex((s) => s.id === over.id);
+
+    setStages(arrayMove(stages, oldIndex, newIndex));
+  };
 
   useEffect(() => {
     fetchSettings();
@@ -189,53 +312,28 @@ export function PipelineSettings() {
             </Button>
           </div>
           
-          <div className="space-y-3">
-            {buyerStages.map((stage, index) => (
-              <div key={index} className="flex items-center gap-3 p-3 border rounded-lg bg-slate-50/50">
-                <div className="flex-1">
-                  <Label className="text-xs text-slate-600 mb-1">Nome do Estágio</Label>
-                  <Input 
-                    value={stage.name} 
-                    onChange={(e) => updateStage("buyer", index, "name", e.target.value)}
-                    className="bg-white"
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={(e) => handleDragEnd(e, "buyer")}
+          >
+            <SortableContext
+              items={buyerStages.map((s) => s.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="space-y-3">
+                {buyerStages.map((stage, index) => (
+                  <SortableStageItem
+                    key={stage.id}
+                    stage={stage}
+                    index={index}
+                    onUpdate={(idx, field, value) => updateStage("buyer", idx, field, value)}
+                    onRemove={(idx) => removeStage("buyer", idx)}
                   />
-                </div>
-                <div className="w-32">
-                  <Label className="text-xs text-slate-600 mb-1">ID</Label>
-                  <Input 
-                    value={stage.id} 
-                    onChange={(e) => updateStage("buyer", index, "id", e.target.value)}
-                    className="font-mono text-xs bg-white"
-                  />
-                </div>
-                <div className="w-32">
-                  <Label className="text-xs text-slate-600 mb-1">Cor (Hex)</Label>
-                  <div className="flex gap-2">
-                    <Input 
-                      type="color"
-                      value={stage.color} 
-                      onChange={(e) => updateStage("buyer", index, "color", e.target.value)}
-                      className="w-12 h-10 p-1 cursor-pointer"
-                    />
-                    <Input 
-                      value={stage.color} 
-                      onChange={(e) => updateStage("buyer", index, "color", e.target.value)}
-                      className="flex-1 font-mono text-xs bg-white"
-                      placeholder="#3B82F6"
-                    />
-                  </div>
-                </div>
-                <Button 
-                  variant="ghost" 
-                  size="icon"
-                  onClick={() => removeStage("buyer", index)}
-                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                ))}
               </div>
-            ))}
-          </div>
+            </SortableContext>
+          </DndContext>
         </div>
 
         {/* Pipeline Vendedores */}
@@ -247,53 +345,28 @@ export function PipelineSettings() {
             </Button>
           </div>
           
-          <div className="space-y-3">
-            {sellerStages.map((stage, index) => (
-              <div key={index} className="flex items-center gap-3 p-3 border rounded-lg bg-slate-50/50">
-                <div className="flex-1">
-                  <Label className="text-xs text-slate-600 mb-1">Nome do Estágio</Label>
-                  <Input 
-                    value={stage.name} 
-                    onChange={(e) => updateStage("seller", index, "name", e.target.value)}
-                    className="bg-white"
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={(e) => handleDragEnd(e, "seller")}
+          >
+            <SortableContext
+              items={sellerStages.map((s) => s.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="space-y-3">
+                {sellerStages.map((stage, index) => (
+                  <SortableStageItem
+                    key={stage.id}
+                    stage={stage}
+                    index={index}
+                    onUpdate={(idx, field, value) => updateStage("seller", idx, field, value)}
+                    onRemove={(idx) => removeStage("seller", idx)}
                   />
-                </div>
-                <div className="w-32">
-                  <Label className="text-xs text-slate-600 mb-1">ID</Label>
-                  <Input 
-                    value={stage.id} 
-                    onChange={(e) => updateStage("seller", index, "id", e.target.value)}
-                    className="font-mono text-xs bg-white"
-                  />
-                </div>
-                <div className="w-32">
-                  <Label className="text-xs text-slate-600 mb-1">Cor (Hex)</Label>
-                  <div className="flex gap-2">
-                    <Input 
-                      type="color"
-                      value={stage.color} 
-                      onChange={(e) => updateStage("seller", index, "color", e.target.value)}
-                      className="w-12 h-10 p-1 cursor-pointer"
-                    />
-                    <Input 
-                      value={stage.color} 
-                      onChange={(e) => updateStage("seller", index, "color", e.target.value)}
-                      className="flex-1 font-mono text-xs bg-white"
-                      placeholder="#3B82F6"
-                    />
-                  </div>
-                </div>
-                <Button 
-                  variant="ghost" 
-                  size="icon"
-                  onClick={() => removeStage("seller", index)}
-                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                ))}
               </div>
-            ))}
-          </div>
+            </SortableContext>
+          </DndContext>
         </div>
 
         {/* Nota informativa */}

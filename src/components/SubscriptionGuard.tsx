@@ -34,22 +34,24 @@ export function SubscriptionGuard({ children }: SubscriptionGuardProps) {
       const profileData = await getUserProfile();
       setProfile(profileData);
 
-      // ✅ ADMINS BYPASS SUBSCRIPTION CHECK
+      // ✅ ADMINS AND TEAM LEADS BYPASS SUBSCRIPTION CHECK
       if (profileData && (profileData.role === "admin" || profileData.role === "team_lead")) {
         setHasAccess(true);
         setLoading(false);
         return;
       }
 
-      // For non-admins, check subscription
+      // ❌ FOR AGENTS: CHECK SUBSCRIPTION IS REQUIRED
       const subscription = await getCurrentSubscription(user.id);
       
+      // Block access if no subscription or subscription is not active
       if (!subscription || subscription.status !== "active") {
         setHasAccess(false);
         setLoading(false);
         return;
       }
 
+      // ✅ Agent has active subscription
       setHasAccess(true);
     } catch (error) {
       console.error("Error checking subscription:", error);
@@ -67,11 +69,12 @@ export function SubscriptionGuard({ children }: SubscriptionGuardProps) {
     );
   }
 
-  // Admin and Team Lead bypass subscription check
-  if (profile && (profile.role === "admin" || profile.role === "team_lead")) {
+  // Show content if user has access (admin/team_lead or active subscription)
+  if (hasAccess) {
     return <>{children}</>;
   }
 
+  // Block access - show subscription required screen
   if (!hasAccess) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">

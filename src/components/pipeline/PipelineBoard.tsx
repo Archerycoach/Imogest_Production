@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   DndContext,
   DragEndEvent,
@@ -12,6 +12,7 @@ import { PipelineColumn } from "./PipelineColumn";
 import { LeadCard } from "./LeadCard";
 import type { LeadWithContacts } from "@/services/leadsService";
 import type { LeadType } from "@/types";
+import { getBuyerStages, getSellerStages, type PipelineStage } from "@/services/pipelineSettingsService";
 
 interface PipelineBoardProps {
   leads: LeadWithContacts[];
@@ -22,29 +23,32 @@ interface PipelineBoardProps {
   pipelineView: LeadType;
 }
 
-const BUYER_STAGES = [
-  { id: "new", title: "Novo Contacto", color: "bg-blue-500" },
-  { id: "contacted", title: "Contactado", color: "bg-yellow-500" },
-  { id: "qualified", title: "Qualificado", color: "bg-purple-500" },
-  { id: "proposal", title: "Proposta", color: "bg-orange-500" },
-  { id: "negotiation", title: "Negociação", color: "bg-orange-600" },
-  { id: "won", title: "Fechado", color: "bg-green-500" },
-  { id: "lost", title: "Perdido", color: "bg-red-500" },
-];
-
-const SELLER_STAGES = [
-  { id: "new", title: "Novo Contacto", color: "bg-blue-500" },
-  { id: "contacted", title: "Avaliação", color: "bg-yellow-500" },
-  { id: "qualified", title: "Angariação", color: "bg-purple-500" },
-  { id: "proposal", title: "Marketing", color: "bg-orange-500" },
-  { id: "negotiation", title: "Negociação", color: "bg-orange-600" },
-  { id: "won", title: "Vendido", color: "bg-green-500" },
-  { id: "lost", title: "Perdido", color: "bg-red-500" },
-];
-
 export function PipelineBoard({ leads, onLeadMove, onLeadClick, onLeadDelete, isLoading, pipelineView }: PipelineBoardProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [buyerStages, setBuyerStages] = useState<PipelineStage[]>([]);
+  const [sellerStages, setSellerStages] = useState<PipelineStage[]>([]);
+  const [stagesLoading, setStagesLoading] = useState(true);
+
+  useEffect(() => {
+    const loadStages = async () => {
+      setStagesLoading(true);
+      try {
+        const [buyers, sellers] = await Promise.all([
+          getBuyerStages(),
+          getSellerStages(),
+        ]);
+        setBuyerStages(buyers);
+        setSellerStages(sellers);
+      } catch (error) {
+        console.error("Error loading pipeline stages:", error);
+      } finally {
+        setStagesLoading(false);
+      }
+    };
+
+    loadStages();
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -81,9 +85,9 @@ export function PipelineBoard({ leads, onLeadMove, onLeadClick, onLeadDelete, is
 
   const activeLead = activeId ? leads.find((lead) => lead.id === activeId) : null;
 
-  const stages = pipelineView === "buyer" ? BUYER_STAGES : SELLER_STAGES;
+  const stages = pipelineView === "buyer" ? buyerStages : sellerStages;
 
-  if (isLoading) {
+  if (isLoading || stagesLoading) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
@@ -93,12 +97,12 @@ export function PipelineBoard({ leads, onLeadMove, onLeadClick, onLeadDelete, is
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className="flex gap-4 pb-4 overflow-x-auto min-w-full h-full">
+      <div className="flex gap-4 pb-4 overflow-x-auto h-[calc(100vh-240px)]">
         {stages.map((stage) => (
-          <div key={stage.id} className="min-w-[300px] max-w-[300px]">
+          <div key={stage.id} className="min-w-[320px] max-w-[320px] flex-shrink-0">
             <PipelineColumn
               id={stage.id}
-              title={stage.title}
+              title={stage.name}
               color={stage.color}
               leads={getLeadsByStage(stage.id)}
               isDragging={isDragging}

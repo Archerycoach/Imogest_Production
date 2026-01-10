@@ -14,6 +14,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -30,7 +37,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Mail, Phone, Euro, Calendar, MessageCircle, UserCheck, Edit, Trash2, FileText, CalendarDays } from "lucide-react";
+import { Mail, Phone, Euro, Calendar, MessageCircle, UserCheck, Edit, Trash2, FileText, CalendarDays, MessageSquare, MoreVertical, Users, StickyNote } from "lucide-react";
 import type { LeadWithContacts } from "@/services/leadsService";
 import { convertLeadToContact } from "@/services/contactsService";
 import { createInteraction } from "@/services/interactionsService";
@@ -38,6 +45,9 @@ import { useToast } from "@/hooks/use-toast";
 import { QuickTaskDialog } from "@/components/QuickTaskDialog";
 import { QuickEventDialog } from "@/components/QuickEventDialog";
 import { LeadNotesDialog } from "@/components/leads/LeadNotesDialog";
+import { AssignLeadDialog } from "@/components/leads/AssignLeadDialog";
+import { useEffect } from "react";
+import { getUserProfile } from "@/services/profileService";
 
 interface LeadCardProps {
   lead: LeadWithContacts;
@@ -50,6 +60,8 @@ export function LeadCard({ lead, onClick, onDelete, onConvertSuccess }: LeadCard
   const [convertDialogOpen, setConvertDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [interactionDialogOpen, setInteractionDialogOpen] = useState(false);
+  const [notesDialogOpen, setNotesDialogOpen] = useState(false);
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [converting, setConverting] = useState(false);
   const [creatingInteraction, setCreatingInteraction] = useState(false);
   const [interactionForm, setInteractionForm] = useState({
@@ -61,7 +73,23 @@ export function LeadCard({ lead, onClick, onDelete, onConvertSuccess }: LeadCard
   });
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
+  const [canAssignLeads, setCanAssignLeads] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    checkPermissions();
+  }, []);
+
+  const checkPermissions = async () => {
+    try {
+      const profile = await getUserProfile();
+      if (profile && (profile.role === "admin" || profile.role === "team_lead")) {
+        setCanAssignLeads(true);
+      }
+    } catch (error) {
+      console.error("Error checking permissions:", error);
+    }
+  };
 
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: lead.id,
@@ -299,6 +327,16 @@ export function LeadCard({ lead, onClick, onDelete, onConvertSuccess }: LeadCard
     setEventDialogOpen(true);
   };
 
+  const handleNotesClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setNotesDialogOpen(true);
+  };
+
+  const handleAssignClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setAssignDialogOpen(true);
+  };
+
   const handleEdit = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (onClick) {
@@ -336,134 +374,210 @@ export function LeadCard({ lead, onClick, onDelete, onConvertSuccess }: LeadCard
           isDragging ? "opacity-50" : ""
         }`}
       >
-        {/* Header with Edit and Delete Buttons - Top Right */}
-        <div className="absolute top-4 right-4 flex gap-2">
+        {/* Header with Actions and Delete Button - Top Right */}
+        <div className="absolute top-4 right-4 flex gap-1 bg-white/80 backdrop-blur-sm p-1 rounded-lg shadow-sm">
+          {/* Actions Dropdown Menu - Concentrates ALL actions */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors">
+                <MoreVertical className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              {/* Communication Section */}
+              <DropdownMenuItem onClick={handleEmail}>
+                <Mail className="h-4 w-4 mr-2" />
+                Email
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleSMS}>
+                <MessageSquare className="h-4 w-4 mr-2" />
+                SMS
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleWhatsApp}>
+                <MessageCircle className="h-4 w-4 mr-2" />
+                WhatsApp
+              </DropdownMenuItem>
+              
+              <DropdownMenuSeparator />
+              
+              {/* Calendar Section */}
+              <DropdownMenuItem onClick={handleTaskClick}>
+                <CalendarDays className="h-4 w-4 mr-2" />
+                Tarefa
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleEventClick}>
+                <Calendar className="h-4 w-4 mr-2" />
+                Evento
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleInteractionClick}>
+                <FileText className="h-4 w-4 mr-2" />
+                Interação
+              </DropdownMenuItem>
+              
+              <DropdownMenuSeparator />
+              
+              {/* Management Section */}
+              <DropdownMenuItem onClick={handleNotesClick}>
+                <StickyNote className="h-4 w-4 mr-2" />
+                Notas
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleConvertClick}>
+                <UserCheck className="h-4 w-4 mr-2" />
+                Converter
+              </DropdownMenuItem>
+              
+              {canAssignLeads && (
+                <DropdownMenuItem onClick={handleAssignClick}>
+                  <Users className="h-4 w-4 mr-2" />
+                  Atribuir Agente
+                </DropdownMenuItem>
+              )}
+
+              <DropdownMenuSeparator />
+
+              {/* Destructive Actions in Menu (Optional/Alternative) */}
+               <DropdownMenuItem onClick={handleDelete} className="text-red-600 focus:text-red-600">
+                <Trash2 className="h-4 w-4 mr-2" />
+                Apagar
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Edit Button - Visible for quick access */}
           <button
             onClick={handleEdit}
-            className="text-blue-500 hover:text-blue-700 transition-colors"
+            className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors"
+            title="Editar"
           >
             <Edit className="h-4 w-4" />
-          </button>
-          <button
-            onClick={handleDelete}
-            className="text-red-500 hover:text-red-700 transition-colors"
-          >
-            <Trash2 className="h-4 w-4" />
           </button>
         </div>
 
         {/* Lead Name */}
-        <h3 className="text-lg font-semibold text-gray-900 mb-3 pr-16">
+        <h3 className="text-lg font-semibold text-gray-900 mb-3 pr-20 truncate">
           {lead.name}
         </h3>
 
-        {/* Badges */}
-        <div className="flex gap-2 mb-4">
-          <Badge variant="outline" className={getTypeColor(lead.lead_type)}>
-            {getTypeLabel(lead.lead_type)}
-          </Badge>
-          <Badge variant="outline" className={getStatusColor(lead.status)}>
-            {getStatusLabel(lead.status)}
-          </Badge>
-        </div>
-
-        {/* Contact Information */}
-        <div className="space-y-2 mb-4 text-sm text-gray-600">
-          {lead.email && (
-            <div className="flex items-center gap-2">
-              <Mail className="h-4 w-4 text-gray-400" />
-              <span className="truncate">{lead.email}</span>
-            </div>
-          )}
+        {/* Contact Information - Phone Only */}
+        <div className="mb-4">
           {lead.phone && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 text-sm text-gray-600">
               <Phone className="h-4 w-4 text-gray-400" />
               <span>{lead.phone}</span>
             </div>
           )}
-          <div className="flex items-center gap-2">
-            <Euro className="h-4 w-4 text-gray-400" />
-            <span>Até {formatBudget(lead.budget)}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-gray-400" />
-            <span>Criado a {formatDate(lead.created_at)}</span>
-          </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="space-y-2">
-          {/* Email, SMS and WhatsApp Buttons */}
-          <div className="grid grid-cols-3 gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleEmail}
-              className="text-purple-600 border-purple-200 hover:bg-purple-50 hover:text-purple-700"
-            >
-              <Mail className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSMS}
-              className="text-orange-600 border-orange-200 hover:bg-orange-50 hover:text-orange-700"
-            >
-              <MessageCircle className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleWhatsApp}
-              className="text-green-600 border-green-200 hover:bg-green-50 hover:text-green-700"
-            >
-              <MessageCircle className="h-4 w-4" />
-            </Button>
+        {/* Buyer Preferences or Seller Property Details */}
+        {lead.lead_type === "buyer" && (
+          <div className="space-y-1 text-sm text-gray-600">
+            <div className="font-medium text-gray-700 mb-2">Preferências de Compra:</div>
+            {lead.property_type && (
+              <div className="flex items-center gap-2">
+                <span>🏠</span>
+                <span>{lead.property_type}</span>
+              </div>
+            )}
+            {lead.location_preference && (
+              <div className="flex items-center gap-2">
+                <span>📍</span>
+                <span>{lead.location_preference}</span>
+              </div>
+            )}
+            {lead.bedrooms && (
+              <div className="flex items-center gap-2">
+                <span>🛏️</span>
+                <span>{lead.bedrooms}</span>
+              </div>
+            )}
+            {lead.min_area && (
+              <div className="flex items-center gap-2">
+                <span>📏</span>
+                <span>{lead.min_area}m²</span>
+              </div>
+            )}
+            {(lead.budget_min || lead.budget_max) && (
+              <div className="flex items-center gap-2">
+                <span>💰</span>
+                <span>
+                  {formatBudget(lead.budget_min)} - {formatBudget(lead.budget_max)}
+                </span>
+              </div>
+            )}
+            {lead.needs_financing && (
+              <div className="flex items-center gap-2">
+                <span>💳</span>
+                <span>Necessita Financiamento</span>
+              </div>
+            )}
           </div>
+        )}
 
-          {/* Task, Event and Interaction Buttons */}
-          <div className="grid grid-cols-3 gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleTaskClick}
-              className="text-blue-600 border-blue-200 hover:bg-blue-50 hover:text-blue-700"
-              title="Nova Tarefa"
-            >
-              <CalendarDays className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleEventClick}
-              className="text-purple-600 border-purple-200 hover:bg-purple-50 hover:text-purple-700"
-              title="Novo Evento"
-            >
-              <Calendar className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleInteractionClick}
-              className="text-indigo-600 border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
-            >
-              <FileText className="h-4 w-4" />
-            </Button>
+        {lead.lead_type === "seller" && (
+          <div className="space-y-1 text-sm text-gray-600">
+            <div className="font-medium text-gray-700 mb-2">Propriedade para Venda:</div>
+            {lead.property_type && (
+              <div className="flex items-center gap-2">
+                <span>🏠</span>
+                <span>{lead.property_type}</span>
+              </div>
+            )}
+            {lead.location_preference && (
+              <div className="flex items-center gap-2">
+                <span>📍</span>
+                <span>{lead.location_preference}</span>
+              </div>
+            )}
+            {lead.bedrooms && (
+              <div className="flex items-center gap-2">
+                <span>🛏️</span>
+                <span>{lead.bedrooms}</span>
+              </div>
+            )}
+            {lead.property_area && (
+              <div className="flex items-center gap-2">
+                <span>📏</span>
+                <span>{lead.property_area}m²</span>
+              </div>
+            )}
+            {lead.desired_price && (
+              <div className="flex items-center gap-2">
+                <span>💰</span>
+                <span>{formatBudget(lead.desired_price)}</span>
+              </div>
+            )}
           </div>
+        )}
 
-          {/* Convert and Notes Buttons */}
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleConvertClick}
-              className="text-blue-600 border-blue-200 hover:bg-blue-50 hover:text-blue-700"
-            >
-              <UserCheck className="h-4 w-4" />
-            </Button>
-            <LeadNotesDialog leadId={lead.id} leadName={lead.name} />
+        {lead.lead_type === "both" && (
+          <div className="space-y-3 text-sm text-gray-600">
+            <div>
+              <div className="font-medium text-gray-700 mb-2">Detalhes:</div>
+              <div className="space-y-1 pl-2">
+                {lead.property_type && (
+                  <div className="flex items-center gap-2">
+                    <span>🏠</span>
+                    <span>{lead.property_type}</span>
+                  </div>
+                )}
+                {lead.location_preference && (
+                  <div className="flex items-center gap-2">
+                    <span>📍</span>
+                    <span>{lead.location_preference}</span>
+                  </div>
+                )}
+                {(lead.budget_min || lead.budget_max) && (
+                  <div className="flex items-center gap-2">
+                    <span>💰</span>
+                    <span>
+                      {formatBudget(lead.budget_min)} - {formatBudget(lead.budget_max)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </Card>
 
       {/* Convert Confirmation Dialog */}
@@ -638,6 +752,33 @@ export function LeadCard({ lead, onClick, onDelete, onConvertSuccess }: LeadCard
         contactId={null}
         entityName={lead.name}
       />
+
+      {/* Notes Dialog */}
+      {/* Controlled dialog - rendered outside of card content flow, controlled by state */}
+      <LeadNotesDialog 
+        leadId={lead.id} 
+        leadName={lead.name} 
+        open={notesDialogOpen}
+        onOpenChange={setNotesDialogOpen}
+        trigger={<></>} // No trigger button needed as we control it via menu
+      />
+
+      {/* Assign Dialog */}
+      {canAssignLeads && (
+        <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
+          <DialogContent className="sm:max-w-[425px]">
+            <AssignLeadDialog
+              leadId={lead.id}
+              leadName={lead.name}
+              currentAssignedUserId={lead.assigned_to}
+              onAssignSuccess={() => {
+                setAssignDialogOpen(false);
+                if (onConvertSuccess) onConvertSuccess();
+              }}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </>
   );
 }

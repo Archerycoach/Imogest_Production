@@ -1,385 +1,172 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import {
-  Edit,
-  Trash2,
-  Mail,
-  Phone,
-  MessageCircle,
-  MessageSquare,
-  CheckCircle,
-  Eye,
-  Users,
-  CalendarDays,
-  Calendar,
-  FileText,
-  Euro,
-  MapPin,
-  Home,
-  BedDouble,
-  Bath,
-  Ruler,
-  Banknote,
-  StickyNote,
-  Save,
-  X,
-  Building2,
-  Bed,
-  MoreVertical,
-} from "lucide-react";
-import type { LeadWithContacts } from "@/services/leadsService";
-import { Textarea } from "@/components/ui/textarea";
-import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger,
   DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
+import {
+  Mail,
+  Phone,
+  MessageCircle,
+  Eye,
+  Edit,
+  Trash2,
+  MessageSquare,
+  Calendar,
+  CalendarDays,
+  FileText,
+  UserCheck,
+  MoreVertical,
+  Users,
+  StickyNote,
+} from "lucide-react";
 import { LeadNotesDialog } from "@/components/leads/LeadNotesDialog";
+import { AssignLeadDialog } from "@/components/leads/AssignLeadDialog";
+import { getUserProfile } from "@/services/profileService";
 
-interface LeadCardProps {
-  lead: LeadWithContacts;
-  showArchived: boolean;
-  canAssignLeads: boolean;
-  onEdit: (lead: LeadWithContacts) => void;
-  onDelete: (id: string) => void;
-  onRestore: (id: string) => void;
-  onConvert: (lead: LeadWithContacts) => void;
-  onViewDetails: (lead: LeadWithContacts) => void;
-  onAssign: (lead: LeadWithContacts) => void;
-  onTask: (lead: LeadWithContacts) => void;
-  onEvent: (lead: LeadWithContacts) => void;
-  onInteraction: (lead: LeadWithContacts) => void;
-  onEmail: (lead: LeadWithContacts) => void;
-  onSMS: (lead: LeadWithContacts) => void;
-  onWhatsApp: (lead: LeadWithContacts) => void;
-  onRefresh?: () => void;
+interface Lead {
+  id: string;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  status?: string | null;
+  lead_type?: string | null;
+  budget_min?: number | null;
+  budget_max?: number | null;
+  property_type?: string | null;
+  location?: string | null;
+  bedrooms?: string | number | null;
+  area_min?: number | null;
+  requires_financing?: boolean | null;
+  created_at?: string | null;
+  assigned_to?: string | null;
+  [key: string]: any;
 }
 
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case "new":
-      return "bg-blue-100 text-blue-800 border-blue-200";
-    case "contacted":
-      return "bg-yellow-100 text-yellow-800 border-yellow-200";
-    case "qualified":
-      return "bg-purple-100 text-purple-800 border-purple-200";
-    case "proposal":
-      return "bg-indigo-100 text-indigo-800 border-indigo-200";
-    case "negotiation":
-      return "bg-orange-100 text-orange-800 border-orange-200";
-    case "won":
-      return "bg-green-100 text-green-800 border-green-200";
-    case "lost":
-      return "bg-red-100 text-red-800 border-red-200";
-    default:
-      return "bg-gray-100 text-gray-800 border-gray-200";
-  }
-};
-
-const getTypeColor = (type: string) => {
-  switch (type) {
-    case "buyer":
-      return "bg-blue-100 text-blue-800 border-blue-200";
-    case "seller":
-      return "bg-green-100 text-green-800 border-green-200";
-    case "both":
-      return "bg-purple-100 text-purple-800 border-purple-200";
-    default:
-      return "bg-gray-100 text-gray-800 border-gray-200";
-  }
-};
-
-const getStatusLabel = (status: string) => {
-  const labels: Record<string, string> = {
-    new: "Novo",
-    contacted: "Contactado",
-    qualified: "Qualificado",
-    proposal: "Proposta",
-    negotiation: "Negociação",
-    won: "Ganho",
-    lost: "Perdido",
-  };
-  return labels[status] || status;
-};
-
-const getTypeLabel = (type: string) => {
-  const labels: Record<string, string> = {
-    buyer: "Comprador",
-    seller: "Vendedor",
-    both: "Ambos",
-  };
-  return labels[type] || type;
-};
-
-const formatDate = (dateString: string) => {
-  if (!dateString) return "-";
-  const date = new Date(dateString);
-  return new Intl.DateTimeFormat("pt-PT", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(date);
-};
-
-const formatBudget = (budget: number | null) => {
-  if (!budget) return "-";
-  return new Intl.NumberFormat("pt-PT", {
-    style: "currency",
-    currency: "EUR",
-    maximumFractionDigits: 0,
-  }).format(budget);
-};
+interface LeadCardProps {
+  lead: Lead;
+  onViewDetails: (lead: Lead) => void;
+  onEdit: (lead: Lead) => void;
+  onDelete: (lead: Lead) => void;
+  onRestore?: (lead: Lead) => void;
+  onConvert?: (lead: Lead) => void;
+  onEmail: (lead: Lead) => void;
+  onSMS: (lead: Lead) => void;
+  onWhatsApp: (lead: Lead) => void;
+  onTask: (lead: Lead) => void;
+  onEvent: (lead: Lead) => void;
+  onInteraction: (lead: Lead) => void;
+  onAssign?: (lead: Lead) => void;
+  onAssignSuccess?: () => void;
+  showArchived?: boolean;
+  canAssignLeads?: boolean;
+}
 
 export function LeadCard({
   lead,
-  showArchived,
-  canAssignLeads,
+  onViewDetails,
   onEdit,
   onDelete,
   onRestore,
   onConvert,
-  onViewDetails,
-  onAssign,
-  onTask,
-  onEvent,
-  onInteraction,
   onEmail,
   onSMS,
   onWhatsApp,
-  onRefresh,
+  onTask,
+  onEvent,
+  onInteraction,
+  onAssign,
+  onAssignSuccess,
+  showArchived = false,
+  canAssignLeads = false,
 }: LeadCardProps) {
-  const isBuyer = lead.lead_type === "buyer" || lead.lead_type === "both";
-  const isSeller = lead.lead_type === "seller" || lead.lead_type === "both";
-  const [showNoteField, setShowNoteField] = useState(false);
-  const [noteValue, setNoteValue] = useState(lead.notes || "");
-  const [savingNote, setSavingNote] = useState(false);
-  const { toast } = useToast();
+  const [notesDialogOpen, setNotesDialogOpen] = useState(false);
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
 
-  const handleSaveNote = async () => {
-    setSavingNote(true);
-    try {
-      const { error } = await supabase
-        .from("leads")
-        .update({ notes: noteValue || null })
-        .eq("id", lead.id);
+  const formatCurrency = (value: number | null | undefined) => {
+    if (!value) return "N/A";
+    return new Intl.NumberFormat("pt-PT", {
+      style: "currency",
+      currency: "EUR",
+      maximumFractionDigits: 0,
+    }).format(value);
+  };
 
-      if (error) throw error;
+  const formatDate = (date: string | null | undefined) => {
+    if (!date) return "N/A";
+    return new Date(date).toLocaleDateString("pt-PT", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  };
 
-      toast({
-        title: "Nota guardada!",
-        description: "A nota foi atualizada com sucesso.",
-      });
-
-      setShowNoteField(false);
-      
-      if (onRefresh) {
-        await onRefresh();
-      }
-    } catch (error: any) {
-      console.error("Error saving note:", error);
-      toast({
-        title: "Erro ao guardar nota",
-        description: error.message,
-        variant: "destructive",
-      });
-    } finally {
-      setSavingNote(false);
+  const getStatusBadgeVariant = (status: string | null | undefined) => {
+    switch (status) {
+      case "new":
+        return "default";
+      case "contacted":
+        return "secondary";
+      case "qualified":
+        return "default";
+      case "proposal":
+        return "default";
+      case "negotiation":
+        return "default";
+      case "won":
+        return "default";
+      case "lost":
+        return "destructive";
+      default:
+        return "secondary";
     }
   };
 
-  const handleCancelNote = () => {
-    setNoteValue(lead.notes || "");
-    setShowNoteField(false);
+  const getStatusLabel = (status: string | null | undefined) => {
+    const statusMap: Record<string, string> = {
+      new: "Novo",
+      contacted: "Contactado",
+      qualified: "Qualificado",
+      proposal: "Proposta",
+      negotiation: "Negociação",
+      won: "Ganho",
+      lost: "Perdido",
+    };
+    return statusMap[status || ""] || status || "N/A";
+  };
+
+  const getLeadTypeLabel = (type: string | null | undefined) => {
+    const typeMap: Record<string, string> = {
+      buyer: "Comprador",
+      seller: "Vendedor",
+      both: "Comprador/Vendedor",
+    };
+    return typeMap[type || ""] || type || "N/A";
   };
 
   return (
-    <Card className="relative p-6 hover:shadow-lg transition-shadow">
-      <div className="absolute top-4 right-4 flex gap-2">
-        {!showArchived ? (
-          <>
-            <button
-              onClick={() => onEdit(lead)}
-              className="text-blue-500 hover:text-blue-700 transition-colors"
-              title="Editar"
-              type="button"
-            >
-              <Edit className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => onConvert(lead)}
-              className="text-green-500 hover:text-green-700 transition-colors"
-              title="Converter em Contacto"
-              type="button"
-            >
-              <CheckCircle className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => onDelete(lead.id)}
-              className="text-red-500 hover:text-red-700 transition-colors"
-              title="Arquivar"
-              type="button"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          </>
-        ) : (
-          <button
-            onClick={() => onRestore(lead.id)}
-            className="text-green-500 hover:text-green-700 transition-colors"
-            title="Restaurar Lead"
-            type="button"
-          >
-            <CheckCircle className="h-4 w-4" />
-          </button>
-        )}
-      </div>
-
-      <h3 className="text-lg font-semibold text-gray-900 mb-3 pr-16">
-        {lead.name}
-      </h3>
-
-      <div className="flex gap-2 mb-4">
-        <Badge variant="outline" className={getTypeColor(lead.lead_type)}>
-          {getTypeLabel(lead.lead_type)}
-        </Badge>
-        <Badge variant="outline" className={getStatusColor(lead.status)}>
-          {getStatusLabel(lead.status)}
-        </Badge>
-      </div>
-
-      <div className="space-y-3 mb-4 text-sm text-gray-600">
-        <div className="flex items-center gap-2">
-          <Mail className="h-4 w-4 text-gray-400 shrink-0" />
-          <span className="truncate">{lead.email || "Sem email"}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Phone className="h-4 w-4 text-gray-400 shrink-0" />
-          <span>{lead.phone || "Sem telefone"}</span>
-        </div>
-
-        {isBuyer && (lead.property_type || lead.location_preference || lead.bedrooms || lead.min_area || lead.budget || lead.needs_financing) && (
-          <div className="mt-3 pt-3 border-t border-gray-100 bg-blue-50/50 p-3 rounded-md space-y-2">
-            <p className="font-semibold text-blue-900 mb-2 text-sm">Preferências de Compra:</p>
-            {lead.property_type && (
-              <div className="flex items-center gap-2 text-sm">
-                <Home className="h-4 w-4 text-blue-600" />
-                <span className="capitalize">
-                  {lead.property_type === "apartment" ? "Apartamento" : 
-                   lead.property_type === "house" ? "Moradia" : 
-                   lead.property_type === "land" ? "Terreno" :
-                   lead.property_type === "commercial" ? "Comercial" :
-                   lead.property_type === "office" ? "Escritório" :
-                   lead.property_type === "warehouse" ? "Armazém" :
-                   lead.property_type}
-                </span>
-              </div>
-            )}
-            {lead.location_preference && (
-              <div className="flex items-center gap-2 text-sm">
-                <MapPin className="h-4 w-4 text-blue-600" />
-                <span>{lead.location_preference}</span>
-              </div>
-            )}
-            {lead.is_development && lead.development_name && (
-              <div className="flex items-center gap-2 text-sm">
-                <Home className="h-4 w-4 text-blue-600" />
-                <span className="font-semibold">🏢 {lead.development_name}</span>
-              </div>
-            )}
-            <div className="flex items-center gap-4 flex-wrap">
-              {lead.bedrooms && (
-                <div className="flex items-center gap-1.5 text-sm">
-                  <BedDouble className="h-4 w-4 text-blue-600" />
-                  <span className="font-medium">T{lead.bedrooms}</span>
-                </div>
-              )}
-              {lead.min_area && (
-                <div className="flex items-center gap-1.5 text-sm">
-                  <Ruler className="h-4 w-4 text-blue-600" />
-                  <span>{lead.min_area}m² min</span>
-                </div>
-              )}
-            </div>
-            {lead.budget && (
-              <div className="flex items-center gap-2 text-sm">
-                <Euro className="h-4 w-4 text-blue-600" />
-                <span className="font-medium">Até {formatBudget(lead.budget)}</span>
-              </div>
-            )}
-            {lead.needs_financing && (
-              <div className="flex items-center gap-2 text-sm">
-                <Banknote className="h-4 w-4 text-blue-600" />
-                <span className="text-blue-800 font-semibold bg-blue-100 px-2 py-0.5 rounded">
-                  Recorre a Crédito
-                </span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {isSeller && (lead.location_preference || lead.bedrooms || lead.bathrooms || lead.property_area || lead.desired_price) && (
-          <div className="mt-3 pt-3 border-t border-gray-100 bg-green-50/50 p-3 rounded-md space-y-2">
-            <p className="font-semibold text-green-900 mb-2 text-sm">Imóvel para Venda:</p>
-            {lead.location_preference && (
-              <div className="flex items-center gap-2 text-sm">
-                <MapPin className="h-4 w-4 text-green-600" />
-                <span>{lead.location_preference}</span>
-              </div>
-            )}
-            <div className="flex items-center gap-4 flex-wrap">
-              {lead.bedrooms && (
-                <div className="flex items-center gap-1.5 text-sm">
-                  <BedDouble className="h-4 w-4 text-green-600" />
-                  <span className="font-medium">T{lead.bedrooms}</span>
-                </div>
-              )}
-              {lead.bathrooms && (
-                <div className="flex items-center gap-1.5 text-sm">
-                  <Bath className="h-4 w-4 text-green-600" />
-                  <span>{lead.bathrooms} WC</span>
-                </div>
-              )}
-            </div>
-            {lead.property_area && (
-              <div className="flex items-center gap-2 text-sm">
-                <Ruler className="h-4 w-4 text-green-600" />
-                <span className="font-medium">{lead.property_area} m²</span>
-              </div>
-            )}
-            {lead.desired_price && (
-              <div className="flex items-center gap-2 text-sm">
-                <Euro className="h-4 w-4 text-green-600" />
-                <span className="font-semibold text-green-800">{formatBudget(lead.desired_price)}</span>
-              </div>
-            )}
-          </div>
-        )}
-        
-        <div className="flex items-center gap-2 pt-2 text-xs text-gray-400">
-          <Calendar className="h-3 w-3" />
-          <span>Criado a {formatDate(lead.created_at)}</span>
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        {/* Action Buttons Row */}
-        <div className="flex gap-2">
-          {/* Comunicação Dropdown */}
+    <Card className="p-4 hover:shadow-md transition-shadow relative">
+      {/* Header with Actions Dropdown, Edit and Delete Buttons */}
+      <div className="flex items-start justify-between mb-3">
+        <h3 className="text-lg font-semibold text-gray-900 pr-20">{lead.name}</h3>
+        <div className="flex gap-1">
+          {/* Actions Dropdown Menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="flex-1">
-                <MessageCircle className="h-4 w-4 mr-1" />
-                <span className="text-xs">Comunicação</span>
-              </Button>
+              <button className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors">
+                <MoreVertical className="h-4 w-4" />
+              </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
+            <DropdownMenuContent align="end" className="w-56">
+              {/* Communication Section */}
+              <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase">
+                Comunicação
+              </div>
               <DropdownMenuItem onClick={() => onEmail(lead)}>
                 <Mail className="h-4 w-4 mr-2" />
                 Email
@@ -392,18 +179,13 @@ export function LeadCard({
                 <MessageCircle className="h-4 w-4 mr-2" />
                 WhatsApp
               </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
 
-          {/* Calendário Dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="flex-1">
-                <Calendar className="h-4 w-4 mr-1" />
-                <span className="text-xs">+ Calendário</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
+              <DropdownMenuSeparator />
+
+              {/* Calendar Section */}
+              <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase">
+                Calendário
+              </div>
               <DropdownMenuItem onClick={() => onTask(lead)}>
                 <CalendarDays className="h-4 w-4 mr-2" />
                 Tarefa
@@ -416,43 +198,137 @@ export function LeadCard({
                 <FileText className="h-4 w-4 mr-2" />
                 Interação
               </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+
+              {/* Management Section */}
+              <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase">
+                Gestão
+              </div>
+              <DropdownMenuItem onClick={() => onViewDetails(lead)}>
+                <Eye className="h-4 w-4 mr-2" />
+                Ver Detalhes
+              </DropdownMenuItem>
+              {!showArchived && (
+                <DropdownMenuItem onClick={() => setNotesDialogOpen(true)}>
+                  <StickyNote className="h-4 w-4 mr-2" />
+                  Notas
+                </DropdownMenuItem>
+              )}
+              {!showArchived && onConvert && (
+                <DropdownMenuItem onClick={() => onConvert(lead)}>
+                  <UserCheck className="h-4 w-4 mr-2" />
+                  Converter em Contacto
+                </DropdownMenuItem>
+              )}
+              {canAssignLeads && !showArchived && (
+                <DropdownMenuItem onClick={() => setAssignDialogOpen(true)}>
+                  <Users className="h-4 w-4 mr-2" />
+                  Atribuir Agente
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* Notas Button */}
-          {!showArchived && (
-            <LeadNotesDialog leadId={lead.id} leadName={lead.name} />
-          )}
-        </div>
-
-        {/* View Details Button */}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onViewDetails(lead)}
-          className="w-full"
-          title="Ver Detalhes"
-          type="button"
-        >
-          <Eye className="h-4 w-4 mr-1" />
-          <span className="text-xs">Ver Detalhes</span>
-        </Button>
-
-        {/* Assign Agent Button (if applicable) */}
-        {canAssignLeads && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onAssign(lead)}
-            className="w-full"
-            title="Atribuir Agente"
-            type="button"
+          {/* Edit Button */}
+          <button
+            onClick={() => onEdit(lead)}
+            className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors"
           >
-            <Users className="h-4 w-4 mr-1" />
-            <span className="text-xs">Atribuir Agente</span>
-          </Button>
+            <Edit className="h-4 w-4" />
+          </button>
+
+          {/* Delete Button */}
+          <button
+            onClick={() => onDelete(lead)}
+            className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Badges */}
+      <div className="flex flex-wrap gap-2 mb-3">
+        <Badge variant={getStatusBadgeVariant(lead.status)}>
+          {getStatusLabel(lead.status)}
+        </Badge>
+        <Badge variant="outline">{getLeadTypeLabel(lead.lead_type)}</Badge>
+      </div>
+
+      {/* Contact Info */}
+      <div className="space-y-2 mb-4 text-sm text-gray-600">
+        {lead.email && (
+          <div className="flex items-center gap-2">
+            <Mail className="h-4 w-4" />
+            <span className="truncate">{lead.email}</span>
+          </div>
+        )}
+        {lead.phone && (
+          <div className="flex items-center gap-2">
+            <Phone className="h-4 w-4" />
+            <span>{lead.phone}</span>
+          </div>
         )}
       </div>
+
+      {/* Lead Details */}
+      {lead.lead_type === "buyer" && (
+        <div className="space-y-1 mb-4 text-sm text-gray-600">
+          <div className="font-medium text-gray-700">Preferências de Compra:</div>
+          {lead.property_type && <div>🏠 {lead.property_type}</div>}
+          {lead.location && <div>📍 {lead.location}</div>}
+          {lead.bedrooms && <div>🛏️ {lead.bedrooms}</div>}
+          {lead.area_min && <div>📏 {lead.area_min}m²</div>}
+          {(lead.budget_min || lead.budget_max) && (
+            <div>
+              💰 {formatCurrency(lead.budget_min)} - {formatCurrency(lead.budget_max)}
+            </div>
+          )}
+          {lead.requires_financing && <div>💳 Recorre a Crédito</div>}
+        </div>
+      )}
+
+      {lead.lead_type === "seller" && (
+        <div className="space-y-1 mb-4 text-sm text-gray-600">
+          <div className="font-medium text-gray-700">Propriedade:</div>
+          {lead.property_type && <div>🏠 {lead.property_type}</div>}
+          {lead.location && <div>📍 {lead.location}</div>}
+          {lead.bedrooms && <div>🛏️ {lead.bedrooms}</div>}
+          {lead.area_min && <div>📏 {lead.area_min}m²</div>}
+          {(lead.budget_min || lead.budget_max) && (
+            <div>
+              💰 {formatCurrency(lead.budget_min)} - {formatCurrency(lead.budget_max)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Creation Date */}
+      <div className="text-xs text-gray-500">
+        📅 Criado a {formatDate(lead.created_at)}
+      </div>
+
+      {/* Notes Dialog - Controlled */}
+      <LeadNotesDialog
+        leadId={lead.id}
+        leadName={lead.name}
+        open={notesDialogOpen}
+        onOpenChange={setNotesDialogOpen}
+        trigger={<></>}
+      />
+
+      {/* Assign Dialog - Controlled */}
+      {canAssignLeads && !showArchived && (
+        <AssignLeadDialog
+          leadId={lead.id}
+          leadName={lead.name}
+          currentAssignedUserId={lead.assigned_to}
+          onAssignSuccess={onAssignSuccess}
+          open={assignDialogOpen}
+          onOpenChange={setAssignDialogOpen}
+        />
+      )}
     </Card>
   );
 }

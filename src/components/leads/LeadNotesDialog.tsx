@@ -28,16 +28,22 @@ interface LeadNote {
 interface LeadNotesDialogProps {
   leadId: string;
   leadName: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  trigger?: React.ReactNode;
 }
 
-export function LeadNotesDialog({ leadId, leadName }: LeadNotesDialogProps) {
+export function LeadNotesDialog({ leadId, leadName, open: controlledOpen, onOpenChange: setControlledOpen, trigger }: LeadNotesDialogProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
   const [notes, setNotes] = useState<LeadNote[]>([]);
-  const [isOpen, setIsOpen] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [noteText, setNoteText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+
+  const isOpen = controlledOpen ?? internalOpen;
+  const setIsOpen = setControlledOpen ?? setInternalOpen;
 
   useEffect(() => {
     if (isOpen) {
@@ -191,17 +197,23 @@ export function LeadNotesDialog({ leadId, leadName }: LeadNotesDialogProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-2">
-          <StickyNote className="h-4 w-4" />
-          Notas
-          {notes.length > 0 && (
-            <span className="ml-1 rounded-full bg-primary px-2 py-0.5 text-xs text-primary-foreground">
-              {notes.length}
-            </span>
-          )}
-        </Button>
-      </DialogTrigger>
+      {trigger ? (
+        <DialogTrigger asChild>
+          {trigger}
+        </DialogTrigger>
+      ) : (
+        <DialogTrigger asChild>
+          <Button variant="outline" size="sm" className="gap-2">
+            <StickyNote className="h-4 w-4" />
+            Notas
+            {notes.length > 0 && (
+              <span className="ml-1 rounded-full bg-primary px-2 py-0.5 text-xs text-primary-foreground">
+                {notes.length}
+              </span>
+            )}
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Notas - {leadName}</DialogTitle>
