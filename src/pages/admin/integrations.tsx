@@ -75,6 +75,13 @@ export default function IntegrationsPage() {
     clientSecret: "",
     enabled: false,
   });
+  const [googleSettings, setGoogleSettings] = useState({
+    enabled: false,
+    clientId: "",
+    clientSecret: "",
+  });
+  const [isLoadingSettings, setIsLoadingSettings] = useState(false);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -94,20 +101,19 @@ export default function IntegrationsPage() {
 
   const loadSettings = async () => {
     try {
-      console.log("[Integrations] Loading settings...");
-
+      console.log("[Integrations] Loading Google Calendar settings...");
       const response = await fetch("/api/google-calendar/settings");
-
-      console.log("[Integrations] Settings API response status:", response.status);
-
+      
+      console.log("[Integrations] Response status:", response.status);
+      
       if (!response.ok) {
         const errorData = await response.json();
-        console.error("Settings API error:", errorData);
+        console.error("[Integrations] Settings API error:", errorData);
         throw new Error(errorData.error || "Failed to load settings");
       }
 
       const data = await response.json();
-      console.log("Settings loaded:", data);
+      console.log("[Integrations] Settings loaded:", data);
       
       // Handle null or empty settings
       if (data) {
@@ -175,22 +181,34 @@ export default function IntegrationsPage() {
         return;
       }
 
+      // Calculate redirect URI dynamically
+      const redirectUri = typeof window !== "undefined" 
+        ? `${window.location.origin}/api/google-calendar/callback`
+        : "";
+
       const response = await fetch("/api/google-calendar/settings", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          client_id: configForm.clientId,
-          client_secret: configForm.clientSecret,
+          clientId: configForm.clientId,
+          clientSecret: configForm.clientSecret,
+          redirectUri: redirectUri,
+          scopes: "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events",
           enabled: configForm.enabled,
         }),
       });
 
-      if (!response.ok) throw new Error("Failed to save settings");
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to save settings");
+      }
 
       const data = await response.json();
-      setSettings(data);
+      
+      // Reload settings to confirm they were saved
+      await loadSettings();
 
       toast({
         title: "Sucesso",
@@ -200,7 +218,7 @@ export default function IntegrationsPage() {
       console.error("Error saving settings:", error);
       toast({
         title: "Erro",
-        description: "Erro ao salvar configurações",
+        description: error instanceof Error ? error.message : "Erro ao salvar configurações",
         variant: "destructive",
       });
     } finally {
@@ -355,6 +373,33 @@ export default function IntegrationsPage() {
   const isTokenValid = integration && integration.expires_at && new Date(integration.expires_at) > new Date();
   const isConfigured = !!(settings?.client_id && settings?.client_secret);
 
+  const saveGoogleSettings = async () => {
+    setIsSavingSettings(true);
+    try {
+      // Calculate redirect URI based on current origin
+      const redirectUri = `${window.location.origin}/api/google-calendar/callback`;
+      
+      const response = await fetch("/api/google-calendar/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...googleSettings,
+          redirectUri,
+          scopes: "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events",
+        }),
+      });
+    } catch (error) {
+      console.error("Error saving Google settings:", error);
+      toast({
+        title: "Erro",
+        description: "Erro ao salvar configurações do Google",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+
   return (
     <ProtectedRoute allowedRoles={['admin']}>
       <Layout>
@@ -412,14 +457,19 @@ export default function IntegrationsPage() {
                         <AlertDescription>
                           Para conectar o Google Calendar, você precisa criar credenciais OAuth 2.0 no{" "}
                           <a
-                            href="https://console.cloud.google.com/apis/credentials"
+                            href="https://console.cloud.google.com/"
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="font-medium underline"
+                            className="text-blue-600 hover:underline"
                           >
                             Google Cloud Console
                           </a>
-                          . Use a URL de redirecionamento: <code className="bg-muted px-2 py-1 rounded text-sm">{window.location.origin}/api/google-calendar/callback</code>
+                          . Use a URL de redirecionamento:
+                          <code className="block mt-2 p-2 bg-gray-100 dark:bg-gray-800 rounded text-sm">
+                            {typeof window !== "undefined" 
+                              ? `${window.location.origin}/api/google-calendar/callback`
+                              : "https://your-domain.com/api/google-calendar/callback"}
+                          </code>
                         </AlertDescription>
                       </Alert>
 

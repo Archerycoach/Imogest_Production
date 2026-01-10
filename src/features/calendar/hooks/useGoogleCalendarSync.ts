@@ -35,7 +35,7 @@ export function useGoogleCalendarSync() {
         .from("google_calendar_integrations" as any)
         .select("*")
         .eq("user_id", user.id)
-        .single();
+        .maybeSingle();
 
       if (error || !data) {
         setIsConnected(false);

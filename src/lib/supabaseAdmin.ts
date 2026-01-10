@@ -58,23 +58,21 @@ export const supabaseAdmin = new Proxy({} as ReturnType<typeof createClient<Data
 });
 
 // Validation helper for debugging
-export function validateSupabaseAdmin(): { isValid: boolean; error?: string } {
-  try {
-    const url = getSupabaseUrl();
-    const key = getSupabaseServiceRoleKey();
-    
-    if (!url) {
-      return { isValid: false, error: "NEXT_PUBLIC_SUPABASE_URL is missing" };
-    }
-    if (!key) {
-      return { isValid: false, error: "SUPABASE_SERVICE_ROLE_KEY is missing" };
-    }
-    if (key.length < 150) {
-      return { isValid: false, error: `SUPABASE_SERVICE_ROLE_KEY is too short (${key.length} chars)` };
-    }
-    
-    return { isValid: true };
-  } catch (error: any) {
-    return { isValid: false, error: error.message };
-  }
+export function validateSupabaseAdmin() {
+  console.log("[Supabase Admin] Validating configuration...");
+  console.log("[Supabase Admin] SUPABASE_URL exists:", !!process.env.SUPABASE_URL);
+  console.log("[Supabase Admin] SUPABASE_SERVICE_ROLE_KEY exists:", !!process.env.SUPABASE_SERVICE_ROLE_KEY);
+  
+  const isValid = !!(
+    process.env.SUPABASE_URL && 
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+  
+  console.log("[Supabase Admin] Validation result:", isValid);
+  
+  return {
+    isValid,
+    url: process.env.SUPABASE_URL,
+    hasServiceKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+  };
 }
