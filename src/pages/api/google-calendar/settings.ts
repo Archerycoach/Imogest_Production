@@ -48,7 +48,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         clientId: typedData.client_id || "",
         clientSecret: typedData.client_secret || "",
         redirectUri: typedData.redirect_uri || "",
-        scopes: typedData.scopes || "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events",
+        scopes: Array.isArray(typedData.scopes) ? typedData.scopes.join(" ") : "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events",
       });
     }
 
@@ -61,6 +61,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         hasClientSecret: !!clientSecret,
         hasRedirectUri: !!redirectUri 
       });
+
+      // Convert scopes string to array
+      const scopesArray = scopes ? scopes.split(" ").filter((s: string) => s.trim()) : null;
 
       // Check if settings already exist
       const { data: existing } = await supabaseAdmin
@@ -77,7 +80,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             client_id: clientId || null,
             client_secret: clientSecret || null,
             redirect_uri: redirectUri || null,
-            scopes: scopes || null,
+            scopes: scopesArray,
             enabled: enabled || false,
             updated_at: new Date().toISOString(),
           })
@@ -98,7 +101,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             client_id: clientId || null,
             client_secret: clientSecret || null,
             redirect_uri: redirectUri || null,
-            scopes: scopes || null,
+            scopes: scopesArray,
             enabled: enabled || false,
           });
 
