@@ -81,8 +81,19 @@ export function useGoogleCalendarSync() {
 
     try {
       setIsSyncing(true);
+      
+      // Get session token for authentication
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error("No active session");
+      }
+
       const response = await fetch("/api/google-calendar/sync", {
         method: "POST",
+        headers: {
+          "Authorization": `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
       });
 
       if (!response.ok) {

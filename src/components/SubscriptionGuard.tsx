@@ -17,6 +17,7 @@ interface SubscriptionStatus {
   trialEndsAt: string | null;
   daysRemaining: number;
   subscriptionEndDate: string | null;
+  isAdmin: boolean; // NOVO: flag para admin
 }
 
 // Páginas acessíveis durante e após o trial (sempre disponíveis)
@@ -29,7 +30,7 @@ const ALWAYS_ACCESSIBLE_PAGES = [
   "/tasks",
   "/interactions",
   "/subscription",
-  "/settings", // Para permitir alteração de password, etc.
+  "/settings",
 ];
 
 export function SubscriptionGuard({
@@ -61,16 +62,19 @@ export function SubscriptionGuard({
 
       setUserId(user.id);
 
-      // Get user profile with subscription data
+      // Get user profile with subscription data AND role
       const { data: rawProfile, error } = await supabase
         .from("profiles")
-        .select("trial_ends_at, subscription_status, subscription_end_date")
+        .select("trial_ends_at, subscription_status, subscription_end_date, role")
         .eq("id", user.id)
         .single();
 
       if (error) throw error;
 
       const profile = rawProfile as any;
+
+      // ADMIN BYPASS: Se é admin, tem acesso total sem restrições
+      const isAdmin = profile?.role === "admin";
 
       const now = new Date();
       const trialEndsAt = profile?.trial_ends_at
@@ -95,6 +99,7 @@ export function SubscriptionGuard({
         trialEndsAt: profile?.trial_ends_at || null,
         daysRemaining,
         subscriptionEndDate: profile?.subscription_end_date || null,
+        isAdmin, // NOVO: incluir flag admin
       };
 
       setStatus(subscriptionStatus);
@@ -105,8 +110,10 @@ export function SubscriptionGuard({
         currentPath.startsWith(path)
       );
 
-      // Trial expirado E sem subscrição ativa E tentando aceder a página restrita
+      // ADMIN BYPASS: Admins nunca são redirecionados
+      // Trial expirado E sem subscrição ativa E tentando aceder a página restrita E NÃO é admin
       if (
+        !isAdmin &&
         !isInTrial &&
         !hasActiveSubscription &&
         !isAlwaysAccessible &&
@@ -135,20 +142,24 @@ export function SubscriptionGuard({
     return null;
   }
 
-  // Página sempre acessível ou utilizador com subscrição ativa
+  // ADMIN BYPASS: Admin tem acesso total sempre
+  // Página sempre acessível ou utilizador com subscrição ativa ou ADMIN
   const hasAccess =
+    status.isAdmin ||
     status.hasActiveSubscription ||
     status.isInTrial ||
     ALWAYS_ACCESSIBLE_PAGES.some((path) => router.pathname.startsWith(path));
 
-  // Mostrar alerta se estiver em trial ou sem subscrição
+  // ADMIN BYPASS: Admin NÃO vê alertas de trial/subscrição
+  // Mostrar alerta se estiver em trial ou sem subscrição E NÃO é admin
   const showAlert =
-    (status.isInTrial && status.daysRemaining <= 7) ||
-    (!status.hasActiveSubscription && !status.isInTrial);
+    !status.isAdmin &&
+    ((status.isInTrial && status.daysRemaining <= 7) ||
+      (!status.hasActiveSubscription && !status.isInTrial));
 
   return (
     <>
-      {/* Alerta de Trial/Subscrição */}
+      {/* Alerta de Trial/Subscrição - ESCONDIDO para admins */}
       {showAlert && (
         <div className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
           {status.isInTrial && status.daysRemaining <= 7 && (
