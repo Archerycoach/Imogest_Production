@@ -33,12 +33,14 @@ export function useCalendarFilters() {
     console.log("[useCalendarFilters] Target date:", date.toISOString());
     console.log("[useCalendarFilters] View mode:", viewMode);
     
-    // Log sample events
+    // Log sample events WITH FULL STRUCTURE
     if (events.length > 0) {
+      console.log("[useCalendarFilters] Sample event FULL STRUCTURE:", events[0]);
       console.log("[useCalendarFilters] Sample events:", events.slice(0, 3).map(e => ({
         title: e.title,
         startTime: e.startTime,
-        date: new Date(e.startTime).toLocaleDateString()
+        start_time: (e as any).start_time,
+        date: e.startTime ? new Date(e.startTime).toLocaleDateString() : 'NO START TIME'
       })));
     }
 
@@ -46,7 +48,14 @@ export function useCalendarFilters() {
     if (viewMode === "day") {
       // Day view: apenas eventos do dia exato
       const filtered = events.filter((event) => {
-        const eventDate = new Date(event.startTime);
+        // Try both camelCase and snake_case
+        const timeValue = event.startTime || (event as any).start_time;
+        if (!timeValue) {
+          console.log("[useCalendarFilters] ⚠️ Event without time:", event.title);
+          return false;
+        }
+        
+        const eventDate = new Date(timeValue);
         const match = (
           eventDate.getDate() === date.getDate() &&
           eventDate.getMonth() === date.getMonth() &&
@@ -72,7 +81,10 @@ export function useCalendarFilters() {
       endOfWeek.setHours(23, 59, 59, 999);
       
       const filtered = events.filter((event) => {
-        const eventDate = new Date(event.startTime);
+        const timeValue = event.startTime || (event as any).start_time;
+        if (!timeValue) return false;
+        
+        const eventDate = new Date(timeValue);
         const match = eventDate >= startOfWeek && eventDate <= endOfWeek;
         
         if (match) {
@@ -93,7 +105,13 @@ export function useCalendarFilters() {
       const targetYear = date.getFullYear();
       
       const filtered = events.filter((event) => {
-        const eventDate = new Date(event.startTime);
+        const timeValue = event.startTime || (event as any).start_time;
+        if (!timeValue) {
+          console.log("[useCalendarFilters] ⚠️ Event without time in month view:", event.title);
+          return false;
+        }
+        
+        const eventDate = new Date(timeValue);
         const eventMonth = eventDate.getMonth();
         const eventYear = eventDate.getFullYear();
         const match = eventMonth === targetMonth && eventYear === targetYear;
@@ -103,7 +121,8 @@ export function useCalendarFilters() {
             title: event.title,
             eventDate: eventDate.toISOString(),
             eventMonth,
-            targetMonth
+            targetMonth,
+            timeValue
           });
         }
         

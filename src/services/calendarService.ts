@@ -30,9 +30,11 @@ export const getCalendarEvents = async (): Promise<CalendarEvent[]> => {
   const { data: { user } } = await supabase.auth.getUser();
   
   if (!user) {
-    console.error("User not authenticated");
+    console.error("[calendarService] ❌ User not authenticated");
     return [];
   }
+
+  console.log("[calendarService] 🔍 Fetching events for user:", user.id);
 
   const { data, error } = await supabase
     .from("calendar_events")
@@ -41,11 +43,24 @@ export const getCalendarEvents = async (): Promise<CalendarEvent[]> => {
     .order("start_time", { ascending: true });
 
   if (error) {
-    console.error("Error fetching calendar events:", error);
+    console.error("[calendarService] ❌ Error fetching calendar events:", error);
     return [];
   }
 
-  return (data || []).map(mapDbEventToFrontend);
+  console.log("[calendarService] 📦 Raw data from DB:", data?.length || 0, "events");
+  
+  if (data && data.length > 0) {
+    console.log("[calendarService] 📊 Sample raw event:", data[0]);
+  }
+
+  const mappedEvents = (data || []).map(mapDbEventToFrontend);
+  
+  console.log("[calendarService] ✅ Mapped events:", mappedEvents.length);
+  if (mappedEvents.length > 0) {
+    console.log("[calendarService] 📊 Sample mapped event:", mappedEvents[0]);
+  }
+
+  return mappedEvents;
 };
 
 // Get events within date range
