@@ -292,11 +292,15 @@ async function syncEventsFromGoogle(
   calendarId: string
 ): Promise<number> {
   try {
-    // Get events from Google Calendar
-    const timeMin = new Date().toISOString();
+    // Buscar eventos dos últimos 30 dias até 90 dias no futuro
+    const timeMin = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 dias atrás
+    const timeMax = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(); // 90 dias à frente
+    
+    console.log(`[syncEventsFromGoogle] Fetching events from ${timeMin} to ${timeMax}`);
+    
     const response = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events?` +
-      `timeMin=${encodeURIComponent(timeMin)}&singleEvents=true&orderBy=startTime`,
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events?` +
+      `timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime&maxResults=250`,
       {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -305,54 +309,84 @@ async function syncEventsFromGoogle(
     );
 
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[syncEventsFromGoogle] Failed to fetch events:", errorText);
       throw new Error("Failed to fetch events from Google Calendar");
     }
 
     const data = await response.json();
     const googleEvents = data.items || [];
+    
+    console.log(`[syncEventsFromGoogle] Found ${googleEvents.length} events in Google Calendar`);
 
     let syncedCount = 0;
+    let skippedCount = 0;
+    let errorCount = 0;
 
     for (const googleEvent of googleEvents) {
       try {
-        // Skip all-day events
-        if (!googleEvent.start?.dateTime) continue;
+        // Suporte para eventos all-day e eventos com horário
+        const startTime = googleEvent.start?.dateTime || googleEvent.start?.date;
+        const endTime = googleEvent.end?.dateTime || googleEvent.end?.date;
+        
+        if (!startTime || !endTime) {
+          console.log(`[syncEventsFromGoogle] Skipping event ${googleEvent.id} - no start/end time`);
+          skippedCount++;
+          continue;
+        }
 
-        // Check if this event already exists in our system
+        // Verificar se já existe
         const { data: existingEvent } = await supabaseAdmin
           .from("calendar_events" as any)
           .select("id")
           .eq("google_event_id", googleEvent.id)
           .maybeSingle();
 
-        if (existingEvent) continue;
+        if (existingEvent) {
+          skippedCount++;
+          continue;
+        }
 
-        // Create event in our system
+        // Converter data all-day para datetime se necessário
+        let finalStartTime = startTime;
+        let finalEndTime = endTime;
+        
+        // Se for data (all-day event), converter para datetime
+        if (startTime.length === 10) { // formato YYYY-MM-DD
+          finalStartTime = `${startTime}T09:00:00.000Z`;
+          finalEndTime = `${endTime}T18:00:00.000Z`;
+        }
+
+        // Criar evento no sistema
         const { error: createError } = await supabaseAdmin
           .from("calendar_events" as any)
           .insert({
             user_id: userId,
             title: googleEvent.summary || "Sem título",
             description: googleEvent.description || "",
-            start_time: googleEvent.start.dateTime,
-            end_time: googleEvent.end.dateTime,
+            start_time: finalStartTime,
+            end_time: finalEndTime,
             google_event_id: googleEvent.id,
           });
 
         if (createError) {
-          console.error(`Failed to create event from Google: ${googleEvent.id}`, createError);
+          console.error(`[syncEventsFromGoogle] Failed to create event ${googleEvent.id}:`, createError);
+          errorCount++;
           continue;
         }
 
+        console.log(`[syncEventsFromGoogle] ✅ Imported event: ${googleEvent.summary}`);
         syncedCount++;
       } catch (eventError) {
-        console.error(`Error importing event ${googleEvent.id}:`, eventError);
+        console.error(`[syncEventsFromGoogle] Error importing event ${googleEvent.id}:`, eventError);
+        errorCount++;
       }
     }
 
+    console.log(`[syncEventsFromGoogle] Summary: ${syncedCount} imported, ${skippedCount} skipped, ${errorCount} errors`);
     return syncedCount;
   } catch (error) {
-    console.error("Error in syncEventsFromGoogle:", error);
+    console.error("[syncEventsFromGoogle] Fatal error:", error);
     return 0;
   }
 }

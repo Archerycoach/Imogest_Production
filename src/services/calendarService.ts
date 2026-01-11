@@ -28,9 +28,17 @@ const mapDbEventToFrontend = (dbEvent: DbCalendarEvent): CalendarEvent => ({
 
 // Get all calendar events for current user
 export const getCalendarEvents = async (): Promise<CalendarEvent[]> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    console.error("User not authenticated");
+    return [];
+  }
+
   const { data, error } = await supabase
     .from("calendar_events")
     .select("*")
+    .eq("user_id", user.id)
     .order("start_time", { ascending: true });
 
   if (error) {
@@ -46,9 +54,17 @@ export const getEventsByDateRange = async (
   startDate: Date,
   endDate: Date
 ): Promise<CalendarEvent[]> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    console.error("User not authenticated");
+    return [];
+  }
+
   const { data, error } = await supabase
     .from("calendar_events")
     .select("*")
+    .eq("user_id", user.id)
     .gte("start_time", startDate.toISOString())
     .lte("start_time", endDate.toISOString())
     .order("start_time", { ascending: true });
@@ -63,10 +79,18 @@ export const getEventsByDateRange = async (
 
 // Get single event by ID
 export const getCalendarEvent = async (id: string): Promise<CalendarEvent | null> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    console.error("User not authenticated");
+    return null;
+  }
+
   const { data, error } = await supabase
     .from("calendar_events")
     .select("*")
     .eq("id", id)
+    .eq("user_id", user.id)
     .single();
 
   if (error) {
@@ -139,9 +163,17 @@ export const deleteCalendarEvent = async (id: string): Promise<void> => {
 
 // Get events by type
 export const getEventsByType = async (type: string): Promise<CalendarEvent[]> => {
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    console.error("User not authenticated");
+    return [];
+  }
+
   const { data, error } = await supabase
     .from("calendar_events")
     .select("*")
+    .eq("user_id", user.id)
     .eq("event_type", type)
     .order("start_time", { ascending: true });
 
