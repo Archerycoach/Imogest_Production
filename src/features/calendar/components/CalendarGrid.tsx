@@ -34,16 +34,28 @@ export function CalendarGrid({
   onDragOver,
   onDrop,
 }: CalendarGridProps) {
+  // Debug: Log dos eventos recebidos
+  console.log("[CalendarGrid] Events received:", events.length);
+  console.log("[CalendarGrid] Current date:", currentDate);
+  console.log("[CalendarGrid] View mode:", viewMode);
+
   const getEventsForDay = (day: Date) => {
     const startOfDay = new Date(day);
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(day);
     endOfDay.setHours(23, 59, 59, 999);
     
-    return events.filter(event => {
+    const filtered = events.filter(event => {
       const eventDate = new Date(event.startTime);
       return eventDate >= startOfDay && eventDate <= endOfDay;
     });
+
+    // Debug: Log de eventos filtrados
+    if (filtered.length > 0) {
+      console.log(`[CalendarGrid] Events for ${day.toLocaleDateString()}:`, filtered.length);
+    }
+    
+    return filtered;
   };
 
   const getTasksForDay = (day: Date) => {

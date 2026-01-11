@@ -18,9 +18,8 @@ const mapDbEventToFrontend = (dbEvent: DbCalendarEvent): CalendarEvent => ({
   leadId: dbEvent.lead_id || undefined,
   propertyId: dbEvent.property_id || undefined,
   contactId: dbEvent.contact_id || undefined,
-  // Google fields ignored/removed
-  googleEventId: undefined,
-  googleSynced: false,
+  googleEventId: dbEvent.google_event_id || undefined,
+  googleSynced: dbEvent.is_synced || false,
   eventType: dbEvent.event_type || "meeting",
   createdAt: dbEvent.created_at,
   userId: dbEvent.user_id || ""

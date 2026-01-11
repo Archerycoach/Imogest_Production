@@ -28,17 +28,26 @@ export function useCalendarFilters() {
   };
 
   const filterEventsByDate = (events: CalendarEvent[], date: Date) => {
+    console.log("[useCalendarFilters] filterEventsByDate called with:", {
+      totalEvents: events.length,
+      targetDate: date.toISOString(),
+      viewMode
+    });
+
     // Filtrar baseado no viewMode
     if (viewMode === "day") {
       // Day view: apenas eventos do dia exato
-      return events.filter((event) => {
+      const filtered = events.filter((event) => {
         const eventDate = new Date(event.startTime);
-        return (
+        const match = (
           eventDate.getDate() === date.getDate() &&
           eventDate.getMonth() === date.getMonth() &&
           eventDate.getFullYear() === date.getFullYear()
         );
+        return match;
       });
+      console.log("[useCalendarFilters] Day view filtered:", filtered.length);
+      return filtered;
     } else if (viewMode === "week") {
       // Week view: eventos da semana (domingo a sábado)
       const startOfWeek = new Date(date);
@@ -49,19 +58,47 @@ export function useCalendarFilters() {
       endOfWeek.setDate(startOfWeek.getDate() + 6);
       endOfWeek.setHours(23, 59, 59, 999);
       
-      return events.filter((event) => {
+      const filtered = events.filter((event) => {
         const eventDate = new Date(event.startTime);
-        return eventDate >= startOfWeek && eventDate <= endOfWeek;
+        const match = eventDate >= startOfWeek && eventDate <= endOfWeek;
+        return match;
       });
+      console.log("[useCalendarFilters] Week view filtered:", {
+        startOfWeek: startOfWeek.toISOString(),
+        endOfWeek: endOfWeek.toISOString(),
+        filtered: filtered.length
+      });
+      return filtered;
     } else {
       // Month view: eventos do mês inteiro
-      return events.filter((event) => {
+      const filtered = events.filter((event) => {
         const eventDate = new Date(event.startTime);
-        return (
+        const match = (
           eventDate.getMonth() === date.getMonth() &&
           eventDate.getFullYear() === date.getFullYear()
         );
+        if (!match && eventDate.getFullYear() === date.getFullYear() && Math.abs(eventDate.getMonth() - date.getMonth()) <= 1) {
+          console.log("[useCalendarFilters] Event close to target month:", {
+            eventTitle: event.title,
+            eventDate: eventDate.toISOString(),
+            eventMonth: eventDate.getMonth(),
+            targetMonth: date.getMonth()
+          });
+        }
+        return match;
       });
+      console.log("[useCalendarFilters] Month view filtered:", {
+        targetMonth: date.getMonth(),
+        targetYear: date.getFullYear(),
+        filtered: filtered.length
+      });
+      if (filtered.length > 0) {
+        console.log("[useCalendarFilters] First 3 filtered events:", filtered.slice(0, 3).map(e => ({
+          title: e.title,
+          startTime: e.startTime
+        })));
+      }
+      return filtered;
     }
   };
 

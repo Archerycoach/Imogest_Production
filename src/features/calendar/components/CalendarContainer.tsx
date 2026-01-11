@@ -325,8 +325,19 @@ export function CalendarContainer() {
 
   // Filter events and tasks by current date/view
   const filteredEvents = React.useMemo(() => {
-    return filterEventsByDate(events, currentDate);
-  }, [events, currentDate, filterEventsByDate]);
+    const filtered = filterEventsByDate(events, currentDate);
+    
+    // Debug: Log de eventos
+    console.log("[CalendarContainer] Total events fetched:", events.length);
+    console.log("[CalendarContainer] Current date:", currentDate);
+    console.log("[CalendarContainer] View mode:", viewMode);
+    console.log("[CalendarContainer] Filtered events:", filtered.length);
+    if (filtered.length > 0) {
+      console.log("[CalendarContainer] First 3 filtered events:", filtered.slice(0, 3));
+    }
+    
+    return filtered;
+  }, [events, currentDate, filterEventsByDate, viewMode]);
 
   const filteredTasks = React.useMemo(() => {
     return filterTasksByDate(tasks, currentDate);
