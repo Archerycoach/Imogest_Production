@@ -35,9 +35,21 @@ export function CalendarGrid({
   onDrop,
 }: CalendarGridProps) {
   // Debug: Log dos eventos recebidos
+  console.log("[CalendarGrid] ===== DEBUG START =====");
   console.log("[CalendarGrid] Events received:", events.length);
-  console.log("[CalendarGrid] Current date:", currentDate);
+  console.log("[CalendarGrid] Current date:", currentDate.toISOString());
   console.log("[CalendarGrid] View mode:", viewMode);
+  
+  if (events.length > 0) {
+    console.log("[CalendarGrid] First 3 events structure:", events.slice(0, 3).map(e => ({
+      id: e.id,
+      title: e.title,
+      startTime: e.startTime,
+      startTimeType: typeof e.startTime,
+      googleEventId: e.googleEventId,
+      userId: e.userId
+    })));
+  }
 
   const getEventsForDay = (day: Date) => {
     const startOfDay = new Date(day);
@@ -47,13 +59,20 @@ export function CalendarGrid({
     
     const filtered = events.filter(event => {
       const eventDate = new Date(event.startTime);
-      return eventDate >= startOfDay && eventDate <= endOfDay;
+      const isInRange = eventDate >= startOfDay && eventDate <= endOfDay;
+      
+      if (isInRange) {
+        console.log(`[CalendarGrid] ✅ Event matches ${day.toLocaleDateString()}:`, {
+          title: event.title,
+          startTime: event.startTime,
+          eventDate: eventDate.toISOString()
+        });
+      }
+      
+      return isInRange;
     });
 
-    // Debug: Log de eventos filtrados
-    if (filtered.length > 0) {
-      console.log(`[CalendarGrid] Events for ${day.toLocaleDateString()}:`, filtered.length);
-    }
+    console.log(`[CalendarGrid] Events for ${day.toLocaleDateString()}:`, filtered.length);
     
     return filtered;
   };

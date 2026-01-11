@@ -3,26 +3,12 @@ import type { Database } from "@/integrations/supabase/types";
 import { getUserProfile } from "./profileService";
 
 type Subscription = Database["public"]["Tables"]["subscriptions"]["Row"];
-type SubscriptionPlan = Database["public"]["Tables"]["subscription_plans"]["Row"];
+export type SubscriptionPlan = Database["public"]["Tables"]["subscription_plans"]["Row"];
 type PaymentHistory = Database["public"]["Tables"]["payment_history"]["Row"];
 
-// Define types manually to avoid deep inference issues with Supabase joins
-export interface SubscriptionWithPlan extends Subscription {
-  subscription_plans: {
-    id: string;
-    name: string;
-    description: string | null;
-    price: number;
-    currency: string;
-    billing_interval: "monthly" | "yearly";
-    features: any;
-    limits: any;
-    is_active: boolean;
-    stripe_price_id: string;
-    stripe_product_id: string;
-    created_at: string;
-    updated_at: string;
-  } | null;
+export interface SubscriptionWithPlan extends Omit<Subscription, 'plan_id'> {
+  plan_id: string;
+  subscription_plans: SubscriptionPlan | null;
 }
 
 export interface PaymentHistoryWithDetails extends PaymentHistory {
@@ -38,7 +24,7 @@ export const getCurrentSubscription = async (userId: string): Promise<Subscripti
     .from("subscriptions")
     .select("*")
     .eq("user_id", userId)
-    .eq("status", "active")
+    .in("status", ["active", "trialing"])
     .maybeSingle();
 
   if (error) {
@@ -65,7 +51,7 @@ export const hasAccess = async (userId: string): Promise<boolean> => {
 
     // For non-admins, check subscription
     const subscription = await getCurrentSubscription(userId);
-    return subscription !== null && subscription.status === "active";
+    return subscription !== null && ["active", "trialing"].includes(subscription.status);
   } catch (error) {
     console.error("Error checking access:", error);
     return false;
@@ -78,35 +64,47 @@ export const createSubscription = async (
   trialDays: number = 0,
   stripeSubscriptionId?: string
 ): Promise<Subscription | null> => {
-  const startDate = new Date();
-  const endDate = new Date();
-  
-  if (trialDays > 0) {
-    endDate.setDate(endDate.getDate() + trialDays);
-  } else {
-    endDate.setMonth(endDate.getMonth() + 1); // Default 1 month
-  }
+  try {
+    // Check if user already has an active subscription
+    const existingSubscription = await getCurrentSubscription(userId);
+    if (existingSubscription) {
+      console.error("User already has an active subscription");
+      throw new Error("User already has an active subscription");
+    }
 
-  const { data, error } = await supabase
-    .from("subscriptions")
-    .insert({
-      user_id: userId,
-      plan_id: planId,
-      stripe_subscription_id: stripeSubscriptionId || null,
-      status: trialDays > 0 ? "trialing" : "active",
-      current_period_start: startDate.toISOString(),
-      current_period_end: endDate.toISOString(),
-      trial_end: trialDays > 0 ? endDate.toISOString() : null,
-    })
-    .select()
-    .single();
+    const startDate = new Date();
+    const endDate = new Date();
+    
+    if (trialDays > 0) {
+      endDate.setDate(endDate.getDate() + trialDays);
+    } else {
+      endDate.setMonth(endDate.getMonth() + 1); // Default 1 month
+    }
 
-  if (error) {
-    console.error("Error creating subscription:", error);
+    const { data, error } = await supabase
+      .from("subscriptions")
+      .insert({
+        user_id: userId,
+        plan_id: planId,
+        stripe_subscription_id: stripeSubscriptionId || null,
+        status: trialDays > 0 ? "trialing" : "active",
+        current_period_start: startDate.toISOString(),
+        current_period_end: endDate.toISOString(),
+        trial_end: trialDays > 0 ? endDate.toISOString() : null,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error creating subscription:", error);
+      throw error;
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Error in createSubscription:", error);
     return null;
   }
-
-  return data;
 };
 
 export const updateSubscriptionStatus = async (
@@ -115,7 +113,7 @@ export const updateSubscriptionStatus = async (
 ): Promise<boolean> => {
   const { error } = await supabase
     .from("subscriptions")
-    .update({ status })
+    .update({ status, updated_at: new Date().toISOString() })
     .eq("id", subscriptionId);
 
   if (error) {
@@ -143,6 +141,7 @@ export const activateSubscription = async (
       status: "active",
       current_period_end: endDate.toISOString(),
       trial_end: null,
+      updated_at: new Date().toISOString(),
     })
     .eq("id", subscriptionId);
 
@@ -158,76 +157,78 @@ export const extendSubscription = async (
   subscriptionId: string,
   months: number
 ): Promise<boolean> => {
-  // Get current subscription
-  const { data: subscription, error: fetchError } = await supabase
-    .from("subscriptions")
-    .select("current_period_end")
-    .eq("id", subscriptionId)
-    .single();
+  try {
+    // Get current subscription
+    const { data: subscription, error: fetchError } = await supabase
+      .from("subscriptions")
+      .select("current_period_end")
+      .eq("id", subscriptionId)
+      .single();
 
-  if (fetchError || !subscription) {
-    console.error("Error fetching subscription:", fetchError);
+    if (fetchError || !subscription) {
+      console.error("Error fetching subscription:", fetchError);
+      return false;
+    }
+
+    // Extend from current end date
+    const currentEndDate = new Date(subscription.current_period_end || new Date().toISOString());
+    currentEndDate.setMonth(currentEndDate.getMonth() + months);
+
+    const { error } = await supabase
+      .from("subscriptions")
+      .update({ 
+        current_period_end: currentEndDate.toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", subscriptionId);
+
+    if (error) {
+      console.error("Error extending subscription:", error);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error("Error in extendSubscription:", error);
     return false;
   }
-
-  // Extend from current end date
-  const currentEndDate = new Date(subscription.current_period_end || new Date().toISOString());
-  currentEndDate.setMonth(currentEndDate.getMonth() + months);
-
-  const { error } = await supabase
-    .from("subscriptions")
-    .update({ current_period_end: currentEndDate.toISOString() })
-    .eq("id", subscriptionId);
-
-  if (error) {
-    console.error("Error extending subscription:", error);
-    return false;
-  }
-
-  return true;
 };
 
-export const getAllSubscriptions = async (filters: any = {}) => {
-  let query = (supabase as any)
-    .from("subscriptions")
-    .select(`
-      *,
-      subscription_plans (
-        id,
-        name,
-        description,
-        price,
-        currency,
-        billing_interval,
-        features,
-        limits,
-        is_active,
-        stripe_price_id,
-        stripe_product_id,
-        created_at,
-        updated_at
-      )
-    `)
-    .order("created_at", { ascending: false });
+export const getAllSubscriptions = async (filters: any = {}): Promise<SubscriptionWithPlan[]> => {
+  try {
+    // Cast to any to avoid "Type instantiation is excessively deep" error with complex joins
+    let query: any = supabase
+      .from("subscriptions")
+      .select(`
+        *,
+        subscription_plans!inner (
+          *
+        )
+      `)
+      .order("created_at", { ascending: false });
 
-  // Apply filters if provided
-  if (filters) {
-    Object.keys(filters).forEach(key => {
-      if (filters[key] !== undefined) {
-        query = query.eq(key, filters[key]);
-      }
-    });
-  }
+    // Apply filters if provided
+    if (filters && Object.keys(filters).length > 0) {
+      Object.keys(filters).forEach(key => {
+        if (filters[key] !== undefined && filters[key] !== null) {
+          query = query.eq(key, filters[key]);
+        }
+      });
+    }
 
-  const { data, error } = await query;
+    const { data, error } = await query;
 
-  if (error) {
-    console.error("Error fetching all subscriptions:", error);
+    if (error) {
+      console.error("Error fetching all subscriptions:", error);
+      return [];
+    }
+
+    // Force cast to avoid deep type instantiation issues with complex joins
+    return (data || []) as unknown as SubscriptionWithPlan[];
+  } catch (error) {
+    console.error("Error in getAllSubscriptions:", error);
     return [];
   }
-
-  // Force cast since we know the structure matches
-  return (data as unknown) as SubscriptionWithPlan[];
 };
 
 export const getSubscriptionPlans = async (): Promise<SubscriptionPlan[]> => {
@@ -246,36 +247,41 @@ export const getSubscriptionPlans = async (): Promise<SubscriptionPlan[]> => {
 };
 
 export const getUserSubscription = async (userId: string): Promise<SubscriptionWithPlan | null> => {
-  const { data, error } = await supabase
-    .from("subscriptions")
-    .select(`
-      *,
-      subscription_plans (
-        id,
-        name,
-        description,
-        price,
-        currency,
-        billing_interval,
-        features,
-        limits,
-        is_active,
-        stripe_price_id,
-        stripe_product_id,
-        created_at,
-        updated_at
-      )
-    `)
-    .eq("user_id", userId)
-    .in("status", ["trialing", "active"])
-    .maybeSingle();
+  try {
+    const { data, error } = await supabase
+      .from("subscriptions")
+      .select(`
+        *,
+        subscription_plans!inner (
+          id,
+          name,
+          description,
+          price,
+          currency,
+          billing_interval,
+          features,
+          limits,
+          is_active,
+          stripe_price_id,
+          stripe_product_id,
+          created_at,
+          updated_at
+        )
+      `)
+      .eq("user_id", userId)
+      .in("status", ["trialing", "active"])
+      .maybeSingle();
 
-  if (error) {
-    console.error("Error fetching user subscription:", error);
+    if (error) {
+      console.error("Error fetching user subscription:", error);
+      return null;
+    }
+
+    return data as SubscriptionWithPlan | null;
+  } catch (error) {
+    console.error("Error in getUserSubscription:", error);
     return null;
   }
-
-  return data as unknown as SubscriptionWithPlan | null;
 };
 
 export const getPaymentHistory = async (userId: string): Promise<PaymentHistoryWithDetails[]> => {
@@ -300,14 +306,35 @@ export const getPaymentHistory = async (userId: string): Promise<PaymentHistoryW
   return data as unknown as PaymentHistoryWithDetails[];
 };
 
-export const getSubscriptionStats = async (filters: any = {}) => {
-  // Get all subscriptions to calculate stats
-  const { data, error } = await supabase
-    .from("subscriptions")
-    .select("status, plan_id");
+export const getSubscriptionStats = async () => {
+  try {
+    // Get all subscriptions to calculate stats
+    const { data, error } = await supabase
+      .from("subscriptions")
+      .select("status, plan_id");
 
-  if (error) {
-    console.error("Error fetching subscription stats:", error);
+    if (error) {
+      console.error("Error fetching subscription stats:", error);
+      return {
+        total: 0,
+        active: 0,
+        trial: 0,
+        cancelled: 0,
+        expired: 0,
+      };
+    }
+
+    const stats = {
+      total: data?.length || 0,
+      active: data?.filter(s => s.status === "active").length || 0,
+      trial: data?.filter(s => s.status === "trialing").length || 0,
+      cancelled: data?.filter(s => s.status === "cancelled").length || 0,
+      expired: data?.filter(s => s.status === "past_due").length || 0,
+    };
+
+    return stats;
+  } catch (error) {
+    console.error("Error in getSubscriptionStats:", error);
     return {
       total: 0,
       active: 0,
@@ -316,14 +343,4 @@ export const getSubscriptionStats = async (filters: any = {}) => {
       expired: 0,
     };
   }
-
-  const stats = {
-    total: data.length,
-    active: data.filter(s => s.status === "active").length,
-    trial: data.filter(s => s.status === "trialing").length,
-    cancelled: data.filter(s => s.status === "cancelled").length,
-    expired: data.filter(s => s.status === "past_due").length, // Mapping past_due to expired concept for stats
-  };
-
-  return stats;
 };

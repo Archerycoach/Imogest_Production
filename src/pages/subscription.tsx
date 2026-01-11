@@ -10,57 +10,14 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { Check, AlertTriangle, Calendar, CreditCard, Loader2 } from "lucide-react";
 import SEO from "@/components/SEO";
-
-interface SubscriptionPlan {
-  id: string;
-  name: string;
-  price: number;
-  interval: "month" | "year";
-  features: string[];
-  popular?: boolean;
-}
-
-const plans: SubscriptionPlan[] = [
-  {
-    id: "monthly",
-    name: "Mensal",
-    price: 29.99,
-    interval: "month",
-    features: [
-      "Gestão ilimitada de leads",
-      "Pipeline visual completo",
-      "Calendário e tarefas",
-      "Contactos e interações",
-      "Propriedades e documentos",
-      "Análise de mercado",
-      "Relatórios e performance",
-      "Workflows automatizados",
-      "Templates personalizáveis",
-      "Suporte por email",
-    ],
-  },
-  {
-    id: "yearly",
-    name: "Anual",
-    price: 299.99,
-    interval: "year",
-    features: [
-      "Todas as funcionalidades do plano mensal",
-      "2 meses grátis (poupança de 16%)",
-      "Suporte prioritário",
-      "Formação personalizada",
-      "Backups diários",
-      "API de integração",
-    ],
-    popular: true,
-  },
-];
+import { getSubscriptionPlans, type SubscriptionPlan } from "@/services/subscriptionService";
 
 export default function SubscriptionPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [subscribing, setSubscribing] = useState<string | null>(null);
+  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [trialInfo, setTrialInfo] = useState<{
     isInTrial: boolean;
     daysRemaining: number;
@@ -84,6 +41,10 @@ export default function SubscriptionPage() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
+
+      // Load plans from database
+      const dbPlans = await getSubscriptionPlans();
+      setPlans(dbPlans.filter(p => p.is_active)); // Only show active plans
 
       const { data: rawProfile } = await supabase
         .from("profiles")
@@ -219,65 +180,76 @@ export default function SubscriptionPage() {
 
           {/* Plans Grid */}
           <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
-            {plans.map((plan) => (
-              <Card
-                key={plan.id}
-                className={plan.popular ? "border-primary shadow-lg" : ""}
-              >
-                <CardHeader>
-                  <div className="flex justify-between items-start mb-2">
-                    <CardTitle className="text-2xl">{plan.name}</CardTitle>
-                    {plan.popular && (
-                      <Badge variant="default">Mais Popular</Badge>
+            {plans.map((plan) => {
+              const features = Array.isArray(plan.features) 
+                ? (plan.features as unknown as string[]) 
+                : [];
+              
+              return (
+                <Card
+                  key={plan.id}
+                  className={plan.name.toLowerCase().includes("anual") ? "border-primary shadow-lg" : ""}
+                >
+                  <CardHeader>
+                    <div className="flex justify-between items-start mb-2">
+                      <CardTitle className="text-2xl">{plan.name}</CardTitle>
+                      {plan.name.toLowerCase().includes("anual") && (
+                        <Badge variant="default">Mais Popular</Badge>
+                      )}
+                    </div>
+                    <CardDescription>
+                      <span className="text-4xl font-bold text-foreground">
+                        €{plan.price}
+                      </span>
+                      <span className="text-muted-foreground">
+                        /{plan.billing_interval === "month" ? "mês" : "ano"}
+                      </span>
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {plan.description && (
+                      <p className="text-sm text-muted-foreground mb-4">{plan.description}</p>
                     )}
-                  </div>
-                  <CardDescription>
-                    <span className="text-4xl font-bold text-foreground">
-                      €{plan.price}
-                    </span>
-                    <span className="text-muted-foreground">
-                      /{plan.interval === "month" ? "mês" : "ano"}
-                    </span>
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-3">
-                    {plan.features.map((feature, index) => (
-                      <li key={index} className="flex items-start gap-2">
-                        <Check className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
-                        <span className="text-sm">{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-                <CardFooter>
-                  <Button
-                    className="w-full"
-                    size="lg"
-                    variant={plan.popular ? "default" : "outline"}
-                    onClick={() => handleSubscribe(plan.id)}
-                    disabled={
-                      subscribing !== null ||
-                      currentSubscription?.plan === plan.id
-                    }
-                  >
-                    {subscribing === plan.id ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        A processar...
-                      </>
-                    ) : currentSubscription?.plan === plan.id ? (
-                      "Plano Atual"
-                    ) : (
-                      <>
-                        <CreditCard className="mr-2 h-5 w-5" />
-                        Subscrever {plan.name}
-                      </>
+                    {features.length > 0 && (
+                      <ul className="space-y-3">
+                        {features.map((feature, index) => (
+                          <li key={index} className="flex items-start gap-2">
+                            <Check className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                            <span className="text-sm">{feature}</span>
+                          </li>
+                        ))}
+                      </ul>
                     )}
-                  </Button>
-                </CardFooter>
-              </Card>
-            ))}
+                  </CardContent>
+                  <CardFooter>
+                    <Button
+                      className="w-full"
+                      size="lg"
+                      variant={plan.name.toLowerCase().includes("anual") ? "default" : "outline"}
+                      onClick={() => handleSubscribe(plan.id)}
+                      disabled={
+                        subscribing !== null ||
+                        currentSubscription?.plan === plan.id
+                      }
+                    >
+                      {subscribing === plan.id ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          A processar...
+                        </>
+                      ) : currentSubscription?.plan === plan.id ? (
+                        "Plano Atual"
+                      ) : (
+                        <>
+                          <CreditCard className="mr-2 h-5 w-5" />
+                          Subscrever {plan.name}
+                        </>
+                      )}
+                    </Button>
+                  </CardFooter>
+                </Card>
+              );
+            })}
           </div>
 
           {/* Trial Info */}
