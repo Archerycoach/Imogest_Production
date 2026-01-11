@@ -63,7 +63,7 @@ export default async function handler(
         clientId: settings?.client_id || "",
         clientSecret: settings?.client_secret || "",
         redirectUri: settings?.redirect_uri || "",
-        scopes: Array.isArray(settings?.scopes) ? settings.scopes.join(" ") : (settings?.scopes || "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events"),
+        scopes: Array.isArray(settings?.scopes) ? settings.scopes.join(" ") : (settings?.scopes || "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/userinfo.email"),
       });
     }
 
