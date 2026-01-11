@@ -1,61 +1,121 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-import { getCurrentSubscription } from "@/services/subscriptionService";
-import { getUserProfile } from "@/services/profileService";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, CreditCard, Lock, CheckCircle2 } from "lucide-react";
+import { AlertTriangle, Calendar, CreditCard, Lock } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
 
 interface SubscriptionGuardProps {
   children: React.ReactNode;
+  requiresSubscription?: boolean;
 }
 
-export function SubscriptionGuard({ children }: SubscriptionGuardProps) {
+interface SubscriptionStatus {
+  hasActiveSubscription: boolean;
+  isInTrial: boolean;
+  trialEndsAt: string | null;
+  daysRemaining: number;
+  subscriptionEndDate: string | null;
+}
+
+// Páginas acessíveis durante e após o trial (sempre disponíveis)
+const ALWAYS_ACCESSIBLE_PAGES = [
+  "/dashboard",
+  "/leads",
+  "/pipeline",
+  "/contacts",
+  "/calendar",
+  "/tasks",
+  "/interactions",
+  "/subscription",
+  "/settings", // Para permitir alteração de password, etc.
+];
+
+export function SubscriptionGuard({
+  children,
+  requiresSubscription = false,
+}: SubscriptionGuardProps) {
   const router = useRouter();
+  const [status, setStatus] = useState<SubscriptionStatus | null>(null);
   const [loading, setLoading] = useState(true);
-  const [hasAccess, setHasAccess] = useState(false);
-  const [profile, setProfile] = useState<any>(null);
+  const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
-    checkSubscription();
-  }, []);
+    checkSubscriptionStatus();
+  }, [router.pathname]);
 
-  const checkSubscription = async () => {
+  const checkSubscriptionStatus = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
+      setLoading(true);
+
+      // Get current user
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       if (!user) {
         router.push("/login");
         return;
       }
 
-      // Get user profile to check role
-      const profileData = await getUserProfile();
-      setProfile(profileData);
+      setUserId(user.id);
 
-      // ✅ ADMINS AND TEAM LEADS BYPASS SUBSCRIPTION CHECK
-      if (profileData && (profileData.role === "admin" || profileData.role === "team_lead")) {
-        setHasAccess(true);
-        setLoading(false);
-        return;
+      // Get user profile with subscription data
+      const { data: rawProfile, error } = await supabase
+        .from("profiles")
+        .select("trial_ends_at, subscription_status, subscription_end_date")
+        .eq("id", user.id)
+        .single();
+
+      if (error) throw error;
+
+      const profile = rawProfile as any;
+
+      const now = new Date();
+      const trialEndsAt = profile?.trial_ends_at
+        ? new Date(profile.trial_ends_at)
+        : null;
+      const subscriptionEndDate = profile?.subscription_end_date
+        ? new Date(profile.subscription_end_date)
+        : null;
+
+      const isInTrial = trialEndsAt ? now < trialEndsAt : false;
+      const hasActiveSubscription =
+        profile?.subscription_status === "active" &&
+        (!subscriptionEndDate || now < subscriptionEndDate);
+
+      const daysRemaining = trialEndsAt
+        ? Math.max(0, Math.ceil((trialEndsAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+        : 0;
+
+      const subscriptionStatus: SubscriptionStatus = {
+        hasActiveSubscription,
+        isInTrial,
+        trialEndsAt: profile?.trial_ends_at || null,
+        daysRemaining,
+        subscriptionEndDate: profile?.subscription_end_date || null,
+      };
+
+      setStatus(subscriptionStatus);
+
+      // Check if user should be redirected
+      const currentPath = router.pathname;
+      const isAlwaysAccessible = ALWAYS_ACCESSIBLE_PAGES.some((path) =>
+        currentPath.startsWith(path)
+      );
+
+      // Trial expirado E sem subscrição ativa E tentando aceder a página restrita
+      if (
+        !isInTrial &&
+        !hasActiveSubscription &&
+        !isAlwaysAccessible &&
+        requiresSubscription
+      ) {
+        router.push("/subscription?reason=expired");
       }
-
-      // ❌ FOR AGENTS: CHECK SUBSCRIPTION IS REQUIRED
-      const subscription = await getCurrentSubscription(user.id);
-      
-      // Block access if no subscription or subscription is not active
-      if (!subscription || subscription.status !== "active") {
-        setHasAccess(false);
-        setLoading(false);
-        return;
-      }
-
-      // ✅ Agent has active subscription
-      setHasAccess(true);
     } catch (error) {
       console.error("Error checking subscription:", error);
-      setHasAccess(false);
     } finally {
       setLoading(false);
     }
@@ -63,78 +123,140 @@ export function SubscriptionGuard({ children }: SubscriptionGuardProps) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-pulse text-muted-foreground">
+          A verificar subscrição...
+        </div>
       </div>
     );
   }
 
-  // Show content if user has access (admin/team_lead or active subscription)
-  if (hasAccess) {
-    return <>{children}</>;
+  if (!status) {
+    return null;
   }
 
-  // Block access - show subscription required screen
-  if (!hasAccess) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
-        <Card className="max-w-md w-full mx-4">
-          <CardHeader>
-            <CardTitle className="text-center">
-              <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Lock className="w-8 h-8 text-amber-600" />
+  // Página sempre acessível ou utilizador com subscrição ativa
+  const hasAccess =
+    status.hasActiveSubscription ||
+    status.isInTrial ||
+    ALWAYS_ACCESSIBLE_PAGES.some((path) => router.pathname.startsWith(path));
+
+  // Mostrar alerta se estiver em trial ou sem subscrição
+  const showAlert =
+    (status.isInTrial && status.daysRemaining <= 7) ||
+    (!status.hasActiveSubscription && !status.isInTrial);
+
+  return (
+    <>
+      {/* Alerta de Trial/Subscrição */}
+      {showAlert && (
+        <div className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          {status.isInTrial && status.daysRemaining <= 7 && (
+            <Alert className="rounded-none border-x-0 border-t-0 border-orange-500/50 bg-orange-500/10">
+              <Calendar className="h-4 w-4 text-orange-600" />
+              <AlertTitle className="text-orange-900 dark:text-orange-100">
+                Trial a terminar
+              </AlertTitle>
+              <AlertDescription className="flex items-center justify-between">
+                <span className="text-orange-800 dark:text-orange-200">
+                  {status.daysRemaining === 0
+                    ? "O seu período de trial termina hoje!"
+                    : `Restam ${status.daysRemaining} dias do seu período de trial.`}
+                  {" "}Subscreva agora para continuar a usar todas as
+                  funcionalidades.
+                </span>
+                <Button
+                  size="sm"
+                  onClick={() => router.push("/subscription")}
+                  className="ml-4 bg-orange-600 hover:bg-orange-700"
+                >
+                  <CreditCard className="mr-2 h-4 w-4" />
+                  Subscrever Agora
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {!status.hasActiveSubscription && !status.isInTrial && (
+            <Alert className="rounded-none border-x-0 border-t-0 border-red-500/50 bg-red-500/10">
+              <AlertTriangle className="h-4 w-4 text-red-600" />
+              <AlertTitle className="text-red-900 dark:text-red-100">
+                Trial expirado
+              </AlertTitle>
+              <AlertDescription className="flex items-center justify-between">
+                <span className="text-red-800 dark:text-red-200">
+                  O seu período de trial terminou. Subscreva agora para
+                  continuar a usar o ImoGest.
+                </span>
+                <Button
+                  size="sm"
+                  onClick={() => router.push("/subscription")}
+                  className="ml-4 bg-red-600 hover:bg-red-700"
+                >
+                  <CreditCard className="mr-2 h-4 w-4" />
+                  Ver Planos
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
+      )}
+
+      {/* Conteúdo */}
+      {hasAccess ? (
+        children
+      ) : (
+        <div className="min-h-screen flex items-center justify-center p-4">
+          <Card className="max-w-2xl w-full">
+            <CardContent className="pt-6">
+              <div className="text-center space-y-6">
+                <div className="flex justify-center">
+                  <div className="rounded-full bg-red-100 dark:bg-red-900/20 p-6">
+                    <Lock className="h-16 w-16 text-red-600 dark:text-red-400" />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                    Subscrição Necessária
+                  </h2>
+                  <p className="text-gray-600 dark:text-gray-400">
+                    O seu período de trial expirou. Para continuar a usar esta
+                    funcionalidade, é necessário subscrever um plano.
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <Button
+                    onClick={() => router.push("/subscription")}
+                    className="w-full"
+                    size="lg"
+                  >
+                    <CreditCard className="mr-2 h-5 w-5" />
+                    Ver Planos e Subscrever
+                  </Button>
+
+                  <Button
+                    onClick={() => router.push("/dashboard")}
+                    variant="outline"
+                    className="w-full"
+                    size="lg"
+                  >
+                    Voltar ao Dashboard
+                  </Button>
+                </div>
+
+                <div className="pt-4 border-t">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Todos os seus dados estão seguros e serão preservados assim
+                    que subscrever um plano.
+                  </p>
+                </div>
               </div>
-              Subscrição Necessária
-            </CardTitle>
-            <CardDescription className="text-center">
-              Esta funcionalidade requer uma subscrição ativa do Imogest CRM.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <h4 className="font-semibold text-blue-900 mb-2">
-                Benefícios da Subscrição:
-              </h4>
-              <ul className="space-y-2 text-sm text-blue-800">
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                  <span>Gestão ilimitada de leads e propriedades</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                  <span>Pipeline visual e relatórios avançados</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                  <span>Sincronização com Google Calendar</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                  <span>Suporte prioritário</span>
-                </li>
-              </ul>
-            </div>
-            
-            <Button 
-              className="w-full" 
-              size="lg"
-              onClick={() => router.push("/subscription")}
-            >
-              Ver Planos de Subscrição
-            </Button>
-            
-            <Button 
-              variant="outline" 
-              className="w-full"
-              onClick={() => router.push("/dashboard")}
-            >
-              Voltar ao Dashboard
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  return <>{children}</>;
+            </CardContent>
+          </Card>
+        </div>
+      )}
+    </>
+  );
 }

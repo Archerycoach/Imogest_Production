@@ -1,396 +1,195 @@
-# ⏰ Como Ativar Cron Jobs no Supabase - Guia Visual
+# Como Ativar Cron Jobs no Supabase
 
-## 🎯 LOCALIZAÇÃO DOS CRON JOBS
+## 📋 Pré-requisitos
+- Projeto Supabase criado
+- Edge Function `google-calendar-auto-sync` já criada
+- Acesso ao Dashboard do Supabase
 
-### **CAMINHO NO DASHBOARD:**
+## 🔧 Método 1: Dashboard do Supabase (Recomendado)
 
-```
-Supabase Dashboard
-    └── Database (ícone cilindro/base de dados)
-        └── Cron Jobs
-```
+### Passo 1: Acessar Cron Jobs
+1. Aceda ao [Dashboard do Supabase](https://supabase.com/dashboard)
+2. Selecione o seu projeto
+3. No menu lateral, vá para **Database** → **Cron Jobs**
 
----
+### Passo 2: Criar Novo Cron Job
+1. Clique em **Create a new cron job**
+2. Preencha os campos:
+   - **Name**: `google-calendar-hourly-sync`
+   - **Schedule**: `0 * * * *` (a cada hora)
+   - **SQL Query**:
+   ```sql
+   SELECT
+     net.http_post(
+       url:='https://YOUR_PROJECT_REF.supabase.co/functions/v1/google-calendar-auto-sync',
+       headers:='{"Content-Type": "application/json", "Authorization": "Bearer YOUR_ANON_KEY"}'::jsonb,
+       body:='{}'::jsonb
+     ) as request_id;
+   ```
 
-## 📍 PASSO A PASSO VISUAL
+### Passo 3: Substituir Variáveis
+Substitua:
+- `YOUR_PROJECT_REF` pelo Reference ID do seu projeto (encontrado em Settings → General)
+- `YOUR_ANON_KEY` pela sua Anon Key (encontrado em Settings → API)
 
-### **PASSO 1: Aceder ao Dashboard**
+### Passo 4: Ativar
+1. Clique em **Save**
+2. Certifique-se de que o cron job está **Enabled**
 
-1. Abrir: **https://supabase.com/dashboard**
-2. Fazer login (se necessário)
-3. Selecionar projeto: **Imogest**
+## 🔧 Método 2: SQL Editor
 
-```
-┌─────────────────────────────────────────────┐
-│  🏠 Dashboard → Projects                    │
-│                                             │
-│  📁 My Projects                             │
-│    └── 📊 Imogest  [SELECIONAR]             │
-│                                             │
-└─────────────────────────────────────────────┘
-```
-
----
-
-### **PASSO 2: Navegar para Database**
-
-No **menu lateral esquerdo**, procurar pelo ícone de **Database** (cilindro)
-
-```
-┌─────────────────────────────────────────────┐
-│  MENU LATERAL ESQUERDO:                     │
-│                                             │
-│  🏠 Home                                    │
-│  📊 Table Editor                            │
-│  🔐 Authentication                          │
-│  📦 Storage                                 │
-│  ⚡ Edge Functions                          │
-│  🗄️  Database  ← CLICAR AQUI                │
-│  🔧 Settings                                │
-│                                             │
-└─────────────────────────────────────────────┘
-```
-
----
-
-### **PASSO 3: Abrir Cron Jobs**
-
-Após clicar em **Database**, vai aparecer um **submenu**:
-
-```
-┌─────────────────────────────────────────────┐
-│  🗄️  DATABASE (SUBMENU):                    │
-│                                             │
-│  📊 Tables                                  │
-│  🔍 SQL Editor                              │
-│  🔗 Replication                             │
-│  🔄 Backups                                 │
-│  ⏰ Cron Jobs  ← CLICAR AQUI                │
-│  🔌 Webhooks                                │
-│  🔬 Extensions                              │
-│                                             │
-└─────────────────────────────────────────────┘
-```
-
----
-
-### **PASSO 4: Criar Primeiro Cron Job**
-
-Na página de **Cron Jobs**, verás:
-
-```
-┌─────────────────────────────────────────────┐
-│  ⏰ Cron Jobs                                │
-│                                             │
-│  Schedule SQL commands to run at specific   │
-│  times using PostgreSQL cron syntax.        │
-│                                             │
-│  [+ Create a new cron job]  ← CLICAR AQUI  │
-│                                             │
-│  (vazio se ainda não criaste nenhum)        │
-│                                             │
-└─────────────────────────────────────────────┘
-```
-
----
-
-### **PASSO 5: Preencher Formulário do Cron Job #1**
-
-Vai abrir um **formulário** com os seguintes campos:
-
-```
-┌─────────────────────────────────────────────────────────┐
-│  Create Cron Job                                        │
-│                                                         │
-│  Name *                                                 │
-│  ┌───────────────────────────────────────────────────┐ │
-│  │ daily-email-notifications                         │ │
-│  └───────────────────────────────────────────────────┘ │
-│                                                         │
-│  Schedule (Cron expression) *                           │
-│  ┌───────────────────────────────────────────────────┐ │
-│  │ 0 8 * * *                                         │ │
-│  └───────────────────────────────────────────────────┘ │
-│  💡 Runs every day at 08:00 UTC                        │
-│                                                         │
-│  Command (SQL) *                                        │
-│  ┌───────────────────────────────────────────────────┐ │
-│  │ SELECT                                            │ │
-│  │   net.http_post(                                  │ │
-│  │     url:='https://YOUR_REF.supabase.co/...',      │ │
-│  │     headers:='{"Authorization": "Bearer ..."}'     │ │
-│  │   ) as request_id;                                │ │
-│  └───────────────────────────────────────────────────┘ │
-│                                                         │
-│  [Cancel]  [Create cron job]  ← CLICAR PARA CRIAR     │
-│                                                         │
-└─────────────────────────────────────────────────────────┘
-```
-
----
-
-## 🔑 INFORMAÇÕES NECESSÁRIAS
-
-Antes de preencher, precisas de **2 informações** do teu projeto:
-
-### **1. Project Reference (PROJECT_REF)**
-
-**Como encontrar:**
-```
-Settings (⚙️ no menu lateral)
-    └── API
-        └── Project URL
-            → https://PROJECT_REF.supabase.co
-```
-
-**Exemplo:**
-```
-Se a URL for: https://abcdefghijk.supabase.co
-Então PROJECT_REF = abcdefghijk
-```
-
----
-
-### **2. Anon Key (ANON_KEY)**
-
-**Como encontrar:**
-```
-Settings (⚙️ no menu lateral)
-    └── API
-        └── Project API keys
-            └── anon public
-                → eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-```
-
-**É uma key LONGA começando com `eyJ`**
-
----
-
-## 📝 COMANDO SQL COMPLETO PARA CADA CRON JOB
-
-### **CRON JOB #1: daily-email-notifications**
-
+### Passo 1: Habilitar pg_cron
 ```sql
-SELECT
-  net.http_post(
-    url:='https://PROJECT_REF.supabase.co/functions/v1/daily-emails',
-    headers:='{"Content-Type": "application/json", "Authorization": "Bearer ANON_KEY"}'::jsonb,
-    body:='{}'::jsonb
-  ) as request_id;
+-- Verificar se pg_cron está habilitado
+SELECT * FROM pg_extension WHERE extname = 'pg_cron';
+
+-- Se não estiver, habilitar (requer permissões de superuser - contactar Supabase Support)
+CREATE EXTENSION IF NOT EXISTS pg_cron;
 ```
 
-**Preencher no formulário:**
-- **Name:** `daily-email-notifications`
-- **Schedule:** `0 8 * * *`
-- **Command:** (colar o SQL acima com PROJECT_REF e ANON_KEY substituídos)
-
----
-
-### **CRON JOB #2: daily-whatsapp-tasks**
-
+### Passo 2: Criar Cron Job
 ```sql
-SELECT
-  net.http_post(
-    url:='https://PROJECT_REF.supabase.co/functions/v1/daily-tasks-whatsapp',
-    headers:='{"Content-Type": "application/json", "Authorization": "Bearer ANON_KEY"}'::jsonb,
-    body:='{}'::jsonb
-  ) as request_id;
+SELECT cron.schedule(
+  'google-calendar-hourly-sync',
+  '0 * * * *', -- A cada hora
+  $$
+  SELECT
+    net.http_post(
+      url:='https://YOUR_PROJECT_REF.supabase.co/functions/v1/google-calendar-auto-sync',
+      headers:='{"Content-Type": "application/json", "Authorization": "Bearer YOUR_ANON_KEY"}'::jsonb,
+      body:='{}'::jsonb
+    ) as request_id;
+  $$
+);
 ```
 
-**Preencher no formulário:**
-- **Name:** `daily-whatsapp-tasks`
-- **Schedule:** `0 8 * * *`
-- **Command:** (colar o SQL acima com PROJECT_REF e ANON_KEY substituídos)
-
----
-
-### **CRON JOB #3: calendar-auto-sync**
-
+### Passo 3: Verificar Cron Jobs Ativos
 ```sql
-SELECT
-  net.http_post(
-    url:='https://PROJECT_REF.supabase.co/functions/v1/sync-google-calendar',
-    headers:='{"Content-Type": "application/json", "Authorization": "Bearer ANON_KEY"}'::jsonb,
-    body:='{}'::jsonb
-  ) as request_id;
+SELECT * FROM cron.job;
 ```
 
-**Preencher no formulário:**
-- **Name:** `calendar-auto-sync`
-- **Schedule:** `*/15 * * * *`
-- **Command:** (colar o SQL acima com PROJECT_REF e ANON_KEY substituídos)
+## 🔧 Método 3: Supabase CLI (Avançado)
 
----
-
-## ✅ VERIFICAÇÃO APÓS CRIAR
-
-Depois de criar os 3 Cron Jobs, deverás ver:
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  ⏰ Cron Jobs                                    [+ Create new]  │
-│                                                                 │
-│  ┌───────────────────────────────────────────────────────────┐ │
-│  │ Name                      │ Schedule     │ Active │ Edit   │ │
-│  ├───────────────────────────┼──────────────┼────────┼────────┤ │
-│  │ daily-email-notifications │ 0 8 * * *    │ ✅ Yes │ [...]  │ │
-│  │ daily-whatsapp-tasks      │ 0 8 * * *    │ ✅ Yes │ [...]  │ │
-│  │ calendar-auto-sync        │ */15 * * * * │ ✅ Yes │ [...]  │ │
-│  └───────────────────────────┴──────────────┴────────┴────────┘ │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+### Passo 1: Instalar Supabase CLI
+```bash
+npm install -g supabase
 ```
 
-**Todos devem estar com:**
-- ✅ **Active: Yes**
-- ✅ **Schedule correto**
-
----
-
-## 🧪 TESTAR ANTES DE AGENDAR
-
-Antes de os Cron Jobs começarem a correr automaticamente, podes **testá-los manualmente**:
-
-### **Opção 1: Via SQL Editor**
-
-```
-1. Database → SQL Editor
-2. Nova query
-3. Colar o comando SELECT net.http_post(...)
-4. Run (F5)
-5. Ver resultado
+### Passo 2: Login e Link do Projeto
+```bash
+supabase login
+supabase link --project-ref YOUR_PROJECT_REF
 ```
 
-### **Opção 2: Via Edge Function Invoke**
-
-```
-1. Edge Functions → daily-emails
-2. Tab "Invoke"
-3. Method: POST
-4. Body: {}
-5. Send request
-6. ✅ Ver response 200
-```
-
----
-
-## 📊 MONITORAR EXECUÇÕES
-
-### **Ver Logs das Edge Functions:**
-
-```
-Edge Functions (menu lateral)
-    └── Selecionar função (ex: daily-emails)
-        └── Tab "Logs"
-            → Ver execuções em tempo real
+### Passo 3: Criar Ficheiro de Migração
+Crie `supabase/migrations/YYYYMMDDHHMMSS_setup_google_calendar_cron.sql`:
+```sql
+SELECT cron.schedule(
+  'google-calendar-hourly-sync',
+  '0 * * * *',
+  $$
+  SELECT
+    net.http_post(
+      url:='https://YOUR_PROJECT_REF.supabase.co/functions/v1/google-calendar-auto-sync',
+      headers:='{"Content-Type": "application/json", "Authorization": "Bearer YOUR_ANON_KEY"}'::jsonb,
+      body:='{}'::jsonb
+    ) as request_id;
+  $$
+);
 ```
 
-### **Ver Histórico do Cron Job:**
-
-```
-Database → Cron Jobs
-    └── Clicar no nome do Cron (ex: daily-email-notifications)
-        → Ver histórico de execuções
-        → Ver sucessos/falhas
+### Passo 4: Aplicar Migração
+```bash
+supabase db push
 ```
 
----
+## 📊 Verificar Funcionamento
 
-## ⚠️ TROUBLESHOOTING RÁPIDO
+### Ver Logs da Edge Function
+1. Vá para **Edge Functions** no Dashboard
+2. Selecione `google-calendar-auto-sync`
+3. Clique em **Logs** para ver execuções
 
-### **Problema: "net.http_post não existe"**
-
-**Causa:** Extensão `pg_net` não está habilitada
-
-**Solução:**
-```
-1. Database → Extensions
-2. Procurar "pg_net"
-3. Enable
-4. Tentar novamente
-```
-
----
-
-### **Problema: Cron criado mas não executa**
-
-**Verificar:**
-1. ✅ Status é "Active"?
-2. ✅ Edge Function está deployed?
-3. ✅ PROJECT_REF está correto?
-4. ✅ ANON_KEY está correto (completo)?
-5. ✅ URL tem `/functions/v1/` no caminho?
-
----
-
-### **Problema: Executa mas sem resultados**
-
-**Verificar nos Logs da Edge Function:**
-```
-Edge Functions → daily-emails → Logs
-
-Procurar por:
-- "Gmail integration not configured"
-- "No users with notifications enabled"
-- "Gmail account not connected"
+### Testar Manualmente
+```bash
+curl -X POST \
+  https://YOUR_PROJECT_REF.supabase.co/functions/v1/google-calendar-auto-sync \
+  -H "Authorization: Bearer YOUR_ANON_KEY" \
+  -H "Content-Type: application/json"
 ```
 
-**Soluções:**
-- Configurar integrações: `/admin/integrations`
-- Conectar Gmail: `/settings` (como user)
-- Ativar notificações: `/settings` → Tab "Notificações"
-
----
-
-## 🎯 RESUMO RÁPIDO
-
-**Para ativar Cron Jobs:**
-
-1. ✅ Dashboard → **Database** → **Cron Jobs**
-2. ✅ Clicar **"+ Create a new cron job"**
-3. ✅ Preencher 3 campos:
-   - Name
-   - Schedule (expressão cron)
-   - Command (SQL com net.http_post)
-4. ✅ Substituir `PROJECT_REF` e `ANON_KEY`
-5. ✅ Clicar **"Create cron job"**
-6. ✅ Repetir para os 3 Cron Jobs
-7. ✅ Verificar **"Active: Yes"**
-
-**Tempo total:** 5-10 minutos
-**Dificuldade:** Fácil
-**Custo:** Grátis
-
----
-
-## 📍 CAMINHO VISUAL COMPLETO
-
-```
-https://supabase.com/dashboard
-    └── [Login]
-        └── [Selecionar projeto "Imogest"]
-            └── Menu lateral: 🗄️ Database
-                └── Submenu: ⏰ Cron Jobs
-                    └── Botão: [+ Create a new cron job]
-                        └── Formulário:
-                            ├── Name: daily-email-notifications
-                            ├── Schedule: 0 8 * * *
-                            └── Command: SELECT net.http_post(...)
-                                └── [Create cron job] ← CLICAR
+### Ver Histórico de Execuções do Cron
+```sql
+SELECT * FROM cron.job_run_details 
+WHERE jobid = (SELECT jobid FROM cron.job WHERE jobname = 'google-calendar-hourly-sync')
+ORDER BY start_time DESC 
+LIMIT 10;
 ```
 
----
+## 🔄 Gestão de Cron Jobs
 
-## 🎉 PRONTO!
+### Pausar Cron Job
+```sql
+SELECT cron.unschedule('google-calendar-hourly-sync');
+```
 
-Agora sabes **exatamente onde** e **como** ativar os Cron Jobs no Supabase!
+### Alterar Frequência
+```sql
+-- Remover existente
+SELECT cron.unschedule('google-calendar-hourly-sync');
 
-**Próximos passos:**
-1. ✅ Abrir Supabase Dashboard
-2. ✅ Seguir este guia passo a passo
-3. ✅ Criar os 3 Cron Jobs
-4. ✅ Testar manualmente
-5. ✅ Aguardar primeira execução automática
-6. ✅ Verificar logs
+-- Criar com nova frequência (exemplo: a cada 30 minutos)
+SELECT cron.schedule(
+  'google-calendar-hourly-sync',
+  '*/30 * * * *', -- A cada 30 minutos
+  $$ ... $$
+);
+```
 
-**Boa sorte!** 🚀
+### Eliminar Cron Job
+```sql
+SELECT cron.unschedule('google-calendar-hourly-sync');
+```
+
+## 📝 Exemplos de Horários Cron
+
+```
+0 * * * *      - A cada hora (no minuto 0)
+*/30 * * * *   - A cada 30 minutos
+0 */2 * * *    - A cada 2 horas
+0 9 * * *      - Todos os dias às 9h
+0 9 * * 1      - Todas as segundas-feiras às 9h
+*/15 9-17 * * 1-5 - A cada 15 min, das 9h às 17h, seg-sex
+```
+
+## ⚠️ Notas Importantes
+
+1. **Edge Functions**: Certifique-se de que a Edge Function `google-calendar-auto-sync` está criada e funcional
+2. **Permissões**: A Anon Key tem permissões para chamar Edge Functions
+3. **Custos**: Verifique os limites do seu plano Supabase para execuções de Cron Jobs
+4. **Timeout**: Edge Functions têm timeout de 150 segundos no plano gratuito
+5. **Logs**: Monitore os logs regularmente para identificar erros
+
+## 🆘 Resolução de Problemas
+
+### Cron Job não está a executar
+1. Verifique se `pg_cron` está habilitado
+2. Confirme que o URL da Edge Function está correto
+3. Verifique se a Anon Key está correta
+4. Veja os logs do cron: `SELECT * FROM cron.job_run_details`
+
+### Edge Function retorna erro
+1. Verifique os logs da Edge Function no Dashboard
+2. Teste a função manualmente via curl
+3. Confirme que as credenciais OAuth estão configuradas
+
+### Sincronização não acontece
+1. Verifique se há integrações com `auto_sync = true`
+2. Confirme que os tokens não expiraram
+3. Veja os logs da Edge Function para detalhes
+
+## 📚 Recursos Adicionais
+
+- [Documentação Supabase Cron Jobs](https://supabase.com/docs/guides/database/extensions/pg_cron)
+- [Documentação Edge Functions](https://supabase.com/docs/guides/functions)
+- [Cron Expression Generator](https://crontab.guru/)

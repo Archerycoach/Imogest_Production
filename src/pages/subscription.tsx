@@ -1,75 +1,121 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Check, CreditCard, AlertCircle, Loader2 } from "lucide-react";
-import {
-  getSubscriptionPlans,
-  getUserSubscription,
-  getPaymentHistory,
-  type SubscriptionWithPlan,
-} from "@/services/subscriptionService";
-import { supabase } from "@/integrations/supabase/client";
-import type { Database } from "@/integrations/supabase/types";
-import { PaymentMethodSelector } from "@/components/PaymentMethodSelector";
-import { User } from "@supabase/supabase-js";
 import { Layout } from "@/components/Layout";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useToast } from "@/hooks/use-toast";
+import { Check, AlertTriangle, Calendar, CreditCard, Loader2 } from "lucide-react";
+import SEO from "@/components/SEO";
 
-type SubscriptionPlan = Database["public"]["Tables"]["subscription_plans"]["Row"];
+interface SubscriptionPlan {
+  id: string;
+  name: string;
+  price: number;
+  interval: "month" | "year";
+  features: string[];
+  popular?: boolean;
+}
+
+const plans: SubscriptionPlan[] = [
+  {
+    id: "monthly",
+    name: "Mensal",
+    price: 29.99,
+    interval: "month",
+    features: [
+      "Gestão ilimitada de leads",
+      "Pipeline visual completo",
+      "Calendário e tarefas",
+      "Contactos e interações",
+      "Propriedades e documentos",
+      "Análise de mercado",
+      "Relatórios e performance",
+      "Workflows automatizados",
+      "Templates personalizáveis",
+      "Suporte por email",
+    ],
+  },
+  {
+    id: "yearly",
+    name: "Anual",
+    price: 299.99,
+    interval: "year",
+    features: [
+      "Todas as funcionalidades do plano mensal",
+      "2 meses grátis (poupança de 16%)",
+      "Suporte prioritário",
+      "Formação personalizada",
+      "Backups diários",
+      "API de integração",
+    ],
+    popular: true,
+  },
+];
 
 export default function SubscriptionPage() {
   const router = useRouter();
-  const [subscription, setSubscription] = useState<SubscriptionWithPlan | null>(null);
-  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
-  const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
+  const { toast } = useToast();
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("current");
-  
-  // Payment selector state
-  const [isPaymentSelectorOpen, setIsPaymentSelectorOpen] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
-  const [isUpdatingPayment, setIsUpdatingPayment] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
+  const [subscribing, setSubscribing] = useState<string | null>(null);
+  const [trialInfo, setTrialInfo] = useState<{
+    isInTrial: boolean;
+    daysRemaining: number;
+    trialEndsAt: string | null;
+  } | null>(null);
+  const [currentSubscription, setCurrentSubscription] = useState<{
+    status: string;
+    plan: string;
+    endDate: string | null;
+  } | null>(null);
+
+  const { reason } = router.query;
 
   useEffect(() => {
-    const init = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        router.push("/login");
-        return;
-      }
-      setUser(session.user);
-      await loadData(session.user.id);
-    };
+    loadSubscriptionData();
+  }, []);
 
-    init();
-  }, [router]);
-
-  const loadData = async (userId: string) => {
+  const loadSubscriptionData = async () => {
     try {
-      setLoading(true);
-      const [subData, plansData, historyData] = await Promise.all([
-        getUserSubscription(userId),
-        getSubscriptionPlans(),
-        getPaymentHistory(userId),
-      ]);
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
 
-      setSubscription(subData);
-      setPlans(plansData);
-      setPaymentHistory(historyData);
-      
-      if (!subData) {
-        setActiveTab("plans");
+      const { data: rawProfile } = await supabase
+        .from("profiles")
+        .select("trial_ends_at, subscription_status, subscription_plan, subscription_end_date")
+        .eq("id", user.id)
+        .single();
+
+      const profile = rawProfile as any;
+
+      if (profile) {
+        // Trial info
+        const now = new Date();
+        const trialEndsAt = profile.trial_ends_at ? new Date(profile.trial_ends_at) : null;
+        const isInTrial = trialEndsAt ? now < trialEndsAt : false;
+        const daysRemaining = trialEndsAt
+          ? Math.max(0, Math.ceil((trialEndsAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)))
+          : 0;
+
+        setTrialInfo({
+          isInTrial,
+          daysRemaining,
+          trialEndsAt: profile.trial_ends_at,
+        });
+
+        // Subscription info
+        if (profile.subscription_status) {
+          setCurrentSubscription({
+            status: profile.subscription_status,
+            plan: profile.subscription_plan || "",
+            endDate: profile.subscription_end_date,
+          });
+        }
       }
     } catch (error) {
       console.error("Error loading subscription data:", error);
@@ -78,216 +124,172 @@ export default function SubscriptionPage() {
     }
   };
 
-  const handleChoosePlan = (plan: SubscriptionPlan) => {
-    setSelectedPlan(plan);
-    setIsPaymentSelectorOpen(true);
-  };
+  const handleSubscribe = async (planId: string) => {
+    try {
+      setSubscribing(planId);
 
-  const handleUpdatePayment = async () => {
-    if (!subscription?.plan_id) return;
-    const currentPlan = plans.find(p => p.id === subscription.plan_id);
-    if (currentPlan) {
-      setSelectedPlan(currentPlan);
-      setIsPaymentSelectorOpen(true);
+      // TODO: Integrate with Stripe/Eupago
+      toast({
+        title: "Em desenvolvimento",
+        description: "A integração de pagamentos estará disponível em breve.",
+      });
+    } catch (error) {
+      toast({
+        title: "Erro",
+        description: "Não foi possível processar a subscrição.",
+        variant: "destructive",
+      });
+    } finally {
+      setSubscribing(null);
     }
-  };
-
-  const handlePaymentSuccess = async () => {
-    setIsPaymentSelectorOpen(false);
-    if (user) {
-      await loadData(user.id);
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    if (!dateString) return "-";
-    return new Date(dateString).toLocaleDateString("pt-PT");
-  };
-
-  const getStatusBadge = (status: string) => {
-    const styles: Record<string, string> = {
-      active: "bg-emerald-100 text-emerald-700",
-      trialing: "bg-blue-100 text-blue-700",
-      past_due: "bg-orange-100 text-orange-700",
-      canceled: "bg-gray-100 text-gray-700",
-      unpaid: "bg-red-100 text-red-700",
-    };
-    return (
-      <Badge className={styles[status] || "bg-gray-100"}>
-        {status === 'trialing' ? 'Em Teste' : status}
-      </Badge>
-    );
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-      </div>
+      <ProtectedRoute>
+        <Layout>
+          <div className="flex items-center justify-center min-h-[60vh]">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        </Layout>
+      </ProtectedRoute>
     );
   }
 
   return (
-    <Layout>
-      <div className="container mx-auto p-6 max-w-7xl space-y-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">A Minha Subscrição</h1>
-          <p className="text-gray-600">Gerir plano e método de pagamento</p>
-        </div>
+    <ProtectedRoute>
+      <Layout>
+        <SEO
+          title="Subscrição - ImoGest"
+          description="Escolha o plano ideal para o seu negócio imobiliário"
+        />
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="current">Plano Atual</TabsTrigger>
-            <TabsTrigger value="plans">Mudar de Plano</TabsTrigger>
-            <TabsTrigger value="history">Histórico de Pagamentos</TabsTrigger>
-          </TabsList>
+        <div className="container mx-auto px-4 py-8 max-w-7xl">
+          <div className="text-center mb-12">
+            <h1 className="text-4xl font-bold mb-4">Escolha o Seu Plano</h1>
+            <p className="text-xl text-muted-foreground">
+              Gestão imobiliária profissional ao seu alcance
+            </p>
+          </div>
 
-          <TabsContent value="current">
-            {subscription ? (
-              <Card>
+          {/* Trial Alert */}
+          {reason === "expired" && (
+            <Alert className="mb-8 border-red-500/50 bg-red-500/10">
+              <AlertTriangle className="h-4 w-4 text-red-600" />
+              <AlertTitle className="text-red-900 dark:text-red-100">
+                Trial Expirado
+              </AlertTitle>
+              <AlertDescription className="text-red-800 dark:text-red-200">
+                O seu período de trial de 14 dias terminou. Subscreva agora para
+                continuar a usar todas as funcionalidades do ImoGest.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {trialInfo?.isInTrial && (
+            <Alert className="mb-8 border-blue-500/50 bg-blue-500/10">
+              <Calendar className="h-4 w-4 text-blue-600" />
+              <AlertTitle className="text-blue-900 dark:text-blue-100">
+                Trial Ativo
+              </AlertTitle>
+              <AlertDescription className="text-blue-800 dark:text-blue-200">
+                Está a usar o ImoGest em modo trial.{" "}
+                {trialInfo.daysRemaining === 0
+                  ? "O seu trial termina hoje!"
+                  : `Restam ${trialInfo.daysRemaining} dias do seu período de trial.`}
+                {" "}Subscreva agora para garantir acesso contínuo.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Current Subscription */}
+          {currentSubscription?.status === "active" && (
+            <Alert className="mb-8 border-green-500/50 bg-green-500/10">
+              <Check className="h-4 w-4 text-green-600" />
+              <AlertTitle className="text-green-900 dark:text-green-100">
+                Subscrição Ativa
+              </AlertTitle>
+              <AlertDescription className="text-green-800 dark:text-green-200">
+                Tem uma subscrição {currentSubscription.plan} ativa.
+                {currentSubscription.endDate &&
+                  ` Renova em ${new Date(currentSubscription.endDate).toLocaleDateString("pt-PT")}.`}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Plans Grid */}
+          <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+            {plans.map((plan) => (
+              <Card
+                key={plan.id}
+                className={plan.popular ? "border-primary shadow-lg" : ""}
+              >
                 <CardHeader>
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <CardTitle className="text-2xl">
-                        {subscription.subscription_plans?.name}
-                      </CardTitle>
-                      <CardDescription>
-                        {subscription.subscription_plans?.description}
-                      </CardDescription>
-                    </div>
-                    {getStatusBadge(subscription.status)}
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="grid md:grid-cols-2 gap-6">
-                    <div>
-                      <p className="text-sm font-medium text-gray-500">Valor</p>
-                      <p className="text-2xl font-bold">
-                        €{subscription.subscription_plans?.price}
-                        <span className="text-sm font-normal text-gray-500">
-                          /{subscription.subscription_plans?.billing_interval === 'monthly' ? 'mês' : 'ano'}
-                        </span>
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-500">Renovação</p>
-                      <p className="text-lg">
-                        {formatDate(subscription.current_period_end)}
-                      </p>
-                    </div>
-                  </div>
-
-                  {subscription.status === 'trialing' && (
-                    <div className="bg-blue-50 p-4 rounded-lg flex items-center gap-3">
-                      <AlertCircle className="h-5 w-5 text-blue-600" />
-                      <p className="text-blue-700 text-sm">
-                        O seu período de teste termina a {formatDate(subscription.trial_end!)}.
-                      </p>
-                    </div>
-                  )}
-
-                  <div className="pt-4 border-t">
-                    <Button variant="outline" onClick={handleUpdatePayment}>
-                      <CreditCard className="mr-2 h-4 w-4" />
-                      Atualizar Método de Pagamento
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ) : (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <p className="text-gray-500 mb-4">Não tem nenhuma subscrição ativa.</p>
-                  <Button onClick={() => setActiveTab("plans")}>Ver Planos</Button>
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
-
-          <TabsContent value="plans">
-            <div className="grid md:grid-cols-3 gap-6">
-              {plans.map((plan) => (
-                <Card key={plan.id} className={`flex flex-col ${subscription?.plan_id === plan.id ? 'border-blue-500 shadow-md' : ''}`}>
-                  <CardHeader>
-                    <CardTitle>{plan.name}</CardTitle>
-                    <div className="mt-2">
-                      <span className="text-3xl font-bold">€{plan.price}</span>
-                      <span className="text-gray-500">/{plan.billing_interval === 'monthly' ? 'mês' : 'ano'}</span>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="flex-1 flex flex-col">
-                    <ul className="space-y-3 mb-6 flex-1">
-                      {Array.isArray(plan.features) && plan.features.map((feature: string, i) => (
-                        <li key={i} className="flex items-center gap-2 text-sm">
-                          <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                          <span>{feature}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    <Button 
-                      className="w-full" 
-                      variant={subscription?.plan_id === plan.id ? "secondary" : "default"}
-                      disabled={subscription?.plan_id === plan.id}
-                      onClick={() => handleChoosePlan(plan)}
-                    >
-                      {subscription?.plan_id === plan.id ? "Plano Atual" : "Escolher Plano"}
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="history">
-            <Card>
-              <CardHeader>
-                <CardTitle>Histórico</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Data</TableHead>
-                      <TableHead>Valor</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {paymentHistory.map((payment) => (
-                      <TableRow key={payment.id}>
-                        <TableCell>{formatDate(payment.created_at)}</TableCell>
-                        <TableCell>€{payment.amount}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{payment.status}</Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {paymentHistory.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={3} className="text-center text-gray-500">
-                          Sem histórico de pagamentos.
-                        </TableCell>
-                      </TableRow>
+                  <div className="flex justify-between items-start mb-2">
+                    <CardTitle className="text-2xl">{plan.name}</CardTitle>
+                    {plan.popular && (
+                      <Badge variant="default">Mais Popular</Badge>
                     )}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+                  </div>
+                  <CardDescription>
+                    <span className="text-4xl font-bold text-foreground">
+                      €{plan.price}
+                    </span>
+                    <span className="text-muted-foreground">
+                      /{plan.interval === "month" ? "mês" : "ano"}
+                    </span>
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ul className="space-y-3">
+                    {plan.features.map((feature, index) => (
+                      <li key={index} className="flex items-start gap-2">
+                        <Check className="h-5 w-5 text-green-500 flex-shrink-0 mt-0.5" />
+                        <span className="text-sm">{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+                <CardFooter>
+                  <Button
+                    className="w-full"
+                    size="lg"
+                    variant={plan.popular ? "default" : "outline"}
+                    onClick={() => handleSubscribe(plan.id)}
+                    disabled={
+                      subscribing !== null ||
+                      currentSubscription?.plan === plan.id
+                    }
+                  >
+                    {subscribing === plan.id ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        A processar...
+                      </>
+                    ) : currentSubscription?.plan === plan.id ? (
+                      "Plano Atual"
+                    ) : (
+                      <>
+                        <CreditCard className="mr-2 h-5 w-5" />
+                        Subscrever {plan.name}
+                      </>
+                    )}
+                  </Button>
+                </CardFooter>
+              </Card>
+            ))}
+          </div>
 
-        {selectedPlan && user && (
-          <PaymentMethodSelector
-            isOpen={isPaymentSelectorOpen}
-            onClose={() => setIsPaymentSelectorOpen(false)}
-            userId={user.id}
-            planId={selectedPlan.id}
-            planName={selectedPlan.name}
-            planPrice={selectedPlan.price}
-            onSuccess={handlePaymentSuccess}
-          />
-        )}
-      </div>
-    </Layout>
+          {/* Trial Info */}
+          <div className="mt-12 text-center">
+            <p className="text-sm text-muted-foreground">
+              {trialInfo?.isInTrial
+                ? "Após o trial, os seus dados serão preservados e poderá continuar assim que subscrever."
+                : "Todos os planos incluem 14 dias de trial gratuito. Não é necessário cartão de crédito."}
+            </p>
+          </div>
+        </div>
+      </Layout>
+    </ProtectedRoute>
   );
 }

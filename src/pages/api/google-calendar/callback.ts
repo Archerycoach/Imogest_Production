@@ -16,7 +16,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { code, state: userId } = req.query;
 
     if (!code || !userId || typeof userId !== "string") {
-      return res.redirect(302, "/admin/integrations?error=invalid_params");
+      return res.redirect(302, "/calendar?error=invalid_params");
     }
 
     // Get OAuth settings from database
@@ -28,7 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (settingsError || !integrationSettings) {
       console.error("Failed to get integration settings:", settingsError);
-      return res.redirect(302, "/admin/integrations?error=config_not_found");
+      return res.redirect(302, "/calendar?error=config_not_found");
     }
 
     const settings = integrationSettings as any;
@@ -36,7 +36,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (!client_id || !client_secret) {
       console.error("Missing OAuth credentials in database");
-      return res.redirect(302, "/admin/integrations?error=missing_credentials");
+      return res.redirect(302, "/calendar?error=missing_credentials");
     }
 
     // Exchange code for tokens
@@ -59,7 +59,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!tokenResponse.ok) {
       const error = await tokenResponse.text();
       console.error("Token exchange failed:", error);
-      return res.redirect(302, "/admin/integrations?error=token_exchange");
+      return res.redirect(302, "/calendar?error=token_exchange");
     }
 
     const tokens = await tokenResponse.json();
@@ -72,7 +72,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
 
     if (!userInfoResponse.ok) {
-      return res.redirect(302, "/admin/integrations?error=user_info");
+      return res.redirect(302, "/calendar?error=user_info");
     }
 
     const userInfo = await userInfoResponse.json();
@@ -98,12 +98,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (upsertError) {
       console.error("Error saving integration:", upsertError);
-      return res.redirect(302, "/admin/integrations?error=save_failed");
+      return res.redirect(302, "/calendar?error=save_failed");
     }
 
-    res.redirect(302, "/admin/integrations?success=true");
+    // Redirect to calendar with success flag to trigger sync
+    res.redirect(302, "/calendar?google_connected=true&auto_sync=true");
   } catch (error) {
     console.error("Error in Google Calendar callback:", error);
-    res.redirect(302, "/admin/integrations?error=true");
+    res.redirect(302, "/calendar?error=true");
   }
 }

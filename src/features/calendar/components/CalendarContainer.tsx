@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/router";
 import { CalendarHeader } from "./CalendarHeader";
 import { CalendarGrid } from "./CalendarGrid";
 import { CalendarDialogs } from "./CalendarDialogs";
@@ -17,6 +18,7 @@ import type { CalendarEvent, Task } from "@/types";
 
 export function CalendarContainer() {
   const { toast } = useToast();
+  const router = useRouter();
   
   // Hooks for data fetching
   const { events, isLoading: eventsLoading, refetch: refetchEvents } = useCalendarEvents();
@@ -87,6 +89,52 @@ export function CalendarContainer() {
   useEffect(() => {
     checkConnection();
   }, [checkConnection]);
+
+  // Handle successful Google connection and auto-sync
+  useEffect(() => {
+    const handleGoogleConnection = async () => {
+      const { google_connected, auto_sync, error } = router.query;
+      
+      if (error) {
+        const errorMessages: Record<string, string> = {
+          invalid_params: "Parâmetros inválidos na conexão",
+          config_not_found: "Configuração do Google Calendar não encontrada",
+          missing_credentials: "Credenciais OAuth não configuradas",
+          token_exchange: "Erro ao trocar código por tokens",
+          user_info: "Erro ao obter informações do utilizador",
+          save_failed: "Erro ao guardar integração",
+        };
+        
+        toast({
+          title: "Erro na conexão",
+          description: errorMessages[error as string] || "Erro desconhecido ao conectar Google Calendar",
+          variant: "destructive",
+        });
+        
+        // Clean URL
+        router.replace("/calendar", undefined, { shallow: true });
+        return;
+      }
+
+      if (google_connected === "true" && auto_sync === "true") {
+        toast({
+          title: "Conectado com sucesso!",
+          description: "A iniciar sincronização com Google Calendar...",
+        });
+        
+        // Wait a bit for the connection to be fully established
+        setTimeout(async () => {
+          await checkConnection();
+          await syncWithGoogle();
+        }, 1000);
+        
+        // Clean URL
+        router.replace("/calendar", undefined, { shallow: true });
+      }
+    };
+
+    handleGoogleConnection();
+  }, [router.query, toast, checkConnection, syncWithGoogle, router]);
 
   // Helpers
   const formatDate = (date: Date) => {

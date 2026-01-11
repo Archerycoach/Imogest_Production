@@ -11,12 +11,15 @@ export type UserRole = "admin" | "team_lead" | "agent";
 export interface User {
   id: string;
   email: string;
-  full_name?: string;
+  full_name: string;
+  role: "admin" | "user";
+  team_id?: string;
+  created_at: string;
   avatar_url?: string;
   phone?: string;
-  role: UserRole;
-  is_active?: boolean;
-  created_at?: string;
+  subscription_status?: "active" | "canceled" | "expired" | null;
+  trial_ends_at?: string | null;
+  subscription_end_date?: string | null;
   // Legacy mappings for compatibility
   name?: string;
   photo?: string;
