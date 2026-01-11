@@ -9,10 +9,10 @@ interface SEOProps {
 
 // SEO elements that can be used in _document.tsx (returns JSX without Head wrapper)
 export function SEOElements({
-  title = "Imogest - CRM Imobiliário Profissional",
-  description = "Imogest - Gestão completa de leads, imóveis, agenda e tarefas para profissionais do setor imobiliário",
+  title = "Vyxa One - CRM Imobiliário Profissional",
+  description = "Vyxa One - Gestão completa de leads, imóveis, agenda e tarefas para profissionais do setor imobiliário",
   image = "/og-image.png",
-  url,
+  url = "",
 }: SEOProps) {
   return (
     <>
@@ -41,10 +41,10 @@ export function SEOElements({
 
 // Default SEO component for use in pages/_app.tsx or individual pages (uses next/head)
 export default function SEO({
-  title = "Imogest - CRM Imobiliário Profissional",
-  description = "Imogest - Gestão completa de leads, imóveis, agenda e tarefas para profissionais do setor imobiliário",
+  title = "Vyxa One - CRM Imobiliário Profissional",
+  description = "Vyxa One - Gestão completa de leads, imóveis, agenda e tarefas para profissionais do setor imobiliário",
   image = "/og-image.png",
-  url,
+  url = typeof window !== "undefined" ? window.location.href : "",
 }: SEOProps) {
   return (
     <Head>

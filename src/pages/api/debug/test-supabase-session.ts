@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 /**
  * Debug endpoint to test Supabase session validation
- * Access: https://www.imogest.pt/api/debug/test-supabase-session
+ * Access: /api/debug/test-supabase-session
  */
 export default async function handler(
   req: NextApiRequest,

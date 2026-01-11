@@ -538,7 +538,7 @@ export const getAppBranding = async (): Promise<AppBranding> => {
   if (error) throw error;
   
   const branding = data?.value as unknown as AppBranding;
-  return branding || { companyName: "Imogest", logo: null };
+  return branding || { companyName: "Vyxa", logo: null };
 };
 
 // Update app branding

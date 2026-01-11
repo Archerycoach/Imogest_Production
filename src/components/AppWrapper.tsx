@@ -6,6 +6,16 @@ const PUBLIC_PAGES = [
   "/login",
   "/forgot-password",
   "/404",
+  "/landing",
+  "/privacy-policy",
+  "/features",
+  "/pricing",
+  "/use-cases",
+  "/about",
+  "/contact",
+  "/documentation",
+  "/faq",
+  "/support",
 ];
 
 // Páginas que precisam de subscrição ativa (fora do trial)

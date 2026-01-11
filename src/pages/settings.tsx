@@ -6,11 +6,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
-import { ArrowLeft, User, Lock, Building2, Bell, Save, Loader2 } from "lucide-react";
+import { ArrowLeft, User, Lock, Building2, Bell, Save, Loader2, Mail } from "lucide-react";
 import { getUserProfile, updateUserProfile } from "@/services/profileService";
 import { updatePassword, getSession, signOut } from "@/services/authService";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { SMTPSettingsDialog } from "@/components/SMTPSettingsDialog";
 
 export default function Settings() {
   const router = useRouter();
@@ -40,6 +41,9 @@ export default function Settings() {
   // Notifications
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [pushNotifications, setPushNotifications] = useState(true);
+  
+  // SMTP Dialog
+  const [smtpDialogOpen, setSmtpDialogOpen] = useState(false);
 
   useEffect(() => {
     checkAuthentication();
@@ -205,7 +209,7 @@ export default function Settings() {
         </div>
 
         <Tabs defaultValue="profile" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="profile">
               <User className="h-4 w-4 mr-2" />
               Perfil
@@ -217,6 +221,10 @@ export default function Settings() {
             <TabsTrigger value="company">
               <Building2 className="h-4 w-4 mr-2" />
               Empresa
+            </TabsTrigger>
+            <TabsTrigger value="smtp">
+              <Mail className="h-4 w-4 mr-2" />
+              SMTP
             </TabsTrigger>
             <TabsTrigger value="notifications">
               <Bell className="h-4 w-4 mr-2" />
@@ -261,7 +269,7 @@ export default function Settings() {
                     placeholder="Ex: joao.silva@imobiliaria.pt"
                   />
                   <p className="text-xs text-slate-500">
-                    📧 Quando enviar emails via Imogest, os clientes responderão para este endereço.
+                    📧 Quando enviar emails via Vyxa One, os clientes responderão para este endereço.
                     Se deixar vazio, será usado o email da conta.
                   </p>
                 </div>
@@ -376,6 +384,41 @@ export default function Settings() {
             </Card>
           </TabsContent>
 
+          <TabsContent value="smtp">
+            <Card>
+              <CardHeader>
+                <CardTitle>Configuração SMTP</CardTitle>
+                <CardDescription>
+                  Configure o seu servidor SMTP para enviar emails diretamente da aplicação
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-start space-x-4 rounded-lg border p-4">
+                  <Mail className="h-6 w-6 text-blue-600 mt-1" />
+                  <div className="flex-1 space-y-1">
+                    <p className="text-sm font-medium leading-none">
+                      Servidor SMTP Personalizado
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Configure o seu próprio servidor SMTP para enviar emails através da aplicação.
+                      Suporta Gmail, Outlook, SMTP personalizado e outros provedores.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <Button
+                    onClick={() => setSmtpDialogOpen(true)}
+                    className="bg-gradient-to-r from-blue-600 to-purple-600"
+                  >
+                    <Mail className="mr-2 h-4 w-4" />
+                    Configurar SMTP
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           <TabsContent value="notifications" className="space-y-6">
             <Card>
               <CardHeader>
@@ -417,6 +460,11 @@ export default function Settings() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        <SMTPSettingsDialog 
+          open={smtpDialogOpen} 
+          onOpenChange={setSmtpDialogOpen}
+        />
       </div>
     </div>
   );

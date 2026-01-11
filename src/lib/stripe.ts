@@ -50,7 +50,7 @@ export const createStripeCheckoutSession = async ({
             currency: "eur",
             product_data: {
               name: planName,
-              description: `Subscrição ${planName} - Imogest CRM`,
+              description: `Subscrição ${planName} - Vyxa One CRM`,
             },
             unit_amount: Math.round(amount * 100), // Convert to cents
             recurring: {

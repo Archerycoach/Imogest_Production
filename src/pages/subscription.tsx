@@ -121,7 +121,7 @@ export default function SubscriptionPage() {
     <ProtectedRoute>
       <Layout>
         <SEO
-          title="Subscrição - ImoGest"
+          title="Subscrição - Vyxa One"
           description="Escolha o plano ideal para o seu negócio imobiliário"
         />
 
@@ -142,7 +142,7 @@ export default function SubscriptionPage() {
               </AlertTitle>
               <AlertDescription className="text-red-800 dark:text-red-200">
                 O seu período de trial de 14 dias terminou. Subscreva agora para
-                continuar a usar todas as funcionalidades do ImoGest.
+                continuar a usar todas as funcionalidades do Vyxa One.
               </AlertDescription>
             </Alert>
           )}
@@ -154,7 +154,7 @@ export default function SubscriptionPage() {
                 Trial Ativo
               </AlertTitle>
               <AlertDescription className="text-blue-800 dark:text-blue-200">
-                Está a usar o ImoGest em modo trial.{" "}
+                Está a usar o Vyxa One em modo trial.{" "}
                 {trialInfo.daysRemaining === 0
                   ? "O seu trial termina hoje!"
                   : `Restam ${trialInfo.daysRemaining} dias do seu período de trial.`}

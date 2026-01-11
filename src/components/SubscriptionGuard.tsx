@@ -197,7 +197,7 @@ export function SubscriptionGuard({
               <AlertDescription className="flex items-center justify-between">
                 <span className="text-red-800 dark:text-red-200">
                   O seu período de trial terminou. Subscreva agora para
-                  continuar a usar o ImoGest.
+                  continuar a usar o Vyxa One.
                 </span>
                 <Button
                   size="sm"

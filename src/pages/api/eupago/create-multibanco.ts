@@ -35,7 +35,7 @@ export default async function handler(
     const payment = await eupago.createMultibancoReference({
       amount: plan.price,
       reference,
-      description: `Subscrição ${plan.name} - Imogest CRM`,
+      description: `Subscrição ${plan.name} - Vyxa One CRM`,
     });
 
     // Create pending payment record

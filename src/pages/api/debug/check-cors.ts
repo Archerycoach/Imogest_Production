@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 
 /**
  * Debug endpoint to check CORS and cookie configuration
- * Access: https://www.imogest.pt/api/debug/check-cors
+ * Access: /api/debug/check-cors
  */
 export default async function handler(
   req: NextApiRequest,

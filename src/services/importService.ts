@@ -205,7 +205,7 @@ export const generateLeadsTemplate = () => {
   const ws = XLSX.utils.aoa_to_sheet([headers]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Template Leads");
-  XLSX.writeFile(wb, "template_leads_imogest.xlsx");
+  XLSX.writeFile(wb, "template_leads_vyxaone.xlsx");
 };
 
 export const generatePropertiesTemplate = () => {
@@ -216,5 +216,5 @@ export const generatePropertiesTemplate = () => {
   const ws = XLSX.utils.aoa_to_sheet([headers]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Template Imoveis");
-  XLSX.writeFile(wb, "template_imoveis_imogest.xlsx");
+  XLSX.writeFile(wb, "template_imoveis_vyxaone.xlsx");
 };

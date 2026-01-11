@@ -31,6 +31,14 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { getAppBranding } from "@/services/adminService";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface NavItem {
   icon: any;
@@ -43,10 +51,11 @@ export function Navigation() {
   const router = useRouter();
   const [isUserAdmin, setIsUserAdmin] = useState(false);
   const [branding, setBranding] = useState<{ companyName: string; logo: string | null }>({
-    companyName: "Imogest",
+    companyName: "Vyxa",
     logo: null,
   });
   const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<any>(null);
 
   const handleLogout = async () => {
     try {
@@ -184,7 +193,7 @@ export function Navigation() {
       <div className="flex h-16 items-center justify-center border-b px-6">
         {branding.logo ? (
           <img 
-            src={branding.logo} 
+            src="/vyxa-logo.png"
             alt={branding.companyName}
             className="h-10 w-auto object-contain"
           />
@@ -253,6 +262,29 @@ export function Navigation() {
             <Plug className="h-4 w-4" />
             <span className="text-sm font-medium">Integrações</span>
           </Link>
+        </>
+      )}
+
+      {profile?.role === "admin" && (
+        <>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel>Administração</DropdownMenuLabel>
+          <DropdownMenuItem onClick={() => router.push("/admin/dashboard")}>
+            <LayoutDashboard className="h-4 w-4 mr-2" />
+            Dashboard Admin
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => router.push("/admin/users")}>
+            <Users className="h-4 w-4 mr-2" />
+            Utilizadores
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => router.push("/admin/subscriptions")}>
+            <CreditCard className="h-4 w-4 mr-2" />
+            Subscrições
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => router.push("/admin/frontend-settings")}>
+            <Settings className="h-4 w-4 mr-2" />
+            Configurações Frontend
+          </DropdownMenuItem>
         </>
       )}
 

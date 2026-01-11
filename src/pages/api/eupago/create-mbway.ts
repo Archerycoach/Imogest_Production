@@ -56,7 +56,7 @@ export default async function handler(
       amount: plan.price,
       phone: formattedPhone,
       reference,
-      description: `Subscrição ${plan.name} - Imogest CRM`,
+      description: `Subscrição ${plan.name} - Vyxa One CRM`,
     });
 
     // Create pending payment record

@@ -150,7 +150,7 @@ export default function AdminDashboard() {
               🛠️ Painel de Administração
             </h1>
             <p className="text-slate-600 mt-2">
-              Gerir e configurar o sistema Imogest
+              Gerir e configurar o sistema Vyxa One
             </p>
           </div>
 

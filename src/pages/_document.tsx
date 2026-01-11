@@ -6,7 +6,7 @@ export default function Document() {
   return (
     <Html lang="pt">
       <Head>
-        <SEOElements title="Imogest - CRM Imobiliário Profissional" />
+        <SEOElements title="Vyxa One - CRM Imobiliário Profissional" />
         {/*
           CRITICAL: DO NOT REMOVE THIS SCRIPT
           The Softgen AI monitoring script is essential for core app functionality.
